@@ -4,11 +4,16 @@
  * is a single server flip with no client rebuild. No secrets belong here.
  */
 import { Router } from 'express'
-import type { RuntimeConfig, SttEngine } from '@slide-machine/shared'
+import type {
+  DrivePickerConfig,
+  RuntimeConfig,
+  SttEngine,
+} from '@slide-machine/shared'
 import { env } from '../config/env'
 import { serverTranscriptionAvailable } from '../lib/transcribe-audio'
 import { translationEnabled } from '../lib/translate-slides'
 import { feedbackEnabled } from './feedback'
+import { googleLive } from '../lib/export-mode'
 import { mailerAvailable } from '../lib/mailer'
 import { oauthAvailable } from './oauth'
 
@@ -36,6 +41,27 @@ const ttsEnabled = (): boolean => {
   return true
 }
 
+/**
+ * Which Drive chooser the client should open.
+ *
+ * Mock unless the deployment actually talks to Google — either for exports or
+ * for quiz publishing — so a dev machine and the test suite get the app's own
+ * dialog over a fabricated tree. Live, it is Google's Picker: the app holds
+ * only `drive.file` and cannot list a Drive itself. Live with no Picker key is
+ * a misconfiguration, and says so rather than opening a chooser that would
+ * come back empty.
+ */
+const drivePicker = (): DrivePickerConfig => {
+  if (!googleLive()) return { mode: 'mock' }
+  if (!env.GOOGLE_PICKER_API_KEY || !env.GOOGLE_PICKER_APP_ID)
+    return { mode: 'none' }
+  return {
+    mode: 'google',
+    apiKey: env.GOOGLE_PICKER_API_KEY,
+    appId: env.GOOGLE_PICKER_APP_ID,
+  }
+}
+
 configRouter.get('/config', (_req, res) => {
   const body: RuntimeConfig = {
     agentAccessEnabled: oauthAvailable(),
@@ -57,6 +83,7 @@ configRouter.get('/config', (_req, res) => {
     interimFlushEnabled: env.GENERATION_INTERIM_FLUSH,
     interimFlushWords: env.GENERATION_INTERIM_FLUSH_WORDS,
     sttCaptureSampleRate: env.STT_CAPTURE_SAMPLE_RATE,
+    drivePicker: drivePicker(),
   }
   res.json(body)
 })

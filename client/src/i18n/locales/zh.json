@@ -40,12 +40,41 @@
     "profile": "个人资料",
     "accountSettings": "账户设置",
     "logIn": "登录",
-    "logOut": "退出登录"
+    "logOut": "退出登录",
+    "legal": "信息与法律条款"
   },
   "landing": {
-    "title": "The Slide Machine V2",
+    "title": "The Slide Machine",
     "tagline": "尽管开口讲——幻灯片会跟上。",
-    "cta": "登录后开始使用"
+    "intro": "The Slide Machine 会在你讲课的同时，根据你实际说出的内容实时生成幻灯片。开始一堂课，然后开口说：语音被即时转写，我们的 AI 智能体把你的话实时变成排版精良的幻灯片，并在合适的位置配上我们检索到的图片。",
+    "cta": "登录后开始使用",
+    "ctaAbout": "了解更多关于本项目",
+    "featuresTitle": "它能做什么",
+    "featureLiveTitle": "边讲边写的幻灯片",
+    "featureLiveBody": "语音识别与生成式 AI 模型在整堂课中协同工作，根据你刚说的内容选择标题、要点、段落或图片版式。",
+    "featureSeedTitle": "以你自己的材料为起点",
+    "featureSeedBody": "如果你已经有提纲、布置给学生的读物、现成的演示文稿，或想要收录的一组图片，把它们加进来，The Slide Machine 会据此帮你打磨出理想的讲义。",
+    "featureBoardTitle": "任意幻灯片上的白板",
+    "featureBoardBody": "课堂中随手涂画。笔迹会锚定到你当时所说的字词上，因此回放时与讲述同步。",
+    "featureAfterTitle": "课后可编辑、可导出",
+    "featureAfterBody": "课程结束后一切仍可更改。编辑讲义、重新排版、整体润色，并导出为 PDF、YAML 或 Google Slides。",
+    "dataTitle": "我们索取哪些数据，以及为什么",
+    "dataIntro": "The Slide Machine 只索取尽可能少的数据，并且只在某项功能确实需要时索取。以下是它请求的每一项数据及其用途。",
+    "dataAccountTitle": "你的账号",
+    "dataAccountBody": "一个电子邮箱、一个显示名称，以及一个我们只以哈希形式保存的密码——用于识别你的身份，并让你的作品归你所有。",
+    "dataGoogleTitle": "使用 Google 登录",
+    "dataGoogleBody": "如果你选择使用 Google 登录，我们会从 Google 获取你的姓名、电子邮箱和头像。我们仅用它们来创建和识别你的账号，别无他用。登录只会给我们这些 Google 数据。",
+    "dataDriveTitle": "连接 Google 云端硬盘",
+    "dataDriveBody": "把幻灯片或测验导入或导出到你的 Google 账号是可选的，为此我们只向 Google 请求最低限度的权限。因此，我们无法也不会查看、搜索或读取你 Google 云端硬盘中的其他文件或文件夹。",
+    "dataSpeechTitle": "你的麦克风",
+    "dataSpeechBody": "课程录制期间，麦克风音频会被转写成文字以生成幻灯片。我们也可能保留录音本身，以便对课程重新转写、润色、区分发言人、配合幻灯片回放原始讲述，并分析其质量。保留时长取决于你的套餐，以及录音还需要经过哪些处理。保留的录音仅存放在服务器端，绝不会提供给没有该课程编辑权限的人，并在保留期满后删除。",
+    "dataNever": "我们不出售你的数据，也不会用它训练第三方 AI 模型。",
+    "dataMore": "完整说明见我们的隐私政策。",
+    "privacyLink": "隐私政策",
+    "featureQuizTitle": "课堂小测",
+    "featureQuizBody": "根据完成的讲义生成一份小测，并发布为 Google 表单，让学生下课时作答，由 Google 自动批改。",
+    "featureSpeakTitle": "翻译并朗读",
+    "featureSpeakBody": "用你选择的语言阅读已完成的课程，并让课文以该语言朗读出来——便于复习，也照顾到母语并非授课语言的学生。"
   },
   "auth": {
     "signIn": "登录",
@@ -103,7 +132,9 @@
       "resendError": "无法再发送链接——请重试",
       "unavailable": "此服务器无法发送邮件，因此无法重新发送链接。",
       "confirmed": "已确认"
-    }
+    },
+    "legalRegister": "创建账号即表示你同意我们的<termsLink>条款与条件</termsLink>和<privacyLink>隐私政策</privacyLink>。",
+    "legalSignIn": "登录即表示你同意我们的<termsLink>条款与条件</termsLink>和<privacyLink>隐私政策</privacyLink>。"
   },
   "health": {
     "summary": "API {status}",
@@ -460,8 +491,6 @@
       "open": "导入设计",
       "title": "从 Google 幻灯片导入设计",
       "description": "指定你云端硬盘中的一份演示文稿，我们会分析它的设计——配色、字体和元素位置——并保存为可编辑的模板。",
-      "linkLabel": "Google 幻灯片或云端硬盘链接",
-      "linkPlaceholder": "粘贴 Google 幻灯片链接，或指向 .yaml 设计文件的云端硬盘链接",
       "submit": "导入设计",
       "tidy": "将几乎相同的幻灯片合并为一个版式",
       "tidyFile": "将您打开的演示文稿精简为更少的版式",
@@ -469,7 +498,6 @@
       "tidyHintFile": "适用于演示文稿。幻灯片通常会多次重复同一种版式；设计文件没有可合并的幻灯片。",
       "working": "正在读取演示文稿…",
       "errors": {
-        "link": "这看起来不像 Google 幻灯片或云端硬盘链接。",
         "google": "Google 不允许我们读取该演示文稿。请确认你自己能打开它。",
         "failed": "无法导入该演示文稿"
       },
@@ -484,7 +512,8 @@
       },
       "connectPrompt": "连接 Google 账号，以便读取你云端硬盘中的演示文稿。",
       "connect": "连接 Google",
-      "otherSources": "或上传文件"
+      "otherSources": "或上传文件",
+      "choose": "从 Google 云端硬盘中选择"
     },
     "fileImport": {
       "open": "导入设计文件（.yaml 或 .pptx）",
@@ -526,8 +555,6 @@
     "importSlides": {
       "title": "用 Google 幻灯片演示文稿创建课程",
       "description": "从你的云端硬盘导入演示文稿——Google 幻灯片或 PowerPoint。每张幻灯片都会原样呈现。",
-      "linkLabel": "Google 幻灯片链接",
-      "linkPlaceholder": "粘贴演示文稿链接",
       "submit": "导入课程",
       "working": "正在读取演示文稿…",
       "report": {
@@ -539,7 +566,8 @@
         "failed": "无法导入该演示文稿"
       },
       "otherSources": "或上传文件",
-      "fileOpen": "导入课程文件（.yaml 或 .pptx）"
+      "fileOpen": "导入课程文件（.yaml 或 .pptx）",
+      "choose": "选择演示文稿"
     },
     "errors": {
       "create": "无法创建课程"
@@ -801,12 +829,6 @@
       "code": "添加代码",
       "codeIn": "添加 {language} 代码",
       "preformatted": "添加预格式化文本"
-    },
-    "split": {
-      "title": "拆分这张幻灯片？",
-      "intro": "这张幻灯片包含 {count} 个独立的要点（{reason}）。拆成 {count} 张会更清晰：",
-      "confirm": "拆分为 {count} 张幻灯片",
-      "untitled": "（无标题部分）"
     }
   },
   "image": {
@@ -898,6 +920,15 @@
         "description": "当版式留有图片位而尚未放图时，为其寻找一张图片。"
       }
     },
+    "split": {
+      "label": "拆分内容过多的幻灯片",
+      "labelSlide": "拆分这张幻灯片",
+      "description": "在一张幻灯片确实装不下时，将它拆成几张；否则不会拆分。",
+      "descriptionSlide": "如果这张幻灯片确实装不下，就把它拆成几张；否则不会拆分。",
+      "needsText": "（仅在优化幻灯片文字时可用。）",
+      "done": "{count, plural, other {第 {number} 张幻灯片现在是 # 张}} — {reason}。",
+      "doneNoReason": "{count, plural, other {第 {number} 张幻灯片现在是 # 张。}}"
+    },
     "speakers": {
       "label": "识别多位讲话者",
       "description": "识别是谁在讲话——你还是学生——并把学生的发言改写为提问而非事实陈述。",
@@ -916,7 +947,8 @@
       "levelLabel": "这张幻灯片的优化强度",
       "marked": "这张幻灯片上有白板标注。优化可能改变其内容或版式，你的高亮和批注可能不再与下方内容对齐。",
       "running": "正在优化这张幻灯片…",
-      "failed": "无法优化这张幻灯片——请重试"
+      "failed": "无法优化这张幻灯片——请重试",
+      "runningNamed": "正在优化第 {number} 张幻灯片：{title}…"
     }
   },
   "transcript": {
@@ -1081,6 +1113,8 @@
       "general": {
         "titleHeading": "课程标题",
         "titleHint": "为这节课程命名。留空则由 AI 根据你在课上所讲的内容拟定标题。",
+        "projectHeading": "项目",
+        "projectHint": "这节课程所属的项目。移动后其幻灯片、备注和共享设置保持不变，但会开始继承新项目的设置。",
         "seedNotesHeading": "参考笔记",
         "seedNotesHint": "这节课程专属的背景资料，叠加在项目参考笔记之上。自动保存。",
         "seedNotesLabel": "课程参考笔记",
@@ -1109,11 +1143,19 @@
         "markedTitle": "优化带有标注的幻灯片？",
         "markedMessage": "有些幻灯片带有白板标注。优化可能改变其内容或版式，高亮和批注可能不再与下方内容对齐。",
         "markedConfirm": "仍然优化",
+        "progress": {
+          "speakers": "正在识别录音中的发言人…",
+          "slides": "正在优化第 {index} 张幻灯片，共 {total} 张：{title}",
+          "slidesUntitled": "正在优化第 {index} 张幻灯片，共 {total} 张…",
+          "narration": "正在撰写第 {index} 张幻灯片的口述版本，共 {total} 张：{title}",
+          "narrationUntitled": "正在撰写第 {index} 张幻灯片的口述版本，共 {total} 张…"
+        },
         "summary": {
           "done": "完成 — {changes}。",
           "none": "完成 — 无需任何更改。",
           "reframed": "{count, plural, other {改写了 # 张学生发言的幻灯片}}",
           "slidesRefined": "{count, plural, other {优化了 # 张幻灯片}}",
+          "slidesSplit": "{count, plural, other {拆分了 # 张幻灯片}}",
           "transcriptsUpdated": "{count, plural, other {更新了 # 段旁白}}"
         }
       }
@@ -1151,14 +1193,7 @@
     "savingTo": "保存到：",
     "folder": {
       "dialog": "选择云端硬盘文件夹",
-      "title": "将测验保存到…",
-      "path": "文件夹路径",
-      "empty": "这里没有子文件夹。可以把测验保存到当前文件夹，或在下方新建一个。",
-      "new": "新建文件夹",
-      "newName": "新文件夹名称",
-      "newIn": "在“{folder}”中新建文件夹",
-      "cancelNew": "取消新建文件夹",
-      "creating": "创建中…"
+      "title": "将测验保存到…"
     },
     "options": {
       "questionCount": "题目数量",
@@ -1217,7 +1252,6 @@
       "status": "无法加载测验状态",
       "connect": "无法连接你的 Google 账户",
       "loadFolders": "无法加载你的云端硬盘文件夹。你的 Google 账户可能未授予云端硬盘访问权限。",
-      "createFolder": "无法创建文件夹",
       "generate": "无法生成测验——请重试",
       "publish": "无法发布测验——请重试",
       "delete": "无法删除测验——请重试"
@@ -1258,8 +1292,7 @@
       }
     },
     "folder": {
-      "title": "将 {format} 保存到…",
-      "empty": "这里没有子文件夹。可以保存到当前文件夹，或在下方新建一个。"
+      "title": "将 {format} 保存到…"
     },
     "includeWhiteboard": {
       "label": "包含白板标注",
@@ -1282,6 +1315,19 @@
     "notes": {
       "heading": "有些内容无法放入此文件",
       "math-not-typeset": "有一个公式无法排版，因此被略去，而不是写成源码：{detail}"
+    }
+  },
+  "drive": {
+    "picker": {
+      "dialog": "从 Google 云端硬盘中选择",
+      "path": "文件夹路径",
+      "emptyFolders": "这里没有子文件夹。保存到此文件夹。",
+      "emptyFiles": "这里没有可导入的内容。",
+      "unavailable": "此服务器未配置 Google 云端硬盘，因此无法从中选择文件。",
+      "failed": "无法打开 Google 文件选择器。",
+      "cookieHint": "如果 Google 要求你登录，说明浏览器拦截了第三方 Cookie — Brave Shields、Safari、Firefox 和 Chrome 无痕模式都会这样做。请为本站允许第三方 Cookie，然后重新打开选择器。",
+      "change": "更改",
+      "chooseHere": "选择此文件夹"
     }
   },
   "errors": {

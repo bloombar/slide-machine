@@ -28,9 +28,9 @@ import type { AccessDescriptor } from './access/policy'
 
 /**
  * Actions whose access rule is genuinely not one resource at one level, and
- * why. Four of eighty-seven. Each is a decision somebody wrote down rather than
- * an action nobody got to: the reason is required, published here, and a new
- * name cannot join without editing this list.
+ * why. Five in the whole registry. Each is a decision somebody wrote down
+ * rather than an action nobody got to: the reason is required, published
+ * here, and a new name cannot join without editing this list.
  */
 const REASONS = {
   'deck.list':
@@ -41,6 +41,8 @@ const REASONS = {
     'the Mongo filter IS the authorization — publicDeckFilter reimplements deck ACL resolution at query level, so there is no single resource to resolve',
   'social.search':
     'the Mongo filter IS the authorization — the same publicDeckFilter, applied to a search rather than a listing',
+  'deck.move':
+    'a move is two resources — the caller must own the lecture and own the destination project (the gate deck.create applies), and no single resource/level says both',
 } as const
 
 const CUSTOM_ALLOWED = new Set<string>(Object.keys(REASONS))
@@ -70,6 +72,11 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
     resource: 'none',
     level: 'open',
     custom: { reason: REASONS['social.search'] },
+  },
+  'deck.move': {
+    resource: 'none',
+    level: 'open',
+    custom: { reason: REASONS['deck.move'] },
   },
   'deck.create': { resource: 'project', level: 'own' },
   'deck.delete': { resource: 'deck', level: 'own' },
@@ -142,11 +149,6 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
     capabilities: ['google-drive'],
   },
   'quiz.connectGoogle': { resource: 'self', level: 'self' },
-  'quiz.createFolder': {
-    resource: 'none',
-    level: 'signedIn',
-    capabilities: ['google-drive'],
-  },
   'quiz.delete': { resource: 'deck', level: 'edit' },
   'quiz.driveFolders': {
     resource: 'none',
@@ -187,6 +189,11 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
   // Browsing Drive for something to import: the first step of an import, so
   // the same grant and the same surface as the imports themselves.
   'drive.importables': {
+    resource: 'none',
+    level: 'signedIn',
+    capabilities: ['google-drive'],
+  },
+  'drive.pickerToken': {
     resource: 'none',
     level: 'signedIn',
     capabilities: ['google-drive'],

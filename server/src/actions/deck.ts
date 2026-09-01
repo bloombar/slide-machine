@@ -21,6 +21,7 @@ import type {
   DeckShare,
   DeckShareInput,
   DeckSharesInput,
+  DeckMoveInput,
   DeckTransferOwnershipInput,
   DeckUnshareInput,
   DeckGetInput,
@@ -49,6 +50,7 @@ import { defineAction } from './define'
 import {
   custom,
   deckEditor,
+  deckMove,
   deckOwner,
   deckSettings,
   deckSettingsAdmin,
@@ -56,6 +58,7 @@ import {
   deckViewer,
   projectOwner,
   type DeckAccess,
+  type DeckMoveAccess,
   type DeckSettingsAccess,
   type ProjectAccess,
   type Signed,
@@ -274,6 +277,12 @@ const ownerOf = deckOwner((input: { deckId: string }) => input.deckId)
 
 /** Anyone who may read the lecture — public counts. */
 const viewerOf = deckViewer((input: { deckId: string }) => input.deckId)
+
+/** Owner of the lecture and of the project it is being moved into (PROJ-3). */
+const moveInto = deckMove<{ deckId: string; projectId: string }>(
+  input => input.deckId,
+  input => input.projectId,
+)
 
 /**
  * Loads a deck the acting user may edit — the owner or an editor,
@@ -1575,6 +1584,7 @@ export const deckSetRefineSettings = defineAction<
     identifySpeakers: z.boolean().nullable().optional(),
     slidesEnabled: z.boolean().nullable().optional(),
     slidesLevel: z.number().int().min(1).max(5).nullable().optional(),
+    splitEnabled: z.boolean().nullable().optional(),
     transcriptEnabled: z.boolean().nullable().optional(),
     transcriptLevel: z.number().int().min(1).max(5).nullable().optional(),
   }),
@@ -1586,6 +1596,8 @@ export const deckSetRefineSettings = defineAction<
         deck.refineSlidesEnabled = input.slidesEnabled ?? undefined
       if (input.slidesLevel !== undefined)
         deck.refineSlidesLevel = input.slidesLevel ?? undefined
+      if (input.splitEnabled !== undefined)
+        deck.refineSplitEnabled = input.splitEnabled ?? undefined
       if (input.transcriptEnabled !== undefined)
         deck.refineTranscriptEnabled = input.transcriptEnabled ?? undefined
       if (input.transcriptLevel !== undefined)
@@ -1823,6 +1835,56 @@ export const deckDelete = defineAction<
   },
 })
 
+/**
+ * Files the lecture under a different project (PROJ-3).
+ *
+ * The lecture carries everything of its own across — slides, transcript,
+ * template, seed notes, any privacy override. What changes is what it
+ * INHERITS: from here on it takes the destination project's settings
+ * wherever it has none of its own, and a lecture with no privacy override
+ * follows that project's access instead of its old one (SHARE-1). That can
+ * change the lecture's effective ACL without anyone touching its sharing,
+ * which is why the move is filed in the settings change log the way an
+ * ownership transfer is — the snapshot carries the project it sits in, so
+ * the entry names both the move and whatever access moved with it.
+ *
+ * Moving a lecture into the project it is already in changes nothing.
+ */
+export const deckMoveToProject = defineAction<
+  DeckMoveInput,
+  Deck,
+  DeckMoveAccess
+>({
+  name: 'deck.move',
+  access: moveInto,
+  input: z.object({
+    deckId: z.string().min(1),
+    projectId: z.string().min(1),
+  }),
+  execute: async (ctx, input, { userId, deck, acl, project }) => {
+    if (deck.projectId.equals(project._id)) return toDeckDto(deck, acl)
+    const before = deckSettingsSnapshot(deck, acl)
+    deck.projectId = project._id
+    await deck.save()
+    // Re-resolved after the save: an inheriting lecture's ACL is the new
+    // project's, and `acl` above still describes the old one.
+    const moved = await loadDeckAcl(deck)
+    // Owner-only, so it never reaches editDeckSettings — it logs the change
+    // itself, exactly as the ownership transfer below does.
+    await recordSettingsChange({
+      actorId: userId,
+      actorRole: 'owner',
+      entityType: 'deck',
+      entityId: deck._id.toString(),
+      entityName: deck.title,
+      ownerId: deck.ownerId.toString(),
+      before,
+      after: deckSettingsSnapshot(deck, moved),
+    })
+    return toDeckDto(deck, moved)
+  },
+})
+
 export const deckTransferOwnership = defineAction<
   DeckTransferOwnershipInput,
   Deck,
@@ -1900,4 +1962,5 @@ registerAction(deckShare)
 registerAction(deckUnshare)
 registerAction(deckShares)
 registerAction(deckDelete)
+registerAction(deckMoveToProject)
 registerAction(deckTransferOwnership)

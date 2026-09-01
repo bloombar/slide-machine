@@ -29,6 +29,31 @@ export interface OperatorDetails {
   postalAddress: string
 }
 
+/**
+ * How the client asks the user to choose a file or folder in their Drive
+ * (EXP-3/EXP-4/QUIZ-2).
+ *
+ * The app holds only `drive.file`, which cannot list somebody's Drive — by
+ * design, since it is the scope that needs no Google security assessment. So
+ * the choosing is done by Google's own Picker, which runs in Google's iframe
+ * on the user's session and hands back per-file access to whatever they pick.
+ *
+ * `mock` is the finder-style dialog the app draws itself, backed by a
+ * fabricated tree. It is what dev machines and the test suite use, for the
+ * same reason every other Google surface here has a mock: so the whole flow
+ * can be exercised with no credentials.
+ */
+export type DrivePickerConfig =
+  /** Google's Picker. `apiKey` is a browser API key (public by design,
+   * restricted by HTTP referrer); `appId` is the Cloud project number, which
+   * is what ties a picked file's grant to this OAuth client. */
+  | { mode: 'google'; apiKey: string; appId: string }
+  /** The app's own dialog over a fabricated Drive. No credentials needed. */
+  | { mode: 'mock' }
+  /** Live Google, but no Picker configured — Drive saving and importing are
+   * unavailable and say so, rather than opening a chooser that cannot work. */
+  | { mode: 'none' }
+
 export interface RuntimeConfig {
   sttEngine: SttEngine
   /** Whether slide/deck text-to-speech playback is available (TTS provider
@@ -81,6 +106,9 @@ export interface RuntimeConfig {
   /** How many stable, not-yet-submitted interim words accumulate before a
    * mid-speech flush. */
   interimFlushWords: number
+  /** How the user picks a Drive file or folder: Google's Picker, the app's
+   * own mock dialog, or not at all. See `DrivePickerConfig`. */
+  drivePicker: DrivePickerConfig
   /** Rate (Hz) the mic capture downsamples to before streaming to the server
    * (CAP-3). 24 kHz by default — above the 16 kHz the speech models want, to
    * keep the recording pleasant for per-slide playback; the browser's native

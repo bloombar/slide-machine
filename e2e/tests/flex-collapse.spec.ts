@@ -110,7 +110,7 @@ import { writeFileSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { test, expect, type Page } from './fixtures'
 import { settled, descenderFaultsOn, boxesOf, inkOf } from './slide-boxes'
-import { createProject } from './helpers'
+import { createProject, pickLayout } from './helpers'
 
 const DESIGN = process.env.PROBE_DESIGN ?? 'nyu-elegant'
 const LAYOUTS = (process.env.PROBE_LAYOUTS ?? 'closing,title,section').split(
@@ -385,11 +385,7 @@ test('where a computed box gets its height', async ({ page }) => {
     await page.getByRole('menuitem', { name: 'Change layout' }).click()
     const dialog = page.getByRole('dialog', { name: 'Change slide layout' })
     await expect(dialog).toBeVisible()
-    const radios = dialog.getByRole('radio')
-    const labels = (await radios.allInnerTexts()).map(t =>
-      (t.split('\n')[0] ?? '').trim(),
-    )
-    await radios.nth(labels.indexOf(layout.label)).click()
+    await pickLayout(dialog, layout.label)
     await expect(slide).toHaveAttribute('data-layout', type)
     await page
       .getByText(/Filled the boxes this layout added/)

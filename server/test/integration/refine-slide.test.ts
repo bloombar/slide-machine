@@ -413,6 +413,162 @@ describe('deck.refineSlide', () => {
     })
   })
 
+  /**
+   * Breaking one slide up (GEN-4).
+   *
+   * The instructor grants this in the Refine dialog before the run, so what
+   * comes back is a deck that already changed shape — there is no dialog to
+   * catch a split nobody wanted. So both directions are checked against the
+   * DECK: with permission the parts exist and are ordered, and without it the
+   * slide is untouched. The mock provider proposes a split for a slide of
+   * three or more bullets, and only when it was allowed to.
+   */
+  describe('breaking a slide up', () => {
+    /** A three-bullet slide (the mock's split trigger) plus one after it. */
+    const seedWide = async () => {
+      const wide = await SlideModel.create({
+        deckId,
+        index: 0,
+        layoutType: 'list',
+        title: 'Stages',
+        bullets: ['Absorption', 'Transfer', 'Fixation'],
+        sourceTranscript: 'The three stages, as spoken.',
+      })
+      const after = await SlideModel.create({
+        deckId,
+        index: 1,
+        layoutType: 'content',
+        title: 'Summary',
+        body: 'One idea',
+      })
+      await DeckModel.updateOne(
+        { _id: deckId },
+        { slideOrder: [wide._id.toString(), after._id.toString()] },
+      )
+      return { wide: wide._id.toString(), after: after._id.toString() }
+    }
+
+    it('writes the parts, and reports them for the viewer to show', async () => {
+      const { wide, after } = await seedWide()
+
+      const res = await act(ada, 'deck.refineSlide', {
+        deckId,
+        slideId: wide,
+        options: { allowSplit: true },
+      })
+      expect(res.status).toBe(200)
+      // The original kept its id and now holds the first part.
+      expect(res.body.slide.id).toBe(wide)
+      expect(res.body.split.added).toHaveLength(2)
+      expect(res.body.split.reason).toBe('3 separate points')
+      expect(res.body.split.slideOrder).toEqual([
+        wide,
+        res.body.split.added[0].id,
+        res.body.split.added[1].id,
+        after,
+      ])
+
+      const slides = await SlideModel.find({ deckId }).sort({ index: 1 })
+      expect(slides.map(s => s.title)).toEqual([
+        'Stages (1)',
+        'Stages (2)',
+        'Stages (3)',
+        'Summary',
+      ])
+      expect(slides.map(s => s.index)).toEqual([0, 1, 2, 3])
+    })
+
+    it('gives each part the words the slide was speaking', async () => {
+      // A part with no source material would be narrated from its own text,
+      // which is not what the instructor said.
+      const { wide } = await seedWide()
+      await act(ada, 'deck.refineSlide', {
+        deckId,
+        slideId: wide,
+        options: { allowSplit: true },
+      })
+      const parts = await SlideModel.find({ deckId, title: /^Stages/ })
+      expect(parts).toHaveLength(3)
+      for (const part of parts)
+        expect(part.sourceTranscript).toContain('The three stages')
+    })
+
+    it('leaves the slide whole when the run did not allow it', async () => {
+      const { wide } = await seedWide()
+      const res = await act(ada, 'deck.refineSlide', {
+        deckId,
+        slideId: wide,
+        options: { allowSplit: false },
+      })
+      expect(res.body.split).toBeUndefined()
+      expect(await SlideModel.countDocuments({ deckId })).toBe(2)
+    })
+
+    it('is off unless the lecture says otherwise', async () => {
+      // The default has to hold with no options at all: a scripted refine, or
+      // the kebab before the dialog existed, must not restructure a lecture.
+      const { wide } = await seedWide()
+      const res = await act(ada, 'deck.refineSlide', { deckId, slideId: wide })
+      expect(res.body.split).toBeUndefined()
+      expect(await SlideModel.countDocuments({ deckId })).toBe(2)
+    })
+
+    it("follows the lecture's saved setting when the run says nothing", async () => {
+      const { wide } = await seedWide()
+      const saved = await act(ada, 'deck.setRefineSettings', {
+        deckId,
+        splitEnabled: true,
+      })
+      expect(saved.body.refineSplitEnabled).toBe(true)
+
+      const res = await act(ada, 'deck.refineSlide', { deckId, slideId: wide })
+      expect(res.body.split.added).toHaveLength(2)
+    })
+
+    it('this run overrides the saved setting, without changing it', async () => {
+      const { wide } = await seedWide()
+      await act(ada, 'deck.setRefineSettings', { deckId, splitEnabled: true })
+
+      const res = await act(ada, 'deck.refineSlide', {
+        deckId,
+        slideId: wide,
+        options: { allowSplit: false },
+      })
+      expect(res.body.split).toBeUndefined()
+      // The lecture keeps the answer it was given in its settings.
+      const deck = await DeckModel.findById(deckId)
+      expect(deck?.refineSplitEnabled).toBe(true)
+    })
+
+    it('does not split a refine that is not reading the words', async () => {
+      // Splitting is a claim about a slide's text. A layout/imagery-only pass
+      // never looked at it and must not make that claim.
+      const { wide } = await seedWide()
+      const res = await act(ada, 'deck.refineSlide', {
+        deckId,
+        slideId: wide,
+        options: {
+          allowSplit: true,
+          parts: { text: false, layout: true, imagery: true },
+        },
+      })
+      expect(res.body.split).toBeUndefined()
+      expect(await SlideModel.countDocuments({ deckId })).toBe(2)
+    })
+
+    it('re-narrates the slide it split, from the part it now holds', async () => {
+      const { wide } = await seedWide()
+      await act(ada, 'deck.refineSlide', {
+        deckId,
+        slideId: wide,
+        options: { allowSplit: true },
+      })
+      const first = await SlideModel.findById(wide)
+      expect(first?.title).toBe('Stages (1)')
+      expect(first?.sourceTranscript).toBeTruthy()
+    })
+  })
+
   it('gates on edit access and slide ownership', async () => {
     const { target } = await seedSlides()
     const bob = await registerUser('bob@example.com')

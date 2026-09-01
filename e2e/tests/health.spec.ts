@@ -12,7 +12,7 @@ test('landing page shows the hero and a healthy API footer', async ({
 
   await expect(page).toHaveTitle('The Slide Machine')
   await expect(
-    page.getByRole('heading', { name: 'The Slide Machine V2' }),
+    page.getByRole('heading', { level: 1, name: 'The Slide Machine' }),
   ).toBeVisible()
   await expect(
     page.getByRole('link', { name: /sign in to get started/i }),

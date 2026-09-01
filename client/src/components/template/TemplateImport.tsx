@@ -5,12 +5,11 @@
  * brief, so this — not the template editor — is the realistic way to get a
  * template that looks like their own material.
  *
- * ## Paste a link, not a file picker
+ * ## Google's Picker, not a browser of our own
  *
- * The instructor already has the presentation open, and its address is in
- * their clipboard. A Drive browser would be a second thing to learn for the
- * same result, so this takes the link and pulls the id out of it — or the bare
- * id, if that is what they have.
+ * The app holds only `drive.file`, which cannot list a Drive, so the
+ * presentation is chosen in Google's own Picker — and choosing it there is
+ * what grants this app access to it.
  *
  * ## The report is the point of the screen after
  *
@@ -28,6 +27,8 @@ import type { Template } from '@slide-machine/shared'
 import { dispatchAction } from '../../api/actions'
 import { ApiError } from '../../api/http'
 import { apiErrorMessage } from '../../i18n/apiError'
+import DrivePicker from '../DrivePicker'
+import type { PickedDriveItem } from '../../lib/google-picker'
 
 /** What the server says an import did. */
 export interface ImportReport {
@@ -46,54 +47,21 @@ export interface ImportReport {
   assetsFailed?: number
 }
 
-/**
- * The presentation id inside whatever the instructor pasted.
- *
- * A Slides URL is `/presentation/d/<id>/edit`; anything else that looks like
- * an id is taken as one, since a bare id is what an instructor who knows the
- * system will paste.
- */
-export const presentationIdFrom = (input: string): string | null => {
-  const text = input.trim()
-  if (!text) return null
-  const fromUrl = /\/presentation\/d\/([a-zA-Z0-9_-]+)/.exec(text)
-  if (fromUrl) return fromUrl[1]!
-  // A Drive link of any other shape, so the id is a query parameter.
-  const fromQuery = /[?&]id=([a-zA-Z0-9_-]+)/.exec(text)
-  if (fromQuery) return fromQuery[1]!
-  // Not a URL at all: accept it only if it could be an id, so a stray
-  // sentence produces a clear complaint rather than a confusing 404.
-  return /^[a-zA-Z0-9_-]{10,}$/.test(text) ? text : null
-}
+/** What the picked file is for: a presentation is a design to derive from
+ * (TMPL-8), anything else is a design file this app wrote earlier (EXP-3). */
+export const importSourceFor = (item: PickedDriveItem): ImportSource =>
+  item.mimeType === PRESENTATION_MIME
+    ? { action: 'template.importFromSlides', id: item.id }
+    : { action: 'template.importFromDrive', id: item.id }
 
-/** What a pasted link turns out to point at. */
+/** Google's own type for a native Slides presentation. */
+export const PRESENTATION_MIME = 'application/vnd.google-apps.presentation'
+
+/** Which import a picked file is for. */
 export interface ImportSource {
   /** The action that reads it. */
   action: 'template.importFromSlides' | 'template.importFromDrive'
   id: string
-}
-
-/**
- * Which import a pasted link is for.
- *
- * Both sources are links, so the instructor gets one field rather than two —
- * they know what they copied, and having to work out which box it belongs in
- * is a question the app can answer itself.
- *
- * `/file/d/` is Drive's shape for a stored file, which is what an exported
- * design is; everything else that yields an id is a presentation. A bare id
- * goes to Slides because that is overwhelmingly what gets pasted, and the
- * Drive route is reached by pasting the file's own link.
- */
-export const importSourceFrom = (input: string): ImportSource | null => {
-  const text = input.trim()
-  if (!text) return null
-  const driveFile = /\/file\/d\/([a-zA-Z0-9_-]+)/.exec(text)
-  if (driveFile) {
-    return { action: 'template.importFromDrive', id: driveFile[1]! }
-  }
-  const id = presentationIdFrom(text)
-  return id ? { action: 'template.importFromSlides', id } : null
 }
 
 export default function TemplateImport({
@@ -115,7 +83,9 @@ export default function TemplateImport({
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  const [link, setLink] = useState('')
+  /** The file chosen in Google's picker, waiting to be imported. */
+  const [picked, setPicked] = useState<PickedDriveItem | null>(null)
+  const [picking, setPicking] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [report, setReport] = useState<ImportReport | null>(null)
@@ -134,7 +104,7 @@ export default function TemplateImport({
    */
   const { tidy, setTidy, keepEverySlide } = useConsolidateChoice()
 
-  const source = importSourceFrom(link)
+  const source = picked ? importSourceFor(picked) : null
   const fromSlides = source?.action === 'template.importFromSlides'
 
   const submit = (event: React.FormEvent) => {
@@ -164,7 +134,7 @@ export default function TemplateImport({
         } else {
           onImported(result)
         }
-        setLink('')
+        setPicked(null)
       })
       .catch((e: Error) => {
         // Not connected is not a failure, it is a missing step — so offer the
@@ -189,8 +159,12 @@ export default function TemplateImport({
   }
 
   /** Sends the instructor through Google's consent screen and back to this
-   * tab. A full page load, so where to return is carried in the URL. */
-  const connect = () => {
+   * tab. A full page load, so where to return is carried in the URL. *
+   * `onConnected` runs when the connect completed without leaving the page —
+   * mock mode, or an account that was already connected — so the picker that
+   * sent us here can open again rather than making the instructor find it.
+   */
+  const connect = (onConnected?: () => void) => {
     setBusy(true)
     setError(null)
     dispatchAction<{ status: string; url?: string }>('quiz.connectGoogle', {
@@ -201,6 +175,7 @@ export default function TemplateImport({
         else {
           setNeedsGoogle(false)
           setBusy(false)
+          onConnected?.()
         }
       })
       .catch(() => {
@@ -231,18 +206,23 @@ export default function TemplateImport({
         {t('template.import.description')}
       </p>
 
-      <form onSubmit={submit} className="mt-3 flex flex-wrap gap-2">
-        <label className="sr-only" htmlFor="template-import-link">
-          {t('template.import.linkLabel')}
-        </label>
-        <input
-          id="template-import-link"
-          type="text"
-          value={link}
-          onChange={e => setLink(e.target.value)}
-          placeholder={t('template.import.linkPlaceholder')}
-          className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-        />
+      <form
+        onSubmit={submit}
+        className="mt-3 flex flex-wrap items-center gap-2"
+      >
+        {/* Google's picker does the browsing: the app holds only `drive.file`
+            and cannot list a Drive, and choosing the file is what lets it
+            read that one file. */}
+        <button
+          type="button"
+          onClick={() => setPicking(true)}
+          className="inline-flex min-w-0 items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          <Upload className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="truncate">
+            {picked ? picked.name : t('template.import.choose')}
+          </span>
+        </button>
         <button
           type="submit"
           disabled={!source || busy}
@@ -256,6 +236,7 @@ export default function TemplateImport({
             setOpen(false)
             setError(null)
             setReport(null)
+            setPicked(null)
           }}
           className="rounded-md px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
         >
@@ -271,16 +252,28 @@ export default function TemplateImport({
           slides and no way to see why. */}
       {/* Hidden for a design file, which has no slides to consolidate: a
           control that cannot do anything is worse than one that is absent. */}
-      {(!link.trim() || fromSlides) && (
+      {(!picked || fromSlides) && (
         <ConsolidateToggle tidy={tidy} onChange={setTidy} />
       )}
 
-      {/* Said only once something has been typed, so an empty field is not an
-          error the instructor has not made yet. */}
-      {link.trim() && !source && (
-        <p className="mt-2 text-sm text-amber-700">
-          {t('template.import.errors.link')}
-        </p>
+      {picking && (
+        <DrivePicker
+          kind="importable"
+          title={t('template.import.choose')}
+          onPick={item => {
+            setPicked(item)
+            setPicking(false)
+            setError(null)
+          }}
+          onCancel={() => setPicking(false)}
+          // The picker cannot list a Drive this account has not granted, so
+          // the reconnect closes it and opens it again once the grant is in
+          // place — rather than leaving an error where the files should be.
+          onReconnect={() => {
+            setPicking(false)
+            connect(() => setPicking(true))
+          }}
+        />
       )}
 
       {needsGoogle && (
@@ -290,7 +283,7 @@ export default function TemplateImport({
           </p>
           <button
             type="button"
-            onClick={connect}
+            onClick={() => connect()}
             disabled={busy}
             className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >

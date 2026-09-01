@@ -81,7 +81,8 @@ Several features depend on Google Cloud APIs. Each is **optional** — without i
 | **Cloud Translation** | Post-lecture translated viewing | `GOOGLE_CLOUD_TRANSLATION_KEY` | [§4](GOOGLE_API_KEYS.md#4-translation-key-google_cloud_translation_key) |
 | **Cloud Storage (GCS)** | Speaker-diarization batch job (Phase 3) | `GCS_AUDIO_BUCKET` | [§3](GOOGLE_API_KEYS.md#post-lecture-diarization-a-gcs-bucket-phase-3-gen-4) |
 | **Google OAuth** | Sign-in + connected accounts | `GOOGLE_OAUTH_CLIENT_ID` / `_SECRET` | [GOOGLE_SIGN_IN.md](GOOGLE_SIGN_IN.md) |
-| **Google Forms & Drive** | Quiz publishing via the connected account | (uses the OAuth connection above) | [§6](GOOGLE_API_KEYS.md#6-google-forms--drive-access-for-quiz-publishing-exp-4-connected-accounts) |
+| **Google Forms & Drive** | Quiz publishing, export and import via the connected account | (uses the OAuth connection above) | [§6](GOOGLE_API_KEYS.md#6-connected-account-access-forms-drive--slides-exp-4) |
+| **Google Picker** | Choosing a Drive file or folder. Unset in mock mode — the app draws its own dialog over a fabricated Drive | `GOOGLE_PICKER_API_KEY` / `_APP_ID` | [§6](GOOGLE_API_KEYS.md#the-google-picker-google_picker_api_key--google_picker_app_id) |
 
 ## Feature flags
 

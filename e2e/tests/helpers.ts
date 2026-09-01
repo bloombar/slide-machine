@@ -2,7 +2,7 @@
  * Shared e2e helpers.
  */
 import { readFileSync } from 'node:fs'
-import { expect, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
 import { MAIL_LOG } from '../playwright.config'
 
 /**
@@ -71,4 +71,23 @@ export async function verifyEmail(page: Page, email: string) {
   await page.goto(`/verify-email?token=${verificationTokenFor(email)}`)
   await expect(page.getByText(/your address is confirmed/i)).toBeVisible()
   await page.goto(wasAt)
+}
+
+/**
+ * A layout's card in the "Change slide layout" dialog, by the layout's label.
+ *
+ * Named off the card's own `data-layout-label` rather than off its text. Each
+ * card is a miniature slide above its name (EDIT-3), so the first line of a
+ * card's text is the sample words in the preview, not the layout — and a name
+ * pattern would match "Title" inside "Title 2" anyway.
+ */
+export function layoutCard(dialog: Locator, label: string): Locator {
+  return dialog.locator(`[data-layout-label="${label}"]`)
+}
+
+/** Picks a layout in an open "Change slide layout" dialog by its label. */
+export async function pickLayout(dialog: Locator, label: string) {
+  const card = layoutCard(dialog, label)
+  await expect(card, `no layout offered called "${label}"`).toHaveCount(1)
+  await card.click()
 }

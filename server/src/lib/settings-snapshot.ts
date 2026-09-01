@@ -54,6 +54,10 @@ export const projectSettingsSnapshot = (doc: HydratedDocument<ProjectDb>) => ({
  * `visibility` is the EFFECTIVE one and `accessInherited` says where it
  * came from: pinning a lecture to the visibility it already inherits
  * still detaches it from its project, and that flag is the only signal.
+ * `projectId` is here because a move (PROJ-3) changes which project's
+ * settings the lecture inherits, and an inheriting lecture's effective
+ * access can change with it — the field says why the rest of the entry
+ * moved.
  */
 export const deckSettingsSnapshot = (
   doc: HydratedDocument<DeckDb>,
@@ -61,6 +65,7 @@ export const deckSettingsSnapshot = (
 ) => ({
   title: doc.title,
   ownerId: doc.ownerId.toString(),
+  projectId: doc.projectId.toString(),
   visibility: acl.visibility,
   accessInherited: acl.inherited,
   templateId: doc.templateId,

@@ -4,6 +4,9 @@
  * it can be tuned without a code change:
  *
  * - refine.txt   — "Refine all slides": improve one slide at a 1-5 strength.
+ * - refine-split.txt — the extra instructions for a refine the instructor has
+ *   allowed to break a slide into several; spliced into refine.txt's
+ *   `{{split}}`, and left out entirely when they have not.
  * - narrate.txt  — rewrite a slide's spoken narration at a 1-5 eloquence.
  * - reformat.txt — reframe a slide once speakers are known (student turns as
  *   questions/feedback).
@@ -41,6 +44,10 @@ const fill = (name: string, slots: Record<string, string>): string =>
 
 export const renderRefinePrompt = (slots: Record<string, string>): string =>
   fill('refine.txt', slots)
+
+export const renderRefineSplitPrompt = (
+  slots: Record<string, string>,
+): string => fill('refine-split.txt', slots)
 
 export const renderNarratePrompt = (slots: Record<string, string>): string =>
   fill('narrate.txt', slots)

@@ -3,6 +3,11 @@
  * card grid, current one highlighted; picking dispatches
  * slide.setLayout and closes. Escape or the backdrop closes without
  * changing anything.
+ *
+ * Each card is a miniature slide in the deck's own template, the way the
+ * Design tab shows a template: a name and a sentence say what a layout is
+ * for, but what a reader wants to know is where the words will land, and
+ * that is a thing to be looked at rather than described.
  */
 import { useRef } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
@@ -10,6 +15,7 @@ import { X } from 'lucide-react'
 import type { Template } from '@slide-machine/shared'
 import { templateName } from '../i18n/templateName'
 import Modal from './Modal'
+import PreviewCard from './template/PreviewCard'
 
 interface Props {
   template: Template
@@ -69,32 +75,42 @@ export default function LayoutPickerModal({
       <div
         role="radiogroup"
         aria-label={t('layout.pickerLabel')}
-        className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+        className="grid grid-cols-2 gap-3 sm:grid-cols-3"
       >
         {template.layouts.map(layout => {
           const selected = layout.type === current
+          // A layout with no readable name would be an empty button:
+          // invisible here, yet still reachable with the "[" and "]" keys,
+          // which pick by type. Its type is at least something.
+          const label = layout.label.trim() || layout.type
           return (
-            <button
+            <PreviewCard
               key={layout.type}
-              role="radio"
-              aria-checked={selected}
-              onClick={() => onPick(layout.type)}
-              className={`rounded-md border px-4 py-3 text-start ${
-                selected
-                  ? 'border-indigo-500 bg-indigo-50'
-                  : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-              }`}
+              template={template}
+              layout={layout}
+              selected={selected}
+              onSelect={() => onPick(layout.type)}
+              // Told apart from the Design tab's grid of previews, which
+              // shows whole templates rather than one template's layouts.
+              testId="layout-preview"
+              // No tile round the picture and its words: a wall of slides
+              // reads as slides, and the hairline is on the slide itself.
+              chrome="bare"
+              // A card's own name, for anything that has to find one without
+              // reading it off the card: the picture is the first thing in a
+              // card's text now, so its name no longer is.
+              data={{
+                'data-layout-type': layout.type,
+                'data-layout-label': label,
+              }}
             >
-              {/* A layout with no readable name would be an empty button:
-                  invisible here, yet still reachable with the "[" and "]"
-                  keys, which pick by type. Its type is at least something. */}
-              <span className="block text-sm font-medium">
-                {layout.label.trim() || layout.type}
+              <span className="block truncate text-sm font-medium">
+                {label}
               </span>
               <span className="block text-xs text-slate-500">
                 {layout.purpose}
               </span>
-            </button>
+            </PreviewCard>
           )
         })}
       </div>

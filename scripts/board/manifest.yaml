@@ -632,6 +632,23 @@
   phase: 2
   status: Done
   review: false
+- id: AUTH-7
+  title: Public homepage & consent disclosures
+  full: "The application's homepage is public and is a description of the product,
+    not a door. Signed out, it identifies the app by name and mark, describes
+    what the app does in enough detail to be a description rather than a slogan,
+    and states every kind of user data the app asks for and the purpose it is
+    asked for — the account fields, what Google sign-in receives, what the
+    drive.file connect scope (EXP-4) does and does not reach, and what happens
+    to microphone audio. Signed-in visitors are taken to their home screen
+    instead. The privacy policy and the terms are reachable in one click from
+    any page without opening a menu: a footer of static-page links on both
+    shells, in addition to the…"
+  section: §4 Accounts & Authentication
+  family: AUTH
+  phase: 2
+  status: Backlog
+  review: false
 - id: CAP-4
   title: Voice commands
   full: The user can drive the slide generator hands-free by speaking commands —
@@ -796,8 +813,8 @@
     grants broader, purpose-specific scopes (Drive files) and a user who signed
     in by email can still connect Drive. Connections are listed in the profile
     and are revocable at any time; tokens are stored encrypted (P-9). Reading a
-    user's existing Google Slides presentations (TMPL-8 / EXP-5) requires a
-    presentation-read scope…"
+    user's existing Google Slides presentations (TMPL-8 / EXP-5) needs no scope
+    beyond the one…"
   section: §11 Export/Import, Voting & Social
   family: EXP
   phase: 2
@@ -2214,6 +2231,24 @@
   phase: 4
   status: Backlog
   review: false
+- id: PROJ-3
+  title: Move a lecture between projects
+  full: "A lecture is filed under one project, and the file it sits in can be
+    wrong — a session recorded in the wrong course, a project split in two after
+    the fact. Its owner can move it to another project, from the lecture's own
+    settings. The lecture carries everything of its own across: slides,
+    transcript, template, seed notes and seed material, sharing overrides, quiz
+    and exports. What changes is what it inherits — from the moment it lands, it
+    takes the new project's seed context, AI freedom, language and narration
+    voice wherever it has no setting of its own, and a lecture that follows its
+    project's privacy settings (SHARE-1) follows the new project's. A lecture
+    that has pinned its own access…"
+  section: §6 Slide Projects & Seeding
+  family: PROJ
+  phase: null
+  status: Backlog
+  review: true
+  note: no phase found in roadmap
 - id: TMPL-12
   title: Every shipped design holds what it says it holds
   full: "A built-in design states what each of its boxes can hold — on the slot,

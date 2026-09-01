@@ -20,7 +20,6 @@ import {
   Copy,
   ExternalLink,
   Folder,
-  FolderPlus,
   Trash2,
   X,
 } from 'lucide-react'
@@ -40,6 +39,7 @@ import { dispatchAction } from '../api/actions'
 // and would re-run the fetch).
 import { t as translate } from '../i18n'
 import Portal from './Portal'
+import DrivePicker from './DrivePicker'
 
 interface Props {
   deckId: string
@@ -180,13 +180,15 @@ function useQuizOptions(defaults?: QuizGenerationOptions) {
 type QuizOptions = ReturnType<typeof useQuizOptions>
 
 /**
- * Finder-style Google Drive folder browser (QUIZ-2). Navigate into folders via
- * the breadcrumb, create new ones, and save the quiz into whichever folder
- * you're in. Under the current `drive.file` scope this shows the folders the
- * app created; once `drive.readonly` is granted (server-side) and the user
- * reconnects, the very same views browse the whole Drive — no UI change.
+ * The publish dialog (QUIZ-2): the generation options, and where in Drive the
+ * Form should land.
+ *
+ * The destination is chosen in Google's own picker (DrivePicker) rather than a
+ * browser of ours — the app holds only `drive.file`, which cannot list a
+ * Drive, and picking the folder is what grants access to it. My Drive is the
+ * default, and needs no picking at all.
  */
-function FolderPicker({
+function PublishDialog({
   onCancel,
   onGenerate,
   onReconnect,
@@ -221,75 +223,13 @@ function FolderPicker({
   } = options
   const { t } = useTranslation()
 
-  // The breadcrumb; the last entry is the folder currently open (the one a
-  // quiz would be saved into). Always rooted at My Drive — a Google product
-  // name, so it is not translated.
-  const [path, setPath] = useState<DriveFolder[]>([
-    { id: 'root', name: 'My Drive' },
-  ])
-  const [folders, setFolders] = useState<DriveFolder[]>([])
-  const [loadedFor, setLoadedFor] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [newFolderName, setNewFolderName] = useState('')
-  const [creatingNew, setCreatingNew] = useState(false)
-  const [creating, setCreating] = useState(false)
-
-  const current = path[path.length - 1]!
-
-  // Load the current folder's sub-folders. All state updates happen in the
-  // async callbacks (never synchronously in the effect); `loadedFor` marks
-  // which folder `folders` belongs to, giving a loading state without a
-  // synchronous reset (and no flash of the previous folder's contents).
-  useEffect(() => {
-    let ignore = false
-    dispatchAction<{ folders: DriveFolder[] }>('quiz.driveFolders', {
-      parentId: current.id,
-    })
-      .then(r => {
-        if (ignore) return
-        setFolders(r.folders)
-        setLoadedFor(current.id)
-        setError(null)
-      })
-      .catch(() => {
-        if (!ignore) {
-          setError(translate('quiz.errors.loadFolders'))
-        }
-      })
-    return () => {
-      ignore = true
-    }
-  }, [current.id])
-
-  const loading = loadedFor !== current.id
-
-  const openFolder = (f: DriveFolder) => {
-    setCreatingNew(false)
-    setPath(p => [...p, f])
-  }
-  const goTo = (index: number) => {
-    setCreatingNew(false)
-    setPath(p => p.slice(0, index + 1))
-  }
-
-  const createFolder = () => {
-    const name = newFolderName.trim()
-    if (!name) return
-    setCreating(true)
-    setError(null)
-    dispatchAction<DriveFolder>('quiz.createFolder', {
-      name,
-      parentId: current.id,
-    })
-      .then(folder => {
-        setNewFolderName('')
-        setCreatingNew(false)
-        // Step into the new folder so "Save here" saves the quiz into it.
-        openFolder(folder)
-      })
-      .catch(() => setError(t('quiz.errors.createFolder')))
-      .finally(() => setCreating(false))
-  }
+  // Where the Form will land. My Drive until the instructor picks somewhere
+  // else — a Google product name, so it is not translated.
+  const [current, setCurrent] = useState<DriveFolder>({
+    id: 'root',
+    name: 'My Drive',
+  })
+  const [choosing, setChoosing] = useState(false)
 
   return (
     <Portal>
@@ -318,123 +258,40 @@ function FolderPicker({
 
           {/* Scrollable content; the footer below stays fixed */}
           <div className="flex-1 overflow-y-auto pr-1">
-            {/* Breadcrumb of the current folder path */}
-            <nav
-              aria-label={t('quiz.folder.path')}
-              className="mb-2 flex flex-wrap items-center gap-0.5 text-sm text-slate-600"
-            >
-              {path.map((f, i) => (
-                <span key={f.id} className="flex items-center gap-0.5">
-                  {i > 0 && (
-                    <ChevronRight
-                      className="h-3.5 w-3.5 text-slate-400"
-                      aria-hidden
-                    />
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => goTo(i)}
-                    disabled={i === path.length - 1}
-                    className="rounded px-1 hover:text-slate-900 disabled:font-semibold disabled:text-slate-900"
-                  >
-                    {f.name}
-                  </button>
+            {/* Where the Form lands. Chosen in Google's picker, because
+                `drive.file` cannot list a Drive for us to draw one. */}
+            <div className="flex items-center justify-between gap-2 rounded-md border border-slate-200 px-3 py-2">
+              <span className="flex min-w-0 items-center gap-2 text-sm">
+                <Folder
+                  className="h-4 w-4 shrink-0 text-indigo-500"
+                  aria-hidden
+                />
+                <span className="truncate font-medium text-slate-700">
+                  {current.name}
                 </span>
-              ))}
-            </nav>
-
-            {/* Finder body: the sub-folders of the current folder */}
-            <div className="max-h-44 min-h-[6rem] overflow-y-auto rounded-md border border-slate-200">
-              {error ? (
-                <div className="p-3">
-                  <p className="text-sm text-rose-600">{error}</p>
-                  <button
-                    type="button"
-                    onClick={onReconnect}
-                    className="mt-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-slate-50"
-                  >
-                    {t('quiz.reconnect')}
-                  </button>
-                </div>
-              ) : loading ? (
-                <p className="p-3 text-sm text-slate-500">
-                  {t('common.loading')}
-                </p>
-              ) : folders.length === 0 ? (
-                <p className="p-3 text-sm text-slate-400">
-                  {t('quiz.folder.empty')}
-                </p>
-              ) : (
-                <ul className="divide-y divide-slate-100">
-                  {folders.map(f => (
-                    <li key={f.id}>
-                      <button
-                        type="button"
-                        onClick={() => openFolder(f)}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-start text-sm hover:bg-slate-50"
-                      >
-                        <Folder
-                          className="h-4 w-4 shrink-0 text-indigo-500"
-                          aria-hidden
-                        />
-                        <span className="flex-1 truncate">{f.name}</span>
-                        <ChevronRight
-                          className="h-4 w-4 shrink-0 text-slate-300"
-                          aria-hidden
-                        />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              </span>
+              <button
+                type="button"
+                onClick={() => setChoosing(true)}
+                className="shrink-0 text-sm font-medium text-indigo-600 hover:underline"
+              >
+                {t('drive.picker.change')}
+              </button>
             </div>
-
-            {/* Create a new folder inside the current one */}
-            <div className="mt-2">
-              {creatingNew ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    aria-label={t('quiz.folder.newName')}
-                    autoFocus
-                    value={newFolderName}
-                    onChange={e => setNewFolderName(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && createFolder()}
-                    placeholder={t('quiz.folder.newIn', {
-                      folder: current.name,
-                    })}
-                    className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-                  />
-                  <button
-                    type="button"
-                    disabled={!newFolderName.trim() || creating}
-                    onClick={createFolder}
-                    className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-                  >
-                    {creating ? t('quiz.folder.creating') : t('common.create')}
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={t('quiz.folder.cancelNew')}
-                    onClick={() => {
-                      setCreatingNew(false)
-                      setNewFolderName('')
-                    }}
-                    className="rounded p-1 text-slate-400 hover:text-slate-700"
-                  >
-                    <X className="h-4 w-4" aria-hidden />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setCreatingNew(true)}
-                  className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline"
-                >
-                  <FolderPlus className="h-4 w-4" aria-hidden />
-                  {t('quiz.folder.new')}
-                </button>
-              )}
-            </div>
+            {choosing && (
+              <DrivePicker
+                kind="folder"
+                title={t('quiz.folder.title')}
+                confirmLabel={t('drive.picker.chooseHere')}
+                busyLabel={t('drive.picker.chooseHere')}
+                onPick={folder => {
+                  setCurrent({ id: folder.id, name: folder.name })
+                  setChoosing(false)
+                }}
+                onCancel={() => setChoosing(false)}
+                onReconnect={onReconnect}
+              />
+            )}
 
             {/* Basic generation options */}
             <div className="mt-4 grid grid-cols-2 gap-3">
@@ -915,7 +772,7 @@ function QuizPublishFlow({
     )
   }
   return (
-    <FolderPicker
+    <PublishDialog
       publishing={busy}
       hasTranscript={hasTranscript}
       options={options}

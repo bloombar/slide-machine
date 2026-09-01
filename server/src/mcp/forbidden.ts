@@ -52,6 +52,9 @@ export const FORBIDDEN_ACTIONS: readonly string[] = [
   // here is other people's access to lecture material (FERPA — P-1/P-2).
   'deck.setAccess',
   'deck.resetAccess',
+  // Filing a lecture under another project rehomes its inherited ACL, so a
+  // move is a visibility change wearing different clothes (PROJ-3).
+  'deck.move',
   'deck.share',
   'deck.unshare',
   'deck.transferOwnership',
@@ -65,7 +68,11 @@ export const FORBIDDEN_ACTIONS: readonly string[] = [
   // Writes files into the instructor's own Drive, or removes them.
   'export.',
   'template.exportToDrive',
-  'quiz.createFolder',
+  // Hands back a live OAuth access token for the instructor's Drive. It is
+  // the app's `drive.file` grant, but it leaves as a bearer credential the
+  // holder can spend directly against Google for about an hour, outside
+  // anything this server can see or revoke (EXP-4).
+  'drive.pickerToken',
   // Account-level settings that are the person's to set, not an agent's.
   'user.setAccountType',
   'user.setLanguage',

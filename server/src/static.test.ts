@@ -1,5 +1,7 @@
 /**
- * Unit tests for the link-preview rewrite that index.html is served through.
+ * Unit tests for the two rewrites index.html is served through: the
+ * link-preview tags, and the noscript block the legal documents are inlined
+ * into.
  */
 import fs from 'node:fs'
 import os from 'node:os'
@@ -7,7 +9,11 @@ import path from 'node:path'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import express from 'express'
 import request from 'supertest'
-import { absolutizePreviewTags, serveSpa } from './static'
+import { env } from './config/env'
+import { absolutizePreviewTags, inlineDocument, serveSpa } from './static'
+
+/** Stands in for the app summary index.html really ships. */
+const NOSCRIPT = '<noscript><p>APP SUMMARY</p></noscript>'
 
 const HEAD = [
   '<meta property="og:url" content="/" />',
@@ -69,7 +75,7 @@ describe('serveSpa', () => {
     dist = fs.mkdtempSync(path.join(os.tmpdir(), 'spa-'))
     fs.writeFileSync(
       path.join(dist, 'index.html'),
-      `<html><head>${HEAD}</head></html>`,
+      `<html><head>${HEAD}</head><body><div id="root"></div>${NOSCRIPT}</body></html>`,
     )
     fs.writeFileSync(path.join(dist, 'og-image.png'), 'not really a png')
   })
@@ -111,5 +117,89 @@ describe('serveSpa', () => {
   it('leaves /api to the API', async () => {
     const res = await request(app()).get('/api/health')
     expect(res.status).toBe(404)
+  })
+})
+
+describe('inlineDocument', () => {
+  const page = `<body>${NOSCRIPT}</body>`
+
+  it('replaces the app summary with the policy on /privacy', () => {
+    const out = inlineDocument(page, '/privacy')
+    expect(out).toContain('<h1>Privacy policy</h1>')
+    // The generic summary is gone, not appended to
+    expect(out).not.toContain('APP SUMMARY')
+    // Still exactly one noscript block
+    expect(out.match(/<noscript>/g)).toHaveLength(1)
+  })
+
+  it('serves the terms on /terms', () => {
+    const out = inlineDocument(page, '/terms')
+    expect(out).toContain('<h1>Terms &amp; conditions</h1>')
+  })
+
+  it('leaves the summary alone on every other path', () => {
+    for (const path of ['/', '/about', '/login', '/d/some-deck']) {
+      const out = inlineDocument(page, path)
+      expect(out, path).toContain('APP SUMMARY')
+      expect(out, path).not.toContain('<h1>Privacy policy</h1>')
+    }
+  })
+
+  it('ignores a trailing slash', () => {
+    expect(inlineDocument(page, '/privacy/')).toContain(
+      '<h1>Privacy policy</h1>',
+    )
+  })
+
+  it('returns a page with no noscript block untouched', () => {
+    const bare = '<body><div id="root"></div></body>'
+    expect(inlineDocument(bare, '/privacy')).toBe(bare)
+  })
+
+  it('names whoever this deployment configured, or the placeholder', () => {
+    // Written against env rather than a literal, because the value differs
+    // between a developer's .env and a CI run that sets nothing — and both
+    // are correct. What is being pinned is that the render reads env at all.
+    const out = inlineDocument(page, '/privacy')
+    expect(out).toContain(env.OPERATOR_NAME || '[Operator legal name]')
+    expect(out).toContain(env.OPERATOR_CONTACT_EMAIL || '[legal@example.com]')
+  })
+})
+
+describe('serveSpa document inlining', () => {
+  let dist: string
+
+  beforeAll(() => {
+    dist = fs.mkdtempSync(path.join(os.tmpdir(), 'spa-doc-'))
+    fs.writeFileSync(
+      path.join(dist, 'index.html'),
+      `<html><head>${HEAD}</head><body><div id="root"></div>${NOSCRIPT}</body></html>`,
+    )
+  })
+
+  afterAll(() => {
+    fs.rmSync(dist, { recursive: true, force: true })
+  })
+
+  // The whole point: a reader that never executes the bundle still gets the
+  // policy itself, in the response body, not a link to it.
+  it('serves the policy in the body of /privacy', async () => {
+    const a = express()
+    serveSpa(a, dist)
+    const res = await request(a).get('/privacy')
+    expect(res.status).toBe(200)
+    expect(res.text).toContain('<h1>Privacy policy</h1>')
+    expect(res.text).toContain('<h2>')
+    // And the preview rewrite still ran on the same response
+    expect(res.text).toMatch(
+      /property="og:url" content="http:\/\/[^"]+\/privacy"/,
+    )
+  })
+
+  it('leaves the app summary on the home page', async () => {
+    const a = express()
+    serveSpa(a, dist)
+    const res = await request(a).get('/')
+    expect(res.text).toContain('APP SUMMARY')
   })
 })

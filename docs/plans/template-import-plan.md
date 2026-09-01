@@ -2,6 +2,15 @@
 
 ## Context
 
+> **Superseded on scopes.** This plan predates the Picker migration. The app
+> now requests **`drive.file` and nothing else** — no `presentations.readonly`,
+> no `drive.readonly`, no `forms.body*`. Every method named below accepts
+> `drive.file`, and the Drive browsing described here is done by Google's own
+> Picker. See [GOOGLE_API_KEYS.md §6](../GOOGLE_API_KEYS.md#one-scope-on-purpose)
+> and [GOOGLE_PRODUCTION_MODE.md](../GOOGLE_PRODUCTION_MODE.md). The rest of
+> the plan stands as the record of how import was built.
+
+
 The SPEC promises export/import of decks **and templates**, but only ever specifies
 Google Slides in the deck-export direction ([SPEC.md:525](docs/SPEC.md#L525)). Nothing
 imports a template from anywhere, and — the constraint that shapes this whole plan —

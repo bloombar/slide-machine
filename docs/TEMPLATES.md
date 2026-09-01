@@ -534,10 +534,10 @@ renamable, and applied to nothing. An import is a good guess and still a guess, 
 produces is a starting point its author reviews, never a change to a lecture.
 
 The action is `template.importFromSlides`, reached from the Design tab of a lecture's or
-project's settings: the instructor pastes the presentation's link and the id is read out of
-it. It is metered against the **import** allowance
+project's settings: the instructor chooses the presentation in Google's Picker, and picking
+it is what grants access to it. It is metered against the **import** allowance
 (SPEC [BILL-3](SPEC.md#bill-3-usage-caps--metering)), and needs no Google scope beyond the
-one already used to browse Drive ([§11](#11-operational-notes)). Like every Google-touching
+`drive.file` connect already grants ([§11](#11-operational-notes)). Like every Google-touching
 feature it has a **mock mode**, which reads a deliberately messy sample deck — three designs
 rebuilt by hand with jitter, plus one slide like nothing else in it — so the whole
 consolidation runs in tests and on a machine with no credentials.
@@ -547,8 +547,9 @@ consolidation runs in tests and on a machine with no credentials.
 A design also travels as the file it was exported to (SPEC
 [EXP-3](SPEC.md#exp-3-round-trip-import)). `template.import` takes the YAML
 `template.export` writes and recreates it as a new template in the caller's library;
-`template.importFromDrive` is the same import reading the file out of the connected Drive
-by pasted link, since EXP-3 allows an upload **or** a connected account. Once the bytes
+`template.importFromDrive` is the same import reading the file out of the connected Drive,
+by the id of a file the instructor picked in Google's Picker, since EXP-3 allows an upload
+**or** a connected account. Once the bytes
 are in hand both take the same path, so neither route can drift into accepting what the
 other refuses.
 
@@ -996,11 +997,11 @@ writes `e2e/.uploads-e2e`. A template imported by one is therefore missing its p
 the other, and the symptom is decoration that silently does not render rather than an error.
 Check with a direct request for the file, not by looking at the slide.
 
-- **Google Slides import needs no new OAuth scope, and nobody has to reconnect.** This note
-  previously said the opposite; a live check against the Slides API settled it. The `drive.readonly`
-  already granted for the folder picker is enough for `presentations.get`, so an instructor
-  connected for quiz publishing or export can import immediately. The reader still handles a
-  403/401 by asking for a reconnect rather than assuming — a file shared without the right
+- **Google Slides import needs no OAuth scope beyond the one connect already grants.**
+  `presentations.get` accepts `drive.file`, checked against Google's own method reference, so
+  an instructor connected for quiz publishing or export can import immediately — on any file
+  they choose in the Picker, which is what grants access to it. The reader still handles a
+  403/401 by asking for a reconnect rather than assuming: a file shared without the right
   access produces the same status, and that case is real even when the scopes are fine.
   Setup: [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md).
 - **Import has a mock mode**, as every Google-touching feature does, so the test suite and

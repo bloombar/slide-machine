@@ -88,6 +88,15 @@ These are **defaults for new work, not a lock**. Every project and lecture keeps
 
 The prompt is asked but not enforced — because all three answers are valid and "other" is the way past it, there is nothing to skip. It is asked of accounts that predate the question too, since they have no answer stored either. The unverified-email restriction ([AUTH-3](#auth-3-email-verification)) is independent and still applies: whichever is stricter wins, so an unverified educator's first projects are still restricted.
 
+#### AUTH-7 Public homepage & consent disclosures
+
+The application's homepage is public and is a description of the product, not a door. Signed out, it identifies the app by name and mark, describes what the app does in enough detail to be a description rather than a slogan, and states **every kind of user data the app asks for and the purpose it is asked for** — the account fields, what Google sign-in receives, what the `drive.file` connect scope ([EXP-4](#exp-4-connected-accounts-google-drive)) does and does not reach, and what happens to microphone audio. Signed-in visitors are taken to their home screen instead.
+
+The privacy policy and the terms are reachable in **one click from any page without opening a menu**: a footer of static-page links on both shells, in addition to the hamburger's. The sign-in and register forms each name both documents inline, beside the button that starts an account — including the Google one, where pressing it begins an OAuth grant.
+
+These are conditions of Google's OAuth homepage requirements as well as good manners; the homepage, the policy and the terms must sit on the deployment's own verified domain (docs/GOOGLE_PRODUCTION_MODE.md).
+
+
 ### 5. Plans, Billing & Usage Limits
 
 #### BILL-1 Subscription tiers
@@ -199,6 +208,14 @@ An instructor can create a **slide project** ahead of a lecture, with metadata (
 #### PROJ-2 Project lifecycle
 
 Projects persist in MongoDB and can be reopened, duplicated, archived, and deleted. Deletion is a **soft delete** — recoverable during a retention window before a background sweep permanently purges it, and cascading to the project's decks ([P-10](#16-privacy-security--compliance)/[P-11](#16-privacy-security--compliance)). A project may contain multiple decks (e.g., one per lecture session).
+
+#### PROJ-3 Move a lecture between projects
+
+A lecture is filed under one project, and the file it sits in can be wrong — a session recorded in the wrong course, a project split in two after the fact. Its owner can **move it to another project**, from the lecture's own settings.
+
+The lecture carries everything of its own across: slides, transcript, template, seed notes and seed material, sharing overrides, quiz and exports. What changes is what it inherits — from the moment it lands, it takes the new project's seed context, AI freedom, language and narration voice wherever it has no setting of its own, and a lecture that follows its project's privacy settings ([SHARE-1](#share-1-saved-deck-viewer--permalink)) follows the new project's. A lecture that has pinned its own access keeps it.
+
+Moving is authorized exactly as creating would be: the mover must own the lecture **and** own the destination project, which is what starting a lecture in a project asks ([PROJ-1](#proj-1-pre-create-a-project)). So the destinations offered are the projects the user could have created the lecture in to begin with.
 
 #### SEED-1 Document seeding
 
@@ -845,10 +862,11 @@ Generated slides render full-screen in real time as the user speaks, advancing a
 
 Once a session ends ([CAP-1](#cap-1-session-lifecycle) Stop) and the **full transcript** is available, the user is offered a **"Reformat with AI"** option that regenerates the deck holistically from the complete transcript plus project seed context — something the live, phrase-by-phrase pipeline (GEN-1) cannot do because it lacks the full picture.
 
-Delivered as a **"Refine"** action with three **independently-toggleable passes** (identify speakers / refine slide content / refine spoken narration), run together as one background job the client polls; it can also be run **per slide** on demand. (Design: [DECISIONS.md](DECISIONS.md) "Refine: three opt-in passes".)
+Delivered as a **"Refine"** action with three **independently-toggleable passes** (identify speakers / refine slide content / refine spoken narration), run together as one background job the client polls; it can also be run **per slide** on demand. While it runs it **says which slide it is working on**, rather than only that something is happening. (Design: [DECISIONS.md](DECISIONS.md) "Refine: three opt-in passes", "Refine progress".)
 
 - **Identifies speakers (diarization)** — post-hoc, the retained lecture audio ([P-6](#16-privacy-security--compliance)) is grouped into speakers and roles are mapped by talk-time (lecturer vs. students), so **student turns can be reframed as questions** while the lecturer's words stay authoritative. Speaker/role tags are joined onto the timestamped transcript segments ([§15](#15-data-models)) by a pure time-join. Diarization runs behind a `DiarizationProvider` (Google Cloud), post-hoc rather than live to avoid added latency and a single-provider live dependency ([DECISIONS.md](DECISIONS.md)).
 - **Improves and re-organizes content** — tighten wording, merge or split slides, add structure, and reconcile mid-lecture backtracking now that the whole lecture is known.
+- **Breaks a slide up when one slide cannot hold it** — some slides carry separate ideas, or simply more than an audience can take in, and no amount of rewording fixes that. Offered as its own **opt-in checkbox** on both surfaces (one slide, or the whole lecture): ticked, a refine may turn a slide into several; unticked — the default — it never does. It only happens where it is genuinely necessary, so most slides come back as one, and the instructor is told which slide became several and why. (Design: [DECISIONS.md](DECISIONS.md) "Splitting a slide".)
 - **Re-selects template layouts per slide** — choose the most fitting layout type (heading, section, list, two-column, image-heavy, quote — [TMPL-2](#tmpl-2-conventional-layout-types)) for each slide given the overall arc, within the deck's chosen template ([EDIT-2](#edit-2-deck-level-template-switch) / [EDIT-3](#edit-3-per-slide-layout-switch)).
 - **Re-enriches images** — re-runs image enrichment ([IMG-1](#img-1-real-time-image-enrichment) / IMG-2) for new or changed slides.
 - **Refines spoken narration** — rewrites each slide's stored narration (`sourceTranscript`, [§15](#15-data-models)) so the read-aloud ([PLAY-2](#play-2-narration-playback)) stays in-line with the (possibly reformatted) slide; student slides are narrated as questions.
@@ -1063,7 +1081,7 @@ Users can connect their **own Google Drive** account via OAuth to import from an
 - **Import** — pull source documents and previously-exported decks/templates from Drive ([SEED-1](#seed-1-document-seeding)).
 - **Export** — push outputs to the connected destination: **PDF / Google Slides / YAML** to Google Drive (round-trippable via EXP-3).
 - Connecting an account is **separate from sign-in identity** (AUTH-1): it grants broader, purpose-specific scopes (Drive files) and a user who signed in by email can still connect Drive. Connections are listed in the profile and are **revocable** at any time; tokens are stored encrypted ([P-9](#16-privacy-security--compliance)).
-- Reading a user's **existing** Google Slides presentations (TMPL-8 / EXP-5) requires a **presentation-read scope** beyond those needed to create files. Because a stored authorization only carries the scopes granted when it was issued, **adding a scope requires already-connected users to reconnect once**; the app detects the missing grant and prompts, rather than failing without explanation. Setup: [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md).
+- Reading a user's **existing** Google Slides presentations (TMPL-8 / EXP-5) needs **no scope beyond the one connect already grants**: the presentation arrives from Google's Picker, and picking it is what puts it inside `drive.file`. Because a stored authorization only carries the scopes granted when it was issued, **adding a scope would require already-connected users to reconnect once**; the app detects a missing grant and prompts, rather than failing without explanation. Setup: [GOOGLE_API_KEYS.md](GOOGLE_API_KEYS.md).
 
 #### EXP-5 Lecture import from Google Slides
 

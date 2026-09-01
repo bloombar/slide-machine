@@ -40,12 +40,41 @@
     "profile": "Profil",
     "accountSettings": "Paramètres du compte",
     "logIn": "Connexion",
-    "logOut": "Déconnexion"
+    "logOut": "Déconnexion",
+    "legal": "Informations et mentions légales"
   },
   "landing": {
-    "title": "The Slide Machine V2",
+    "title": "The Slide Machine",
     "tagline": "Parlez librement — les diapositives suivront.",
-    "cta": "Connectez-vous pour commencer"
+    "intro": "The Slide Machine construit vos diapositives en direct, à partir de ce que vous dites vraiment, pendant que vous le dites. Lancez un cours et parlez : votre parole est transcrite et notre agent IA transforme vos mots en diapositives bien mises en page, en temps réel, avec des images que nous trouvons et plaçons aux endroits appropriés pendant que vous parlez.",
+    "cta": "Connectez-vous pour commencer",
+    "ctaAbout": "En savoir plus sur le projet",
+    "featuresTitle": "Ce que fait l'application",
+    "featureLiveTitle": "Des diapositives écrites pendant que vous parlez",
+    "featureLiveBody": "La reconnaissance vocale et un modèle d'IA générative fonctionnent ensemble pendant tout le cours et choisissent un titre, des puces, un paragraphe ou une mise en page avec image selon ce que vous venez de dire.",
+    "featureSeedTitle": "Alimentée par vos propres documents",
+    "featureSeedBody": "Si vous avez déjà un plan, une lecture que vous avez donnée à vos étudiants, une présentation existante ou un ensemble d'images à inclure, ajoutez-les : The Slide Machine s'en servira pour composer la présentation idéale.",
+    "featureBoardTitle": "Un tableau blanc sur chaque diapositive",
+    "featureBoardBody": "Dessinez en plein cours. Les traits sont ancrés aux mots que vous prononciez à cet instant, et sont donc rejoués au rythme de la narration.",
+    "featureAfterTitle": "Modifiable et exportable ensuite",
+    "featureAfterBody": "Rien n'est figé à la fin du cours. Modifiez la présentation, remettez-la en page, affinez-la dans son ensemble et exportez-la en PDF, YAML ou Google Slides.",
+    "dataTitle": "Ce que nous demandons, et pourquoi",
+    "dataIntro": "The Slide Machine demande le strict minimum, et seulement quand une fonctionnalité l'exige. Voici chaque donnée demandée et son usage.",
+    "dataAccountTitle": "Votre compte",
+    "dataAccountBody": "Une adresse e-mail, un nom affiché et un mot de passe que nous ne conservons que sous forme de hachage — pour vous identifier et garder votre travail à vous.",
+    "dataGoogleTitle": "Connexion avec Google",
+    "dataGoogleBody": "Si vous choisissez de vous connecter avec Google, nous recevons de Google votre nom, votre adresse e-mail et votre photo de profil. Nous les utilisons pour créer et identifier votre compte, et pour rien d'autre. C'est la seule donnée Google que la connexion nous donne.",
+    "dataDriveTitle": "Connecter Google Drive",
+    "dataDriveBody": "Importer ou exporter des présentations ou des quiz vers votre compte Google est facultatif, et nous demandons à Google l’autorisation la plus restreinte possible pour le faire. Par conséquent, nous ne pouvons pas consulter, rechercher ni lire le reste de vos fichiers et dossiers Google Drive, et nous ne le faisons pas.",
+    "dataSpeechTitle": "Votre microphone",
+    "dataSpeechBody": "Pendant l'enregistrement d'un cours, l'audio du microphone est transcrit en texte afin de construire les diapositives. Nous pouvons également conserver l'enregistrement lui-même, pour qu'un cours puisse être retranscrit, affiné, ses locuteurs distingués, sa narration d'origine rejouée avec les diapositives et sa qualité analysée. La durée de conservation dépend de votre forfait et de ce qu'il reste à faire avec l'enregistrement. Un enregistrement conservé est stocké uniquement côté serveur, n'est jamais exposé à quiconque n'a pas le droit de modifier ce cours, et est supprimé à l'échéance de sa durée de conservation.",
+    "dataNever": "Nous ne vendons pas vos données et ne les utilisons pas pour entraîner des modèles d'IA tiers.",
+    "dataMore": "Tout le détail figure dans notre politique de confidentialité.",
+    "privacyLink": "Politique de confidentialité",
+    "featureQuizTitle": "Quiz de fin de séance",
+    "featureQuizBody": "Générez un quiz à partir de la présentation terminée et publiez-le sous forme de Google Form : la classe y répond en sortant et Google le corrige pour vous.",
+    "featureSpeakTitle": "Traduit, et lu à voix haute",
+    "featureSpeakBody": "Relisez un cours terminé dans la langue de votre choix et faites lire son texte à voix haute dans cette langue — pour réviser, et pour les étudiants qui ne l'ont pas entendu dans leur langue maternelle."
   },
   "auth": {
     "signIn": "Se connecter",
@@ -103,7 +132,9 @@
       "resendError": "Impossible d’envoyer un autre lien — réessayez",
       "unavailable": "Ce serveur ne peut pas envoyer d’e-mails, le lien ne peut donc pas être renvoyé.",
       "confirmed": "Confirmée"
-    }
+    },
+    "legalRegister": "En créant un compte, vous acceptez nos <termsLink>Conditions générales</termsLink> et notre <privacyLink>Politique de confidentialité</privacyLink>.",
+    "legalSignIn": "En vous connectant, vous acceptez nos <termsLink>Conditions générales</termsLink> et notre <privacyLink>Politique de confidentialité</privacyLink>."
   },
   "health": {
     "summary": "API {status}",
@@ -460,8 +491,6 @@
       "open": "Importer un design",
       "title": "Importer un design depuis Google Slides",
       "description": "Indiquez une présentation de votre Drive et nous en déduirons le design — couleurs, typographie et emplacement des éléments — pour l'enregistrer comme un modèle que vous pourrez modifier.",
-      "linkLabel": "Lien Google Slides ou Drive",
-      "linkPlaceholder": "Collez un lien Google Slides, ou un lien Drive vers un design .yaml",
       "submit": "Importer le design",
       "tidy": "Regrouper les diapositives quasi identiques en une seule mise en page",
       "tidyFile": "Réduire la présentation que vous ouvrez à moins de mises en page",
@@ -469,7 +498,6 @@
       "tidyHintFile": "S’applique aux présentations. Un diaporama reprend souvent une même maquette plusieurs fois ; un fichier de design n’a pas de diapositives à combiner.",
       "working": "Lecture de la présentation…",
       "errors": {
-        "link": "Cela ne ressemble pas à un lien Google Slides ou Drive.",
         "google": "Google ne nous a pas laissés lire cette présentation. Vérifiez que vous pouvez l'ouvrir vous-même.",
         "failed": "Impossible d'importer cette présentation"
       },
@@ -484,7 +512,8 @@
       },
       "connectPrompt": "Connectez un compte Google pour lire une présentation de votre Drive.",
       "connect": "Connecter Google",
-      "otherSources": "Ou téléversez un fichier"
+      "otherSources": "Ou téléversez un fichier",
+      "choose": "Choisir dans Google Drive"
     },
     "fileImport": {
       "open": "Importer un fichier de design (.yaml ou .pptx)",
@@ -526,8 +555,6 @@
     "importSlides": {
       "title": "Créer un cours à partir d’une présentation Google Slides",
       "description": "Importez une présentation depuis votre Drive — Google Slides ou PowerPoint. Chaque diapositive arrive telle que vous l’avez faite.",
-      "linkLabel": "Lien Google Slides",
-      "linkPlaceholder": "Collez le lien de la présentation",
       "submit": "Importer le cours",
       "working": "Lecture de la présentation…",
       "report": {
@@ -539,7 +566,8 @@
         "failed": "Impossible d’importer cette présentation"
       },
       "otherSources": "Ou téléversez un fichier",
-      "fileOpen": "Importer un fichier de cours (.yaml ou .pptx)"
+      "fileOpen": "Importer un fichier de cours (.yaml ou .pptx)",
+      "choose": "Choisir une présentation"
     },
     "errors": {
       "create": "Impossible de créer le cours"
@@ -801,12 +829,6 @@
       "code": "Ajouter du code",
       "codeIn": "Ajouter du code {language}",
       "preformatted": "Ajouter du texte préformaté"
-    },
-    "split": {
-      "title": "Diviser cette diapositive ?",
-      "intro": "Cette diapositive contient {count} idées distinctes ({reason}). La présenter en {count} diapositives serait plus clair :",
-      "confirm": "Diviser en {count} diapositives",
-      "untitled": "(partie sans titre)"
     }
   },
   "image": {
@@ -898,6 +920,15 @@
         "description": "Trouver une image lorsque la mise en page comporte un emplacement d'image vide."
       }
     },
+    "split": {
+      "label": "Diviser les diapositives surchargées",
+      "labelSlide": "Diviser cette diapositive",
+      "description": "Transformer une diapositive en plusieurs, mais seulement quand une seule ne suffit pas.",
+      "descriptionSlide": "Transformer cette diapositive en plusieurs, mais seulement si une seule ne suffit pas.",
+      "needsText": "(Disponible uniquement pendant l’amélioration du texte de la diapositive.)",
+      "done": "{count, plural, one {La diapositive {number} est maintenant # diapositive} other {La diapositive {number} est maintenant # diapositives}} — {reason}.",
+      "doneNoReason": "{count, plural, one {La diapositive {number} est maintenant # diapositive.} other {La diapositive {number} est maintenant # diapositives.}}"
+    },
     "speakers": {
       "label": "Identifier plusieurs intervenants",
       "description": "Détecter qui a parlé — vous ou les étudiants — et reformuler les prises de parole des étudiants en questions plutôt qu’en affirmations.",
@@ -916,7 +947,8 @@
       "levelLabel": "Intensité de l’amélioration de cette diapositive",
       "marked": "Cette diapositive comporte des annotations au tableau blanc. L'amélioration peut modifier son contenu ou sa mise en page ; vos surlignages et annotations risquent alors de ne plus correspondre à ce qui se trouve dessous.",
       "running": "Amélioration de cette diapositive…",
-      "failed": "Impossible d'améliorer cette diapositive — réessayez"
+      "failed": "Impossible d'améliorer cette diapositive — réessayez",
+      "runningNamed": "Amélioration de la diapositive {number} : {title}…"
     }
   },
   "transcript": {
@@ -1081,6 +1113,8 @@
       "general": {
         "titleHeading": "Titre du cours",
         "titleHint": "Donnez un nom à ce cours. Laissez le champ vide pour que l'IA le titre à partir de vos propos au fil du cours.",
+        "projectHeading": "Projet",
+        "projectHint": "Le projet dans lequel ce cours est classé. Le déplacer conserve ses diapositives, ses notes et son partage, mais il hérite désormais des réglages du nouveau projet.",
         "seedNotesHeading": "Notes sources",
         "seedNotesHint": "Documentation propre à ce cours, ajoutée aux notes sources du projet. Enregistrée automatiquement.",
         "seedNotesLabel": "Notes sources du cours",
@@ -1109,11 +1143,19 @@
         "markedTitle": "Améliorer des diapositives annotées ?",
         "markedMessage": "Certaines diapositives comportent des annotations au tableau blanc. L'amélioration peut modifier leur contenu ou leur mise en page ; les surlignages et annotations risquent alors de ne plus correspondre à ce qui se trouve dessous.",
         "markedConfirm": "Améliorer quand même",
+        "progress": {
+          "speakers": "Identification des personnes qui ont parlé dans l’enregistrement…",
+          "slides": "Amélioration de la diapositive {index} sur {total} : {title}",
+          "slidesUntitled": "Amélioration de la diapositive {index} sur {total}…",
+          "narration": "Rédaction de la version parlée de la diapositive {index} sur {total} : {title}",
+          "narrationUntitled": "Rédaction de la version parlée de la diapositive {index} sur {total}…"
+        },
         "summary": {
           "done": "Terminé — {changes}.",
           "none": "Terminé — aucune modification nécessaire.",
           "reframed": "{count, plural, one {# diapositive étudiante reformulée} other {# diapositives étudiantes reformulées}}",
           "slidesRefined": "{count, plural, one {# diapositive améliorée} other {# diapositives améliorées}}",
+          "slidesSplit": "{count, plural, one {divisé # diapositive} other {divisé # diapositives}}",
           "transcriptsUpdated": "{count, plural, one {# narration mise à jour} other {# narrations mises à jour}}"
         }
       }
@@ -1151,14 +1193,7 @@
     "savingTo": "Enregistrement dans :",
     "folder": {
       "dialog": "Choisir un dossier Drive",
-      "title": "Enregistrer le quiz dans…",
-      "path": "Chemin du dossier",
-      "empty": "Aucun sous-dossier ici. Enregistrez le quiz dans ce dossier, ou créez-en un ci-dessous.",
-      "new": "Nouveau dossier",
-      "newName": "Nom du nouveau dossier",
-      "newIn": "Nouveau dossier dans {folder}",
-      "cancelNew": "Annuler le nouveau dossier",
-      "creating": "Création…"
+      "title": "Enregistrer le quiz dans…"
     },
     "options": {
       "questionCount": "Nombre de questions",
@@ -1217,7 +1252,6 @@
       "status": "Impossible de charger l'état du quiz",
       "connect": "Impossible de connecter votre compte Google",
       "loadFolders": "Impossible de charger vos dossiers Drive. Votre compte Google n'a peut-être pas accordé l'accès à Drive.",
-      "createFolder": "Impossible de créer le dossier",
       "generate": "Impossible de générer le quiz — veuillez réessayer",
       "publish": "Impossible de publier le quiz — veuillez réessayer",
       "delete": "Impossible de supprimer le quiz — veuillez réessayer"
@@ -1258,8 +1292,7 @@
       }
     },
     "folder": {
-      "title": "Enregistrer le {format} dans…",
-      "empty": "Aucun sous-dossier ici. Enregistrez dans ce dossier, ou créez-en un ci-dessous."
+      "title": "Enregistrer le {format} dans…"
     },
     "includeWhiteboard": {
       "label": "Inclure les annotations du tableau blanc",
@@ -1282,6 +1315,19 @@
     "notes": {
       "heading": "Certains éléments n’ont pas pu être repris dans ce fichier",
       "math-not-typeset": "Une formule n’a pas pu être composée ; elle a été omise plutôt qu’écrite sous forme de code : {detail}"
+    }
+  },
+  "drive": {
+    "picker": {
+      "dialog": "Choisir dans Google Drive",
+      "path": "Chemin du dossier",
+      "emptyFolders": "Aucun sous-dossier ici. Enregistrez dans ce dossier.",
+      "emptyFiles": "Rien à importer ici.",
+      "unavailable": "Google Drive n'est pas configuré sur ce serveur : impossible d'y choisir un fichier.",
+      "failed": "Impossible d’ouvrir le sélecteur de fichiers Google.",
+      "cookieHint": "Si Google vous demande de vous connecter, votre navigateur bloque les cookies tiers — Brave Shields, Safari, Firefox et la navigation privée de Chrome le font tous. Autorisez-les pour ce site, puis rouvrez le sélecteur.",
+      "change": "Modifier",
+      "chooseHere": "Choisir ce dossier"
     }
   },
   "errors": {

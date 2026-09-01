@@ -232,25 +232,91 @@ In the same Cloud project (§1), **APIs & Services → Library**, enable:
 
 - **Google Forms API**
 - **Google Drive API**
-- **Google Slides API** — *needed only for import; see the release note below*
+- **Google Slides API** — needed for template/lecture import
+- **Google Picker API** — the file chooser (see below)
 
-### Scopes to request on the connect flow
+### One scope, on purpose
 
-The connected-account consent must request these least-privilege scopes:
+The connected-account consent requests exactly one scope:
 
 | Scope | Why |
 | --- | --- |
-| `https://www.googleapis.com/auth/forms.body` | Create and edit the quiz form's questions, settings, and metadata |
-| `https://www.googleapis.com/auth/forms.body.readonly` | Read a form back (download / update flows) |
-| `https://www.googleapis.com/auth/drive.file` | Place the created form into a chosen Drive folder, and write exports — per-file access, limited to files this app creates |
-| `https://www.googleapis.com/auth/drive.readonly` | Browse and read files the app did **not** create — the import picker listing the instructor's own presentations |
-| `https://www.googleapis.com/auth/presentations.readonly` | Read a presentation's layouts, element geometry and theme to derive a template. Read-only: import never writes to the instructor's Slides — *see the release note below* |
+| `https://www.googleapis.com/auth/drive.file` | Per-file access: files this app creates, and files the instructor hands it by picking them in Google's Picker |
 
-The first four are requested today. `presentations.readonly` and the Slides API arrive with Google Slides import; granting them before that ships is harmless but does nothing.
+That is enough for every Google call the app makes, verified against Google's own method reference:
 
-Note that **exporting** a template to Google Slides needs no Slides scope — the file is produced as a `.pptx` and converted by Drive, which `drive.file` already covers. Only reading someone's existing presentation needs the new scope.
+| Call | Where |
+| --- | --- |
+| `forms.create`, `forms.batchUpdate`, `forms.get` | quiz publishing — the app only ever touches a Form it created |
+| `files.create`, `files.copy`, `files.get`, `files.get?alt=media`, `files.update` | export, and reading a picked file |
+| `presentations.get` | template and lecture import, on a picked presentation |
+
+It is also the only Drive scope Google classes as **non-sensitive**, which is why the list is this short and should stay that way. See [GOOGLE_PRODUCTION_MODE.md](GOOGLE_PRODUCTION_MODE.md) for what the alternatives cost.
+
+**Scopes this deliberately does not request:**
+
+- `forms.body` / `forms.body.readonly` — *sensitive*, and unnecessary: all three Forms methods above accept `drive.file`. They came from the quiz library's own standalone-CLI scope constant, which the server never uses.
+- `drive.readonly` — ***restricted***: an annual paid third-party security assessment, forever. It bought exactly one thing, `files.list`, i.e. the app browsing a Drive itself. Google's Picker does the browsing now.
+- `presentations.readonly` — *sensitive*, and unnecessary: `presentations.get` accepts `drive.file`.
+
+Note that **exporting** a template to Google Slides needs no Slides scope either — the file is produced as a `.pptx` and converted by Drive, which `drive.file` covers.
 
 These are all **separate from the Google sign-in scopes** (`openid`, `email`, `profile`) requested in [server/src/auth/google.ts](../server/src/auth/google.ts). Sign-in identifies the user; **connecting** a Google account is a second, broader consent (AUTH-1 vs EXP-4), and a user who signed in by email/GitHub can still connect Google here.
+
+### The Google Picker (`GOOGLE_PICKER_API_KEY` / `GOOGLE_PICKER_APP_ID`)
+
+`drive.file` cannot list a Drive — that is the point of it — so the app cannot draw its own file browser. The instructor chooses in **Google's Picker**, which runs in Google's own iframe on their session and grants this app access to exactly what they pick.
+
+Two values, both published to the browser through `GET /api/config` and neither one a secret:
+
+| Variable | What it is | Where |
+| --- | --- | --- |
+| `GOOGLE_PICKER_API_KEY` | A **browser API key** | Cloud Console → **APIs & Services → Credentials → Create credentials → API key**. Restrict it to the **Google Picker API**, and to your own domain under **Application restrictions → Websites** |
+| `GOOGLE_PICKER_APP_ID` | The Cloud **project number** — *not* the project id, *not* the OAuth client id | Cloud Console → **Home**, in the project info card |
+
+**Get the app id wrong and the failure is silent-looking:** the pick succeeds, and the server's later read of that file 404s. It is what ties the picked file's grant to this OAuth client.
+
+#### When the Picker won't open
+
+Two failures look like app bugs and are not. Both were hit on the first live deployment.
+
+**"The API developer key is invalid."** The `developerKey` is checked against the Cloud
+project, not against your app. Check, in this order:
+
+1. **Google Picker API is enabled** on the project — easy to miss, because it is not listed
+   beside Drive/Slides/Forms in most setup guides. This is the usual cause.
+2. **The key's API restriction includes Google Picker API.** A key restricted to the other
+   APIs fails exactly the same way.
+3. **Both are on the same project** as `GOOGLE_PICKER_APP_ID` — the project *number*, which
+   also appears as `appId` in the picker URL. Enabling the API on a different project in the
+   console's project switcher looks identical to having done it.
+
+Key restriction changes take a few minutes to propagate, and Google's edge servers disagree
+with each other while they do, so a retry that fails right after an edit is not evidence the
+edit was wrong. Note also that **OAuth verification status is unrelated** — a project mid
+brand-review issues working tokens and working keys; if consent completed, verification is
+not what broke the Picker.
+
+**"Sign in to your Google Account / You must sign in to access this content"**, drawn inside
+the chooser itself. The Picker is an iframe on `docs.google.com`, and it needs **third-party
+cookies** to find the user's Google session. The OAuth token the app passes authorizes the
+API call, not the iframe's UI. Browsers that block those cookies — **Brave with Shields up,
+Safari, Firefox's Total Cookie Protection, Chrome incognito** — get this screen instead of
+their files.
+
+**There is no fix on the app's side**, which is worth stating plainly because it looks like
+one is missing. The iframe loads successfully, so no error reaches the app to catch;
+`drive.file` cannot list a Drive, so the app cannot fall back to a browser of its own; and a
+pasted Drive link cannot replace a pick, because `drive.file` only reaches a file the user
+actually chose in the Picker. All the app can do is say what happened, which
+[DrivePicker.tsx](../client/src/components/DrivePicker.tsx) does in a caption under the
+chooser. Users have to allow third-party cookies for the site — or, for a lecture, upload the
+`.pptx` directly, which needs no Google at all.
+
+Expect this to be a recurring support question rather than a one-off, and note that the same
+constraint applies to the folder chooser used by export and quiz publishing.
+
+Both unset while `EXPORT_MODE`/`QUIZ_PUBLISH_MODE` are `mock` is normal and correct — the client falls back to its own dialog over a fabricated Drive, which is what dev machines and the test suite use. Live with only one of them set, Drive saving and importing report themselves unavailable rather than opening a chooser that could only come back empty.
 
 ### Configure the scopes in the console
 
@@ -262,6 +328,8 @@ Requesting a scope in code is only half of it — it must also be declared on th
 4. Filter by the API name or the scope string, tick the scope, **Update**, then **Save**.
 
 Take the **Sensitive / Restricted** label the picker shows next to each scope as authoritative — it decides your verification path below, and Google reclassifies scopes from time to time.
+
+Going to production — publishing and what (little) verification a `drive.file`-only app needs — is [GOOGLE_PRODUCTION_MODE.md](GOOGLE_PRODUCTION_MODE.md).
 
 ### What you don't need to change
 
@@ -310,25 +378,26 @@ Paste the output into `CONNECTED_ACCOUNT_TOKEN_ENC_KEY` in `server/.env`. **Keep
 
 ### OAuth consent screen & verification
 
-Google grades scopes in three tiers, and ours are not all the same tier:
+Google grades scopes in three tiers. Every scope this app requests sits in the cheapest one:
 
 | Tier | Ours | Consequence for a **published external** app |
 | --- | --- | --- |
 | Basic | `openid`, `email`, `profile` (sign-in) | None. |
-| **Sensitive** | `forms.body`, `forms.body.readonly`, `drive.file`, `presentations.readonly` | Verification review by Google. |
-| **Restricted** | `drive.readonly` | Verification **plus** an annual third-party security assessment. |
+| Non-sensitive | `drive.file` (connect) | None — no verification review, no user cap, no unverified-app warning. |
+| **Sensitive** | *none* | Would add a verification review by Google. |
+| **Restricted** | *none* | Would add verification **plus** an annual paid third-party security assessment. |
 
-`drive.readonly` being *restricted* is the one to know about: it is already requested today, so this constraint is live now rather than something Google Slides import introduces. It is also the strongest reason to keep the client Workspace-internal.
+That is the whole reason the connect flow asks for one scope and the file browsing happens in Google's Picker. Publishing the app costs a brand-verification pass (2–3 days, so the name and logo show) and nothing else.
 
-**Decide your audience mode before adding any scope** (**Google Auth Platform → Audience**):
+**It stays cheap only while the bottom two rows are empty.** Adding one sensitive scope puts the deployment into Google's review queue; adding one restricted scope adds a recurring paid audit on top. Before adding any scope, check the **Sensitive / Restricted** label the console shows against it, and check whether `drive.file` already covers the call — for every method this app uses so far, it did.
 
-| Mode | What adding a scope costs you |
+Audience modes (**Google Auth Platform → Audience**):
+
+| Mode | What it costs |
 | --- | --- |
-| **Internal** (Workspace org) | Nothing. Sensitive and restricted scopes need no verification at all. **Preferred for a single-institution pilot.** |
-| **External + Testing** | Nothing, as long as every instructor is listed under **Audience → Test users** (100 max). |
-| **External + Published** | Re-triggers verification — weeks, with the feature blocked meanwhile, and a security assessment if any restricted scope is involved. |
-
-So: **add scopes before publishing, never after.** If the OAuth client can be scoped to the **NYU Workspace** organization as Internal, do that — it removes the entire verification path, for these scopes and any future ones.
+| **Internal** (Workspace org) | Nothing, but only org accounts can sign in. |
+| **External + Testing** | Nothing, but only instructors listed under **Audience → Test users** (100 max) can connect, and their refresh tokens expire after 7 days. |
+| **External + Published** | Nothing either, on the current scope set. This is the mode to be in. |
 
 ### Quotas
 

@@ -40,12 +40,41 @@
     "profile": "Profile",
     "accountSettings": "Account settings",
     "logIn": "Log in",
-    "logOut": "Log out"
+    "logOut": "Log out",
+    "legal": "Legal and information"
   },
   "landing": {
-    "title": "The Slide Machine V2",
+    "title": "The Slide Machine",
     "tagline": "Speak freely — the slides will follow.",
-    "cta": "Sign in to get started"
+    "intro": "The Slide Machine builds your lecture slides live, from what you actually say, while you say it. Start a lecture and talk: your speech is transcribed and our AI agent turns your spoken words into well-formatted slides in real-time, with images we source added at appropriate places as you speak.",
+    "cta": "Sign in to get started",
+    "ctaAbout": "Read more about the project",
+    "featuresTitle": "What it does",
+    "featureLiveTitle": "Slides written as you speak",
+    "featureLiveBody": "Speech recognition and a generative AI model run together through the lecture, choosing a title, bullets, a paragraph or an image layout to match what you just said.",
+    "featureSeedTitle": "Seeded from your own material",
+    "featureSeedBody": "If you already have an outline, a reading you assigned to students, an existing deck, or a set of images that you want included, add them and The Slide Machine will use them to help craft the perfect deck.",
+    "featureBoardTitle": "A whiteboard over any slide",
+    "featureBoardBody": "Draw mid-lecture. Strokes are anchored to the words you were speaking at the time, so they replay in step with the narration afterwards.",
+    "featureAfterTitle": "Editable and exportable afterwards",
+    "featureAfterBody": "Nothing is frozen when the lecture ends. Edit the deck, re-lay it out, refine it as a whole, and export it to PDF, YAML or Google Slides.",
+    "dataTitle": "What we ask for, and why",
+    "dataIntro": "The Slide Machine asks for as little as it can, and only when a feature needs it. Here is every piece of data it requests and what it is used for.",
+    "dataAccountTitle": "Your account",
+    "dataAccountBody": "An email address, a display name, and a password we store only as a hash — so we can identify you and keep your work yours.",
+    "dataGoogleTitle": "Google sign-in",
+    "dataGoogleBody": "If you choose to sign in with Google, we receive your name, email address and profile picture from Google. We use them to create and identify your account, and for nothing else. This is the only Google data sign-in gives us.",
+    "dataDriveTitle": "Connecting Google Drive",
+    "dataDriveBody": "Importing or exporting slide decks or quizzes to your Google account is optional and we request the least possible permission from Google to do so. As a result, we cannot and do not view, search, or read the rest of your Google Drive files or folders.",
+    "dataSpeechTitle": "Your microphone",
+    "dataSpeechBody": "While a lecture is recording, microphone audio is transcribed into text so the slides can be built. We may also keep the recording itself, so that a lecture can be re-transcribed, refined, its speakers separated, its original narration replayed alongside the slides, and its quality analysed. How long a recording is kept depends on your plan and on what still has to be done with it. A kept recording is stored server-side only, is never exposed to anyone without edit access to that lecture, and is deleted when its retention window passes.",
+    "dataNever": "We do not sell your data, and we do not use it to train third-party AI models.",
+    "dataMore": "The full detail is in our privacy policy.",
+    "privacyLink": "Privacy policy",
+    "featureQuizTitle": "Exit-ticket quizzes",
+    "featureQuizBody": "Generate a quiz from the finished deck and publish it as a Google Form, so the class can answer it on the way out and Google can grade it for you.",
+    "featureSpeakTitle": "Translated, and read aloud",
+    "featureSpeakBody": "Read a finished lecture in the language you pick, and have its text spoken aloud in that language — for revision, and for students who did not hear it in their first language."
   },
   "auth": {
     "signIn": "Sign in",
@@ -103,7 +132,9 @@
       "resendError": "Could not send another link — try again",
       "unavailable": "This server cannot send email, so the link cannot be re-sent.",
       "confirmed": "Confirmed"
-    }
+    },
+    "legalRegister": "By creating an account you agree to our <termsLink>Terms & conditions</termsLink> and <privacyLink>Privacy policy</privacyLink>.",
+    "legalSignIn": "By signing in you agree to our <termsLink>Terms & conditions</termsLink> and <privacyLink>Privacy policy</privacyLink>."
   },
   "health": {
     "summary": "API {status}",
@@ -460,8 +491,6 @@
       "open": "Import a design",
       "title": "Import a design from Google Slides",
       "description": "Point at a presentation in your Drive and we'll work out the design behind it — colours, type and where things sit — and save it as a template you can edit.",
-      "linkLabel": "Google Slides or Drive link",
-      "linkPlaceholder": "Paste a Google Slides link, or a Drive link to a .yaml design",
       "submit": "Import design",
       "tidy": "Combine near-identical slides into one layout",
       "tidyFile": "Tidy the presentation you open into fewer layouts",
@@ -469,7 +498,6 @@
       "tidyHintFile": "Applies to presentations. A slide deck usually rebuilds one design many times over; a design file has no slides to combine.",
       "working": "Reading the presentation…",
       "errors": {
-        "link": "That doesn't look like a Google Slides or Drive link.",
         "google": "Google wouldn't let us read that presentation. Check you can open it yourself.",
         "failed": "Could not import that presentation"
       },
@@ -484,7 +512,8 @@
       },
       "connectPrompt": "Connect a Google account to read a presentation from your Drive.",
       "connect": "Connect Google",
-      "otherSources": "Or upload a file"
+      "otherSources": "Or upload a file",
+      "choose": "Choose from Google Drive"
     },
     "fileImport": {
       "open": "Import a design file (.yaml or .pptx)",
@@ -526,8 +555,6 @@
     "importSlides": {
       "title": "Create a lecture from a Google Slides presentation",
       "description": "Bring in a presentation from your Drive — Google Slides or PowerPoint. Every slide comes across exactly as you made it.",
-      "linkLabel": "Google Slides link",
-      "linkPlaceholder": "Paste the presentation link",
       "submit": "Import lecture",
       "working": "Reading the presentation…",
       "report": {
@@ -539,7 +566,8 @@
         "failed": "Could not import that presentation"
       },
       "otherSources": "Or upload a file",
-      "fileOpen": "Import a lecture file (.yaml or .pptx)"
+      "fileOpen": "Import a lecture file (.yaml or .pptx)",
+      "choose": "Choose a presentation"
     },
     "errors": {
       "create": "Could not create the lecture"
@@ -801,12 +829,6 @@
       "code": "Add code",
       "codeIn": "Add {language} code",
       "preformatted": "Add preformatted text"
-    },
-    "split": {
-      "title": "Split this slide?",
-      "intro": "This slide holds {count} separate ideas ({reason}). Showing it as {count} slides would be clearer:",
-      "confirm": "Split into {count} slides",
-      "untitled": "(untitled part)"
     }
   },
   "image": {
@@ -898,6 +920,15 @@
         "description": "Find an image when the layout has an image box and none is placed."
       }
     },
+    "split": {
+      "label": "Break up crowded slides",
+      "labelSlide": "Break up this slide",
+      "description": "Turn a slide into several, but only when one slide genuinely cannot hold it.",
+      "descriptionSlide": "Turn this slide into several, but only if one slide genuinely cannot hold it.",
+      "needsText": "(Available only while slide text is being refined.)",
+      "done": "{count, plural, one {Slide {number} is now # slide} other {Slide {number} is now # slides}} — {reason}.",
+      "doneNoReason": "{count, plural, one {Slide {number} is now # slide.} other {Slide {number} is now # slides.}}"
+    },
     "speakers": {
       "label": "Identify multiple speakers",
       "description": "Detect who spoke — you versus students — and reframe student turns as questions, not fact.",
@@ -916,7 +947,8 @@
       "levelLabel": "How much to refine this slide",
       "marked": "This slide has whiteboard markings. Refining may change its content or layout, so your highlights and annotations may no longer line up with what’s underneath.",
       "running": "Refining this slide…",
-      "failed": "Could not refine this slide — try again"
+      "failed": "Could not refine this slide — try again",
+      "runningNamed": "Refining slide {number}: {title}…"
     }
   },
   "transcript": {
@@ -1081,6 +1113,8 @@
       "general": {
         "titleHeading": "Lecture title",
         "titleHint": "Name this lecture. Leave it blank to let the AI title it from your speech as the lecture unfolds.",
+        "projectHeading": "Project",
+        "projectHint": "Which project this lecture is filed under. Moving it keeps its slides, notes and sharing, but it starts inheriting the new project's settings.",
         "seedNotesHeading": "Seed notes",
         "seedNotesHint": "Lecture-specific background material, added on top of the project's seed notes. Saved automatically.",
         "seedNotesLabel": "Lecture seed notes",
@@ -1109,11 +1143,19 @@
         "markedTitle": "Refine marked-up slides?",
         "markedMessage": "Some slides have whiteboard markings. Refining may change their content or layout, so highlights and annotations may no longer line up with what's underneath.",
         "markedConfirm": "Refine anyway",
+        "progress": {
+          "speakers": "Identifying who spoke across the recording…",
+          "slides": "Refining slide {index} of {total}: {title}",
+          "slidesUntitled": "Refining slide {index} of {total}…",
+          "narration": "Writing the spoken version of slide {index} of {total}: {title}",
+          "narrationUntitled": "Writing the spoken version of slide {index} of {total}…"
+        },
         "summary": {
           "done": "Done — {changes}.",
           "none": "Done — no changes were needed.",
           "reframed": "{count, plural, one {reframed # student slide} other {reframed # student slides}}",
           "slidesRefined": "{count, plural, one {refined # slide} other {refined # slides}}",
+          "slidesSplit": "{count, plural, one {broke up # slide} other {broke up # slides}}",
           "transcriptsUpdated": "{count, plural, one {updated # narration} other {updated # narrations}}"
         }
       }
@@ -1151,14 +1193,7 @@
     "savingTo": "Saving to:",
     "folder": {
       "dialog": "Choose a Drive folder",
-      "title": "Save the quiz to…",
-      "path": "Folder path",
-      "empty": "No sub-folders here. Save the quiz into this folder, or make a new one below.",
-      "new": "New folder",
-      "newName": "New folder name",
-      "newIn": "New folder in {folder}",
-      "cancelNew": "Cancel new folder",
-      "creating": "Creating…"
+      "title": "Save the quiz to…"
     },
     "options": {
       "questionCount": "Number of questions",
@@ -1217,7 +1252,6 @@
       "status": "Could not load the quiz status",
       "connect": "Could not connect your Google account",
       "loadFolders": "Could not load your Drive folders. Your Google account may not have granted Drive access.",
-      "createFolder": "Could not create the folder",
       "generate": "Could not generate the quiz — please try again",
       "publish": "Could not publish the quiz — please try again",
       "delete": "Could not delete the quiz — please try again"
@@ -1258,8 +1292,7 @@
       }
     },
     "folder": {
-      "title": "Save {format} to…",
-      "empty": "No sub-folders here. Save into this folder, or make a new one below."
+      "title": "Save {format} to…"
     },
     "includeWhiteboard": {
       "label": "Include whiteboard markups",
@@ -1282,6 +1315,19 @@
     "notes": {
       "heading": "Some things could not be carried into this file",
       "math-not-typeset": "A formula could not be typeset, so it was left out rather than written as its source: {detail}"
+    }
+  },
+  "drive": {
+    "picker": {
+      "dialog": "Choose from Google Drive",
+      "path": "Folder path",
+      "emptyFolders": "No sub-folders here. Save into this folder.",
+      "emptyFiles": "Nothing here to import.",
+      "unavailable": "Google Drive is not set up on this server, so nothing can be chosen from it.",
+      "failed": "Google's file chooser could not be opened.",
+      "cookieHint": "If Google asks you to sign in, your browser is blocking third-party cookies — Brave Shields, Safari, Firefox and Chrome incognito all do. Allow them for this site, then open the chooser again.",
+      "change": "Change",
+      "chooseHere": "Choose this folder"
     }
   },
   "errors": {
