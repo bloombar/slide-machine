@@ -77,6 +77,7 @@ export const FORBIDDEN_ACTIONS: readonly string[] = [
   'user.setAccountType',
   'user.setLanguage',
   'user.setLocale',
+  'user.setTemplate',
   'user.setCapWarnings',
   'quiz.connectGoogle',
   // The live-lecture path. Generation during class is the app's own job

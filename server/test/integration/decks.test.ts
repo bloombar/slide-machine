@@ -13,6 +13,11 @@ import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
 import { TranscriptSegmentModel } from '../../src/models/transcript-segment'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
+import {
+  defaultTemplateId,
+  getBuiltinTemplate,
+  layoutDescriptors,
+} from '../../src/templates/builtin'
 
 // One long-lived server per file: supertest's default per-request
 // ephemeral servers intermittently lost requests to localhost port
@@ -34,6 +39,14 @@ const registerUser = async (email: string): Promise<string> => {
   await UserModel.updateOne({ email }, { emailVerified: true })
   return res.body.accessToken as string
 }
+
+/** How many bullets the deployment's default design allows on a list
+ * slide. Read from the template rather than written down: a deployment
+ * chooses its own default and its own caps (docs/TEMPLATES.md). */
+const listBulletCap = (): number =>
+  layoutDescriptors(getBuiltinTemplate(defaultTemplateId())!).find(
+    l => l.type === 'list',
+  )!.constraints!.maxBullets!
 
 const act = (token: string, name: string, input: object = {}) =>
   request(server)
@@ -112,7 +125,7 @@ describe('deck.create / deck.list / deck.get', () => {
 
     const got = await act(ada, 'deck.get', { deckId: created.body.id })
     expect(got.status).toBe(200)
-    expect(got.body.template.id).toBe('classic')
+    expect(got.body.template.id).toBe(defaultTemplateId())
     expect(got.body.slides).toEqual([])
   })
 
@@ -547,7 +560,7 @@ describe('GET /api/decks/:slug (viewer)', () => {
       .set('Authorization', `Bearer ${ada}`)
     expect(owner.status).toBe(200)
     expect(owner.body.slides).toHaveLength(1)
-    expect(owner.body.template.id).toBe('classic')
+    expect(owner.body.template.id).toBe(defaultTemplateId())
   })
 
   it('serves public decks anonymously', async () => {
@@ -614,13 +627,16 @@ describe('session.phrase capacity enforcement', () => {
     const deck = await act(ada, 'deck.create', { projectId, title: 'Full' })
     const deckId = deck.body.id as string
 
-    // Build a bullet slide already at the classic template's cap (6)
+    // Build a bullet slide already at the design's own cap. The phrase
+    // offers more items than any shipped design allows, so the slide comes
+    // back full whichever design the deployment defaults to.
+    const cap = listBulletCap()
     await act(ada, 'session.phrase', {
       deckId,
-      phrase: 'alpha, beta, gamma, delta, epsilon, zeta',
+      phrase: 'alpha, beta, gamma, delta, epsilon, zeta, eta, theta',
     })
     const before = await act(ada, 'deck.get', { deckId })
-    expect(before.body.slides[0].bullets).toHaveLength(6)
+    expect(before.body.slides[0].bullets).toHaveLength(cap)
 
     // The mock treats "Also ..." as an update adding one bullet — but
     // the slide is full, so the server promotes it to a NEW slide
@@ -631,7 +647,7 @@ describe('session.phrase capacity enforcement', () => {
     expect(res.body.kind).toBe('slide.new')
     const after = await act(ada, 'deck.get', { deckId })
     expect(after.body.slides).toHaveLength(2)
-    expect(after.body.slides[0].bullets).toHaveLength(6)
+    expect(after.body.slides[0].bullets).toHaveLength(cap)
     // The promoted slide gets a synthesized title
     expect(after.body.slides[1].title).toBeTruthy()
   })

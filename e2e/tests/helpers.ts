@@ -44,6 +44,29 @@ export async function openProjectSettings(page: Page, projectTitle: string) {
 }
 
 /**
+ * Pins the account's default design (SPEC TMPL-24), so every project and
+ * lecture the spec goes on to create starts from a known one.
+ *
+ * A spec that measures a design's geometry, or names its boxes, is a spec
+ * about that design — and the deployment's default is a deployment's to
+ * change. Saying which design the spec means is what keeps it true when it
+ * does. Leaves the browser where it found it.
+ */
+export async function chooseAccountDesign(page: Page, design: RegExp) {
+  // Registration redirects into the app; settling there first keeps the
+  // navigation below from racing the sign-up that is still landing.
+  await page.waitForURL(/\/app/)
+  const back = page.url()
+  await page.goto('/app/settings?tab=design')
+  await page.getByRole('radio', { name: design }).click()
+  await expect(page.getByRole('radio', { name: design })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+  if (back && !back.endsWith('/app/settings?tab=design')) await page.goto(back)
+}
+
+/**
  * Confirms a freshly registered account by following the link the server
  * mailed it (AUTH-3).
  *

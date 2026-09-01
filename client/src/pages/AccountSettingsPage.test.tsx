@@ -1,6 +1,7 @@
 /**
  * Unit tests for the unified account settings page: the owner's own profile
- * fields, account details, visibility toggle, and both languages —
+ * fields, account details, visibility toggle, both languages, and the
+ * account's default design (TMPL-24) —
  * then the admin path over the same controls (ADMIN-5), which confirms on
  * entry, loads the target account, saves through the audited endpoint, and
  * drops the owner-only pieces.
@@ -43,6 +44,40 @@ const freeBilling = {
   purchasableTiers: ['fresh', 'pro', 'max'],
 }
 
+/** One built-in in the library, drawn as a card in the Design tab. */
+const templates = [
+  {
+    id: 'nyu-elegant',
+    permalinkSlug: 'nyu-elegant',
+    ownerId: 'system',
+    name: 'NYU Elegant',
+    theme: { background: '#ffffff', text: '#000000', accent: '#57068c' },
+    layouts: [],
+    visibility: 'public',
+    voteScore: 0,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'seminar',
+    permalinkSlug: 'seminar',
+    ownerId: 'system',
+    name: 'Seminar',
+    theme: { background: '#ffffff', text: '#000000', accent: '#123456' },
+    layouts: [],
+    visibility: 'public',
+    voteScore: 0,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+]
+
+// The deployment's default is the server's answer, read at boot from
+// /api/config. Stubbed rather than fetched, so the tab's "nothing chosen yet"
+// case has something to show.
+vi.mock('../runtime-config', async importOriginal => ({
+  ...(await importOriginal<typeof import('../runtime-config')>()),
+  getDefaultTemplateId: () => 'nyu-elegant',
+}))
+
 /** Renders the page at its canonical route, for the signed-in user.
  * `entry` varies the URL, which is where the open tab lives. */
 const renderSettings = (
@@ -57,6 +92,7 @@ const renderSettings = (
     '/api/auth/logout': () => ({ status: 204 }),
     '/api/actions/user.usage': () => ({ status: 200, body: emptyUsage }),
     '/api/actions/billing.summary': () => ({ status: 200, body: freeBilling }),
+    '/api/actions/template.list': () => ({ status: 200, body: templates }),
     ...routes,
   })
   render(
@@ -206,10 +242,101 @@ describe('AccountSettingsPage', () => {
 
     fireEvent.keyDown(general, { key: 'ArrowRight' })
 
-    expect(screen.getByRole('tab', { name: 'Privacy' })).toHaveAttribute(
+    expect(screen.getByRole('tab', { name: 'Design' })).toHaveAttribute(
       'aria-selected',
       'true',
     )
+  })
+
+  // TMPL-24. The account default is where the cascade starts: a project
+  // copies it at creation, and the lectures in that project copy the project.
+  it('shows the deployment default as chosen when the account never chose', async () => {
+    renderSettings({}, '/app/settings?tab=design')
+
+    // Not an empty picker: what it shows is what the next project will get.
+    expect(
+      await screen.findByRole('radio', { name: /NYU Elegant/ }),
+    ).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('radio', { name: /Seminar/ })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
+  })
+
+  it('shows the account’s own choice once it has one', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: user({ templateId: 'seminar' }), accessToken: 't' },
+      }),
+      '/api/actions/template.list': () => ({ status: 200, body: templates }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/app/settings?tab=design']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/app/settings" element={<AccountSettingsPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    expect(
+      await screen.findByRole('radio', { name: /Seminar/ }),
+    ).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('saves a chosen default design', async () => {
+    let sent: unknown
+    renderSettings(
+      {
+        '/api/actions/user.setTemplate': init => {
+          sent = JSON.parse(String(init?.body))
+          return { status: 200, body: user({ templateId: 'seminar' }) }
+        },
+      },
+      '/app/settings?tab=design',
+    )
+
+    fireEvent.click(await screen.findByRole('radio', { name: /Seminar/ }))
+
+    await vi.waitFor(() => expect(sent).toEqual({ templateId: 'seminar' }))
+    // The saved account is what the picker reads back from, so the choice
+    // stays put rather than snapping back on the next render.
+    await vi.waitFor(() =>
+      expect(screen.getByRole('radio', { name: /Seminar/ })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      ),
+    )
+  })
+
+  it('keeps the picker on the saved design when the save is refused', async () => {
+    renderSettings(
+      { '/api/actions/user.setTemplate': () => ({ status: 500 }) },
+      '/app/settings?tab=design',
+    )
+
+    fireEvent.click(await screen.findByRole('radio', { name: /Seminar/ }))
+
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole('radio', { name: /NYU Elegant/ }),
+      ).toHaveAttribute('aria-checked', 'true'),
+    )
+  })
+
+  it('offers the design’s exports beside the picker', async () => {
+    // The same three destinations the lecture and project Design tabs offer,
+    // so a design is exported the same way wherever it is chosen.
+    renderSettings({}, '/app/settings?tab=design')
+
+    expect(await screen.findByText('Export this design')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'As YAML' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'As PowerPoint' })).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'As Google Slides' }),
+    ).toBeVisible()
   })
 
   it('toggles profile visibility', async () => {
@@ -440,7 +567,7 @@ describe('AccountSettingsPage as an admin (ADMIN-5)', () => {
    * happens after that. `confirm: false` stops short of it. */
   const renderAsAdmin = async (
     routes: Record<string, Handler> = {},
-    { confirm = true } = {},
+    { confirm = true, entry = '/app/settings/u9' } = {},
   ) => {
     const mock = mockFetchRoutes({
       '/api/auth/refresh': () => ({
@@ -463,7 +590,7 @@ describe('AccountSettingsPage as an admin (ADMIN-5)', () => {
       ...routes,
     })
     render(
-      <MemoryRouter initialEntries={['/app/settings/u9']}>
+      <MemoryRouter initialEntries={[entry]}>
         <AuthProvider>
           <Routes>
             <Route path="/app/settings" element={<AccountSettingsPage />} />
@@ -490,6 +617,23 @@ describe('AccountSettingsPage as an admin (ADMIN-5)', () => {
     fetchMock.mock.calls
       .filter(([, init]) => init?.method === 'PATCH')
       .map(([, init]) => String(init?.body))
+
+  it('keeps Design off an admin’s view of someone else’s account', async () => {
+    // template.list and user.setTemplate are self-scoped: an admin would be
+    // shown their own library and would save into their own account.
+    await renderAsAdmin()
+    expect(await screen.findByText('grace@example.com')).toBeVisible()
+    expect(screen.queryByRole('tab', { name: 'Design' })).toBeNull()
+  })
+
+  it('lands an admin on General when the URL names the tab they lack', async () => {
+    await renderAsAdmin({}, { entry: '/app/settings/u9?tab=design' })
+    expect(await screen.findByText('grace@example.com')).toBeVisible()
+    expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+  })
 
   it("shows the target's account behind the audit banner", async () => {
     await renderAsAdmin()

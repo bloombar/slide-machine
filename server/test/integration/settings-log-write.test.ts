@@ -21,6 +21,7 @@ import { SlideModel } from '../../src/models/slide'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
 import { AdminActionLogModel } from '../../src/models/admin-action-log'
 import { SettingsChangeLogModel } from '../../src/models/settings-change-log'
+import { defaultTemplateId } from '../../src/templates/builtin'
 
 const ADMIN_EMAIL = 'admin@example.com'
 
@@ -326,7 +327,7 @@ describe('project settings', () => {
     expect(entry.actorRole).toBe('admin')
     expect(entry.ownerId).toBe(adaId)
     expect(entry.changes).toEqual({
-      templateId: { from: 'classic', to: 'midnight' },
+      templateId: { from: defaultTemplateId(), to: 'midnight' },
     })
     expect(await AdminActionLogModel.countDocuments()).toBe(1)
   })

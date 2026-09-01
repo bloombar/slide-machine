@@ -36,6 +36,15 @@ Everything downstream asks the resolver for a template by id and does not care w
 answered. Built-ins are readable by everyone and cannot be modified or deleted; user
 templates are listed and mutated only by their owner.
 
+**Which template new work starts on.** An account has a default design, set in Account
+settings → Design (SPEC [TMPL-24](SPEC.md#tmpl-24-an-accounts-default-design)). A new project
+copies it, a new lecture copies its project's, and each keeps its own copy — so changing a
+default never rewrites work that exists. An account that has never chosen follows
+`DEFAULT_TEMPLATE_ID`, which this deployment sets to `nyu-elegant`; an id `TEMPLATES_DIR`
+does not hold is ignored in favour of the first template it does, so a deployment shipping
+its own set needs no code change. The server publishes the resolved id at `GET /api/config`
+so the picker can show what "not chosen" will actually get.
+
 > **Resolution is not ownership-gated.** A deck's template is embedded in every deck view,
 > including public permalinks, so *resolving* a template by id must work for anyone who can
 > see the deck. Ownership gates listing and mutation, never resolution.

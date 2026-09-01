@@ -5,7 +5,7 @@
  * image-only slide is not deleted.
  */
 import { test, expect, type Page } from './fixtures'
-import { createProject } from './helpers'
+import { chooseAccountDesign, createProject } from './helpers'
 
 const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -24,6 +24,10 @@ const newLectureWithSlide = async (page: Page, tag: string) => {
     .fill(`imgedit-${tag}-${Date.now()}@example.com`)
   await page.getByLabel('Password').fill('sturdy-passw0rd')
   await page.getByRole('button', { name: 'Create account' }).click()
+  // This spec is written against Classic — its box names and its geometry —
+  // so it says so rather than riding on whatever the deployment defaults to
+  // (TMPL-24).
+  await chooseAccountDesign(page, /classic/i)
   await createProject(page, project)
   await page
     .getByRole('button', { name: `Start a new lecture in ${project}` })

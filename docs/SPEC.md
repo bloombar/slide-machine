@@ -762,6 +762,16 @@ stated, and the count is not settled. Neither reading is one.
 
 **And the sequencing argument returned with it — then closed.** `section/number` was the numeral box whose descender was a recorded fault and whose geometry needed a hand nudge: measured, it overflowed its own rectangle by 48px and drew only because an 84.7px allowance caught it, and the other four boxes in the window fit unaided. **That box has since been removed from the design**, for reasons that have nothing to do with this requirement — a section number must change between dividers and the app has no notion of a section's index. With it goes the only box that did not fit, so **nothing in the window now depends on the allowance and the boundary can move freely.** Re-verify before it does: this is a claim about a state, and states move.
 
+#### TMPL-24 An account's default design
+
+An account has a **default design**, chosen in Account settings → Design and offering the same library, the same authoring actions and the same exports as a project's or a lecture's Design tab — one design is chosen the same way wherever it is chosen.
+
+Until an account chooses, its default is **the deployment's default template** ([TMPL-3](#tmpl-3-pre-made-templates)) rather than nothing, so the tab shows what new work will actually get. This deployment configures NYU Elegant; a deployment that ships its own set names its own, and an id its template set does not hold is ignored in favour of one it does.
+
+The default **cascades at creation, not by reference**: a new project copies the account's default, a new lecture copies its project's, and each keeps its own copy from then on. So changing an account's default never rewrites a project that exists, and changing a project's never rewrites a lecture in it — the same rule [TMPL-2](#tmpl-2-conventional-layout-types) already applies between projects and lectures, extended one level up. A project created automatically — the titleless one spun up for a user's first lecture — inherits on the same terms as one created by name.
+
+A stale choice does not travel: a template deleted after it was chosen ([TMPL-4](#tmpl-4-custom-templates-create--edit--save)) is not handed to new work, which starts from the deployment default instead.
+
 ### 8. Live Lecture Capture
 
 #### CAP-1 Session lifecycle

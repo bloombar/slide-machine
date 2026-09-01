@@ -237,6 +237,13 @@ export interface UserSetLocaleInput {
   locale: Locale | null
 }
 
+/** The account's default design (TMPL-24): the template new projects start
+ * from. Null clears the choice, so new projects fall back to the
+ * deployment's default template again. */
+export interface UserSetTemplateInput {
+  templateId: string | null
+}
+
 /** Lecture-level language; null re-inherits project/profile/browser. */
 export interface DeckSetLanguageInput {
   deckId: string

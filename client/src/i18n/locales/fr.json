@@ -196,9 +196,12 @@
     "sections": "Sections des réglages",
     "tabs": {
       "general": "Général",
-      "plan": "Forfait et utilisation",
-      "privacy": "Confidentialité"
+      "design": "Apparence",
+      "privacy": "Confidentialité",
+      "plan": "Forfait et utilisation"
     },
+    "templateHeading": "Modèle par défaut",
+    "templateHint": "Les nouveaux projets démarrent avec ce modèle, et les nouveaux cours en héritent de leur projet. Chaque projet et chaque cours conserve le sien et peut en changer à tout moment dans ses paramètres.",
     "planSection": "Forfait",
     "publicProfileSectionHint": "Enregistré au fil de la saisie. Ce que les inconnus voient sur votre profil.",
     "privacySectionHint": "Qui peut voir votre profil et les cours qui y figurent.",

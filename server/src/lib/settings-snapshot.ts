@@ -31,6 +31,7 @@ export const userSettingsSnapshot = (doc: HydratedDocument<UserDb>) => ({
   accountType: doc.accountType,
   locale: doc.locale,
   language: doc.language,
+  templateId: doc.templateId,
   notifyCapWarnings: doc.notifyCapWarnings,
 })
 

@@ -42,6 +42,11 @@ vi.mock('../lib/transcribe-audio', () => ({
 // suite only checks that /api/config publishes it.
 const feedbackEnabled = vi.fn(() => false)
 vi.mock('./feedback', () => ({ feedbackEnabled: () => feedbackEnabled() }))
+// The published default design is the template store's answer, not an env
+// echo — so it is stubbed with an id no env var here holds.
+vi.mock('../templates/builtin', () => ({
+  defaultTemplateId: () => 'chosen-default',
+}))
 
 const { configRouter } = await import('./config')
 
@@ -76,6 +81,7 @@ describe('GET /api/config', () => {
     expect(await getConfig()).toEqual({
       sttEngine: 'browser',
       ttsEnabled: false,
+      defaultTemplateId: 'chosen-default',
       refineSlidesDefaultLevel: 2,
       refineTranscriptDefaultLevel: 2,
       simulatedSpeechEnabled: false,
