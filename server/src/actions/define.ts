@@ -11,6 +11,18 @@ import type { AccessPolicy } from './access/policy'
 export interface Action<I = unknown, O = unknown, R = unknown> {
   /** Dotted action name, e.g. "slide.editContent" or "deck.switchTemplate". */
   name: string
+  /**
+   * What the action does, in a sentence or two written for an AI model rather
+   * than a developer — the human-readable half of the machine-readable catalog
+   * (TECH-13, actions/catalog.ts).
+   *
+   * Optional, and deliberately so. Most of the ninety-odd registered actions
+   * will never be offered to a model, and writing a sentence for each of those
+   * would be effort spent on entries nobody reads. Write the description when
+   * something actually exposes the action; until then its absence is the
+   * honest answer, and `describedCatalog` leaves it out.
+   */
+  description?: string
   /** Input schema; dispatch rejects anything that does not parse. */
   input: ZodType<I>
   /**

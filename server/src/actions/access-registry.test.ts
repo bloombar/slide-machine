@@ -126,12 +126,19 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
   'billing.plans': { resource: 'none', level: 'open' },
   'billing.portal': { resource: 'self', level: 'self' },
   'billing.summary': { resource: 'self', level: 'self' },
+  // Seeing and cutting the AI assistants connected to this account
+  // (docs/MCP.md §5.3). Self-scoped deliberately: an assistant's token acts
+  // for one person, and withdrawing it is that person's decision — not an
+  // admin's, which is why neither of these is a settings-level action.
+  'mcp.connections': { resource: 'self', level: 'self' },
+  'mcp.disconnect': { resource: 'self', level: 'self' },
   'user.deleteAccount': { resource: 'self', level: 'self' },
   'user.setAccountType': { resource: 'self', level: 'self' },
   'user.setCapWarnings': { resource: 'self', level: 'self' },
   'user.setLanguage': { resource: 'self', level: 'self' },
   'user.setLocale': { resource: 'self', level: 'self' },
   'user.setProfileVisibility': { resource: 'self', level: 'self' },
+  'user.setTemplate': { resource: 'self', level: 'self' },
   'user.updateProfile': { resource: 'self', level: 'self' },
   'user.usage': { resource: 'self', level: 'self' },
   'export.delete': { resource: 'deck', level: 'edit' },

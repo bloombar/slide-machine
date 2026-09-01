@@ -73,10 +73,24 @@ export interface RuntimeConfig {
    * verification and password recovery around this rather than promising a
    * link a deployment with no relay could never deliver (AUTH-3/AUTH-4). */
   mailEnabled: boolean
+  /**
+   * Whether an external AI assistant can connect to this deployment
+   * (docs/MCP.md). False when the OAuth authorization server could not be
+   * hosted — it needs an https origin, which a deployment reached over plain
+   * http cannot offer. The account page uses it to decide whether to tell
+   * someone how to connect an assistant, rather than handing out an address
+   * that would refuse them.
+   */
+  agentAccessEnabled: boolean
   /** Who runs this deployment, named by the privacy policy and the terms.
    * Blank fields fall back to the client's placeholders, which read as the
    * draft they are. */
   operator: OperatorDetails
+  /** The design an account that has never chosen one starts from (TMPL-24),
+   * and what an unknown template id falls back to. Sent rather than assumed:
+   * a deployment ships its own template set, so no id belongs in client
+   * code. */
+  defaultTemplateId: string
   /** Default strength (1–5) the "Refine all slides" slider starts at (GEN-4). */
   refineSlidesDefaultLevel: number
   /** Default strength (1–5) the "Refine the spoken transcript" slider starts at. */

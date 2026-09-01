@@ -15,6 +15,8 @@ import { translationEnabled } from '../lib/translate-slides'
 import { feedbackEnabled } from './feedback'
 import { googleLive } from '../lib/export-mode'
 import { mailerAvailable } from '../lib/mailer'
+import { oauthAvailable } from './oauth'
+import { defaultTemplateId } from '../templates/builtin'
 
 export const configRouter = Router()
 
@@ -63,6 +65,7 @@ const drivePicker = (): DrivePickerConfig => {
 
 configRouter.get('/config', (_req, res) => {
   const body: RuntimeConfig = {
+    agentAccessEnabled: oauthAvailable(),
     sttEngine: sttEngine(),
     ttsEnabled: ttsEnabled(),
     translationEnabled: translationEnabled(),
@@ -74,6 +77,10 @@ configRouter.get('/config', (_req, res) => {
       contactEmail: env.OPERATOR_CONTACT_EMAIL,
       postalAddress: env.OPERATOR_POSTAL_ADDRESS,
     },
+    // Resolved rather than echoed from env: a configured id the template set
+    // does not hold is ignored there, and the client should be told what the
+    // server will actually use.
+    defaultTemplateId: defaultTemplateId(),
     refineSlidesDefaultLevel: env.REFINE_SLIDES_DEFAULT_LEVEL,
     refineTranscriptDefaultLevel: env.REFINE_TRANSCRIPT_DEFAULT_LEVEL,
     simulatedSpeechEnabled: env.SIMULATED_SPEECH_ENABLED,

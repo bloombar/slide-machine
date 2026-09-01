@@ -12,6 +12,12 @@ import { feedbackRouter } from './routes/feedback'
 import { googleConnectRouter } from './routes/google-connect'
 import { adminRouter } from './routes/admin'
 import { actionsRouter } from './routes/actions'
+import { mcpRouter } from './routes/mcp'
+import {
+  oauthAuthRouter,
+  oauthAvailable,
+  oauthConsentRouter,
+} from './routes/oauth'
 import { decksRouter } from './routes/decks'
 import { usersRouter } from './routes/users'
 import { seedAssetsRouter } from './routes/seed-assets'
@@ -55,6 +61,24 @@ export const createApp = (): Express => {
   app.use(express.json({ limit: '32mb' }))
   app.use(cookieParser())
 
+  // The OAuth authorization server, at the application ROOT rather than under
+  // /api — RFC 8414 and RFC 9728 put the discovery documents at
+  // /.well-known/..., and an assistant nobody arranged finds every other
+  // endpoint by reading them. Mounted before the API so the SPA fallback in
+  // production cannot swallow them.
+  //
+  // Conditional, because the standard requires an https issuer and a
+  // deployment reached over plain http cannot satisfy it. Skipping the feature
+  // is the right failure: the alternative is the whole application refusing to
+  // start over one thing it cannot offer.
+  if (oauthAvailable()) {
+    app.use(oauthAuthRouter())
+  } else {
+    console.warn(
+      'MCP agent access is unavailable: it needs an https PUBLIC_BASE_URL (or localhost in development)',
+    )
+  }
+
   const api = Router()
   api.use(healthRouter)
   api.use(configRouter)
@@ -63,6 +87,8 @@ export const createApp = (): Express => {
   api.use('/auth', googleConnectRouter)
   api.use('/admin', adminRouter)
   api.use(actionsRouter)
+  api.use(mcpRouter)
+  api.use(oauthConsentRouter)
   api.use(decksRouter)
   api.use(usersRouter)
   api.use(seedAssetsRouter)

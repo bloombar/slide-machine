@@ -23,6 +23,7 @@ import {
   RefineLevelSlider,
   RefineOption,
   RefinePartsOptions,
+  RefineSplitOption,
 } from './refine/RefineControls'
 
 interface Props {
@@ -35,6 +36,9 @@ interface Props {
   hasAudio?: boolean
   /** Strength the slider starts at (the lecture's slides level). */
   defaultLevel: number
+  /** Whether "break this slide up" starts ticked (the lecture's saved
+   * setting); this run's answer is not persisted back. */
+  defaultAllowSplit?: boolean
   /** Runs the refine; resolves when it finishes (the dialog closes itself). */
   onRefine: (options: SlideRefineOptions) => Promise<void>
   /** Leaves for the lecture's own Refine settings, for refining every slide;
@@ -48,6 +52,7 @@ export default function SlideRefineModal({
   marked,
   hasAudio,
   defaultLevel,
+  defaultAllowSplit,
   onRefine,
   onOpenLectureRefine,
   onClose,
@@ -66,6 +71,10 @@ export default function SlideRefineModal({
     layout: true,
     imagery: true,
   })
+  // Breaking the slide up starts from the lecture's saved setting (off unless
+  // the instructor turned it on there), and this run's answer stays with this
+  // run — the same rule the rest of the dialog follows.
+  const [allowSplit, setAllowSplit] = useState(defaultAllowSplit ?? false)
   const [refineTranscript, setRefineTranscript] = useState(false)
   const [level, setLevel] = useState(defaultLevel)
   const [running, setRunning] = useState(false)
@@ -80,7 +89,15 @@ export default function SlideRefineModal({
     setRunning(true)
     setError(null)
     try {
-      await onRefine({ identifySpeakers, parts, refineTranscript, level })
+      await onRefine({
+        identifySpeakers,
+        parts,
+        // Only meaningful while the text pass is on; sent as false otherwise
+        // so the server is asked for exactly what the form showed.
+        allowSplit: allowSplit && parts.text,
+        refineTranscript,
+        level,
+      })
       onClose()
     } catch {
       setError(t('refine.slide.failed'))
@@ -133,6 +150,13 @@ export default function SlideRefineModal({
         />
 
         <RefinePartsOptions value={parts} onChange={setParts} />
+
+        <RefineSplitOption
+          scope="slide"
+          checked={allowSplit}
+          onChange={setAllowSplit}
+          textOff={!parts.text}
+        />
 
         <RefineOption
           label={t('refine.transcript.label')}

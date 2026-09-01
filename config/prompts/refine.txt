@@ -21,33 +21,6 @@ identifier or filename in backticks, a source as a link with readable words
 rather than a bare URL. A body may hold a "-" or "1." list; a bullet carries
 no marker of its own. No headings, no ``` fences, no $…$ maths.
 
-Some slides cannot be improved at this size, and no amount of rewording gets
-there. Say so with "splitProposal" when EITHER of these is true:
-
-- The slide carries SEPARATE IDEAS that each deserve their own development —
-  distinct stages, a definition and its worked examples, two positions set
-  against each other.
-- The slide is OVERLOADED: more than an audience can take in while listening.
-  Five or six points where three would land, or a body that has to be read
-  rather than glanced at. Length is a real reason on its own — a crowded
-  slide is the commonest thing a refine cannot fix.
-
-Give the COMPLETE content of each part, exactly as you would write those
-slides, and order them as they should appear; the first replaces this slide.
-Split the material between them — do not repeat the same points in every part.
-
-Decide this BEFORE you settle on the single-slide wording, and when it is a
-close call, OFFER. The instructor sees the parts and chooses: declining costs
-them one click and they keep the refined slide, while staying silent means
-they never learn the option was there. An offer is a suggestion, not a change.
-
-Leave "splitProposal" out when the slide is already ONE clear idea at a size
-an audience can read at a glance. That is still the answer for most slides,
-and a slide that is merely worded poorly is refined, not split. Never propose
-more than {{maxSplitParts}} parts, and never a part with no content of its
-own. Fill "slots" with your best single-slide version either way: the
-instructor decides whether to split, and gets the refined slide if they
-decline.
-
 Return ONLY this JSON:
-{ "layoutType": "<one of the layouts above>", "slots": { "title"?: string, "body"?: string, "bullets"?: string[], "caption"?: string }, "imageGuidance"?: { "keywords": string[], "none"?: boolean }, "splitProposal"?: { "reason": "<a short phrase naming what the parts are>", "parts": [ { "layoutType": "<one of the layouts above>", "slots": { ... }, "imageGuidance"?: { ... } } ] } }
+{ "layoutType": "<one of the layouts above>", "slots": { "title"?: string, "body"?: string, "bullets"?: string[], "caption"?: string }, "imageGuidance"?: { "keywords": string[], "none"?: boolean } }
+{{split}}

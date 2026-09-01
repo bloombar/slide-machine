@@ -762,6 +762,16 @@ stated, and the count is not settled. Neither reading is one.
 
 **And the sequencing argument returned with it — then closed.** `section/number` was the numeral box whose descender was a recorded fault and whose geometry needed a hand nudge: measured, it overflowed its own rectangle by 48px and drew only because an 84.7px allowance caught it, and the other four boxes in the window fit unaided. **That box has since been removed from the design**, for reasons that have nothing to do with this requirement — a section number must change between dividers and the app has no notion of a section's index. With it goes the only box that did not fit, so **nothing in the window now depends on the allowance and the boundary can move freely.** Re-verify before it does: this is a claim about a state, and states move.
 
+#### TMPL-24 An account's default design
+
+An account has a **default design**, chosen in Account settings → Design and offering the same library, the same authoring actions and the same exports as a project's or a lecture's Design tab — one design is chosen the same way wherever it is chosen.
+
+Until an account chooses, its default is **the deployment's default template** ([TMPL-3](#tmpl-3-pre-made-templates)) rather than nothing, so the tab shows what new work will actually get. This deployment configures NYU Elegant; a deployment that ships its own set names its own, and an id its template set does not hold is ignored in favour of one it does.
+
+The default **cascades at creation, not by reference**: a new project copies the account's default, a new lecture copies its project's, and each keeps its own copy from then on. So changing an account's default never rewrites a project that exists, and changing a project's never rewrites a lecture in it — the same rule [TMPL-2](#tmpl-2-conventional-layout-types) already applies between projects and lectures, extended one level up. A project created automatically — the titleless one spun up for a user's first lecture — inherits on the same terms as one created by name.
+
+A stale choice does not travel: a template deleted after it was chosen ([TMPL-4](#tmpl-4-custom-templates-create--edit--save)) is not handed to new work, which starts from the deployment default instead.
+
 ### 8. Live Lecture Capture
 
 #### CAP-1 Session lifecycle
@@ -862,10 +872,11 @@ Generated slides render full-screen in real time as the user speaks, advancing a
 
 Once a session ends ([CAP-1](#cap-1-session-lifecycle) Stop) and the **full transcript** is available, the user is offered a **"Reformat with AI"** option that regenerates the deck holistically from the complete transcript plus project seed context — something the live, phrase-by-phrase pipeline (GEN-1) cannot do because it lacks the full picture.
 
-Delivered as a **"Refine"** action with three **independently-toggleable passes** (identify speakers / refine slide content / refine spoken narration), run together as one background job the client polls; it can also be run **per slide** on demand. (Design: [DECISIONS.md](DECISIONS.md) "Refine: three opt-in passes".)
+Delivered as a **"Refine"** action with three **independently-toggleable passes** (identify speakers / refine slide content / refine spoken narration), run together as one background job the client polls; it can also be run **per slide** on demand. While it runs it **says which slide it is working on**, rather than only that something is happening. (Design: [DECISIONS.md](DECISIONS.md) "Refine: three opt-in passes", "Refine progress".)
 
 - **Identifies speakers (diarization)** — post-hoc, the retained lecture audio ([P-6](#16-privacy-security--compliance)) is grouped into speakers and roles are mapped by talk-time (lecturer vs. students), so **student turns can be reframed as questions** while the lecturer's words stay authoritative. Speaker/role tags are joined onto the timestamped transcript segments ([§15](#15-data-models)) by a pure time-join. Diarization runs behind a `DiarizationProvider` (Google Cloud), post-hoc rather than live to avoid added latency and a single-provider live dependency ([DECISIONS.md](DECISIONS.md)).
 - **Improves and re-organizes content** — tighten wording, merge or split slides, add structure, and reconcile mid-lecture backtracking now that the whole lecture is known.
+- **Breaks a slide up when one slide cannot hold it** — some slides carry separate ideas, or simply more than an audience can take in, and no amount of rewording fixes that. Offered as its own **opt-in checkbox** on both surfaces (one slide, or the whole lecture): ticked, a refine may turn a slide into several; unticked — the default — it never does. It only happens where it is genuinely necessary, so most slides come back as one, and the instructor is told which slide became several and why. (Design: [DECISIONS.md](DECISIONS.md) "Splitting a slide".)
 - **Re-selects template layouts per slide** — choose the most fitting layout type (heading, section, list, two-column, image-heavy, quote — [TMPL-2](#tmpl-2-conventional-layout-types)) for each slide given the overall arc, within the deck's chosen template ([EDIT-2](#edit-2-deck-level-template-switch) / [EDIT-3](#edit-3-per-slide-layout-switch)).
 - **Re-enriches images** — re-runs image enrichment ([IMG-1](#img-1-real-time-image-enrichment) / IMG-2) for new or changed slides.
 - **Refines spoken narration** — rewrites each slide's stored narration (`sourceTranscript`, [§15](#15-data-models)) so the read-aloud ([PLAY-2](#play-2-narration-playback)) stays in-line with the (possibly reformatted) slide; student slides are narrated as questions.

@@ -68,6 +68,15 @@ export interface User {
   /** Lecturing/generation language, only when explicitly chosen; absent
    * = browser default. Cascades: lecture ?? project ?? this ?? browser. */
   language?: Locale
+  /**
+   * The design new projects start from (TMPL-24), only when explicitly
+   * chosen; absent = the deployment's default template.
+   *
+   * Unlike `language`, this is NOT resolved on every read: a project copies
+   * it once, at creation, and keeps its own copy. So changing it never
+   * rewrites a project that already exists.
+   */
+  templateId?: string
   projectDefaults?: ProjectDefaults
   /**
    * Whether the advisory "you are close to a limit" email is wanted (BILL-8).

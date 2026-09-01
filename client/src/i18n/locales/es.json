@@ -28,7 +28,8 @@
     "listSeparator": ", ",
     "adminEditNotice": "Estás editando {entity, select, account {la cuenta} project {el proyecto} lecture {la clase} other {los ajustes}} de otra persona como administrador. Cada cambio que hagas aquí queda registrado en el registro de auditoría.",
     "undo": "Deshacer",
-    "redo": "Rehacer"
+    "redo": "Rehacer",
+    "copy": "Copiar"
   },
   "nav": {
     "brand": "The Slide Machine",
@@ -45,7 +46,7 @@
   "landing": {
     "title": "The Slide Machine",
     "tagline": "Habla con libertad: las diapositivas te seguirán.",
-    "intro": "The Slide Machine crea tus diapositivas en directo, a partir de lo que realmente dices, mientras lo dices. Empieza una clase y habla: tu voz se transcribe y nuestro agente de IA convierte tus palabras en diapositivas bien maquetadas en tiempo real, con imágenes que buscamos y colocamos en los puntos adecuados mientras hablas.",
+    "intro": "The Slide Machine crea tus diapositivas en directo, a partir de lo que realmente dices, mientras lo dices. Empieza una clase y habla: nuestro agente de IA convierte tus palabras en diapositivas bien maquetadas en tiempo real.",
     "cta": "Inicia sesión para empezar",
     "ctaAbout": "Conoce más sobre el proyecto",
     "featuresTitle": "Qué hace",
@@ -64,7 +65,7 @@
     "dataGoogleTitle": "Iniciar sesión con Google",
     "dataGoogleBody": "Si eliges iniciar sesión con Google, recibimos de Google tu nombre, tu correo y tu foto de perfil. Los usamos para crear e identificar tu cuenta, y para nada más. Son los únicos datos de Google que nos da el inicio de sesión.",
     "dataDriveTitle": "Conectar Google Drive",
-    "dataDriveBody": "Exportar una presentación a Google Slides o publicar un cuestionario como formulario de Google es opcional y pide un único permiso acotado: drive.file. Solo alcanza los archivos que crea la propia aplicación y los que le entregas eligiéndolos en el selector de archivos de Google. No puede listar, buscar ni leer el resto de tu Drive.",
+    "dataDriveBody": "Importar o exportar presentaciones o cuestionarios a tu cuenta de Google es opcional, y para hacerlo pedimos a Google el mínimo permiso posible. Por eso no podemos ver, buscar ni leer el resto de los archivos y carpetas de tu Google Drive, y no lo hacemos.",
     "dataSpeechTitle": "Tu micrófono",
     "dataSpeechBody": "Mientras se graba una clase, el audio del micrófono se transcribe a texto para construir las diapositivas. También podemos conservar la propia grabación, para que una clase pueda volver a transcribirse, refinarse, distinguir a quienes hablan, reproducir su narración original junto a las diapositivas y analizar su calidad. Cuánto tiempo se conserva depende de tu plan y de lo que aún haya que hacer con la grabación. Una grabación conservada se almacena solo en el servidor, nunca se expone a quien no pueda editar esa clase, y se borra al vencer su periodo de retención.",
     "dataNever": "No vendemos tus datos ni los usamos para entrenar modelos de IA de terceros.",
@@ -195,9 +196,12 @@
     "sections": "Secciones de ajustes",
     "tabs": {
       "general": "General",
-      "plan": "Plan y uso",
-      "privacy": "Privacidad"
+      "design": "Diseño",
+      "privacy": "Privacidad",
+      "plan": "Plan y uso"
     },
+    "templateHeading": "Plantilla predeterminada",
+    "templateHint": "Los proyectos nuevos empiezan con esta plantilla, y las clases nuevas la heredan de su proyecto. Cada proyecto y cada clase conserva la suya y puede cambiarla cuando quiera en sus ajustes.",
     "planSection": "Plan",
     "publicProfileSectionHint": "Se guarda al escribir. Lo que ven los desconocidos en tu perfil.",
     "privacySectionHint": "Quién puede ver tu perfil y las clases que aparecen en él.",
@@ -206,7 +210,9 @@
       "hint": "Eliminar tu cuenta borra definitivamente tus proyectos, clases y diapositivas. Esta acción no se puede deshacer.",
       "title": "¿Eliminar tu cuenta?",
       "message": "Tu cuenta y todos sus proyectos, clases y diapositivas se eliminarán definitivamente."
-    }
+    },
+    "assistantsSection": "Asistentes de IA conectados",
+    "assistantsSectionHint": "Asistentes a los que has permitido leer o cambiar tus clases desde fuera de la aplicación. Desconectar uno surte efecto de inmediato y no cierra tu sesión en ningún sitio."
   },
   "language": {
     "label": "Idioma",
@@ -826,12 +832,6 @@
       "code": "Añadir código",
       "codeIn": "Añadir código {language}",
       "preformatted": "Añadir texto preformateado"
-    },
-    "split": {
-      "title": "¿Dividir esta diapositiva?",
-      "intro": "Esta diapositiva contiene {count} ideas distintas ({reason}). Mostrarla como {count} diapositivas sería más claro:",
-      "confirm": "Dividir en {count} diapositivas",
-      "untitled": "(parte sin título)"
     }
   },
   "image": {
@@ -923,6 +923,15 @@
         "description": "Buscar una imagen cuando el diseño tiene un hueco para imagen y no hay ninguna."
       }
     },
+    "split": {
+      "label": "Dividir diapositivas sobrecargadas",
+      "labelSlide": "Dividir esta diapositiva",
+      "description": "Convertir una diapositiva en varias, pero solo cuando una sola no pueda con todo.",
+      "descriptionSlide": "Convertir esta diapositiva en varias, pero solo si una sola no puede con todo.",
+      "needsText": "(Disponible solo mientras se refina el texto de la diapositiva.)",
+      "done": "{count, plural, one {La diapositiva {number} ahora es # diapositiva} other {La diapositiva {number} ahora son # diapositivas}} — {reason}.",
+      "doneNoReason": "{count, plural, one {La diapositiva {number} ahora es # diapositiva.} other {La diapositiva {number} ahora son # diapositivas.}}"
+    },
     "speakers": {
       "label": "Identificar a varios hablantes",
       "description": "Detectar quién habló —tú o el alumnado— y reformular las intervenciones del alumnado como preguntas, no como hechos.",
@@ -941,7 +950,8 @@
       "levelLabel": "Cuánto mejorar esta diapositiva",
       "marked": "Esta diapositiva tiene anotaciones de pizarra. La mejora puede cambiar su contenido o su diseño, así que puede que tus subrayados y anotaciones dejen de coincidir con lo que hay debajo.",
       "running": "Mejorando esta diapositiva…",
-      "failed": "No se pudo mejorar esta diapositiva: inténtalo de nuevo"
+      "failed": "No se pudo mejorar esta diapositiva: inténtalo de nuevo",
+      "runningNamed": "Refinando la diapositiva {number}: {title}…"
     }
   },
   "transcript": {
@@ -1136,11 +1146,19 @@
         "markedTitle": "¿Mejorar diapositivas anotadas?",
         "markedMessage": "Algunas diapositivas tienen anotaciones de pizarra. La mejora puede cambiar su contenido o su diseño, así que puede que los subrayados y las anotaciones dejen de coincidir con lo que hay debajo.",
         "markedConfirm": "Mejorar de todos modos",
+        "progress": {
+          "speakers": "Identificando quién habló en la grabación…",
+          "slides": "Refinando la diapositiva {index} de {total}: {title}",
+          "slidesUntitled": "Refinando la diapositiva {index} de {total}…",
+          "narration": "Escribiendo la versión hablada de la diapositiva {index} de {total}: {title}",
+          "narrationUntitled": "Escribiendo la versión hablada de la diapositiva {index} de {total}…"
+        },
         "summary": {
           "done": "Listo: {changes}.",
           "none": "Listo: no hizo falta ningún cambio.",
           "reframed": "{count, plural, one {# diapositiva del alumnado reformulada} other {# diapositivas del alumnado reformuladas}}",
           "slidesRefined": "{count, plural, one {# diapositiva mejorada} other {# diapositivas mejoradas}}",
+          "slidesSplit": "{count, plural, one {dividió # diapositiva} other {dividió # diapositivas}}",
           "transcriptsUpdated": "{count, plural, one {# narración actualizada} other {# narraciones actualizadas}}"
         }
       }
@@ -1384,5 +1402,24 @@
       "warnEmails": "Avisarme por correo antes de agotarlo",
       "warnEmailsHint": "Un aviso cuando un cupo está casi agotado. Los avisos de límite realmente alcanzado siempre se envían."
     }
+  },
+  "oauth": {
+    "title": "Conectar un asistente",
+    "asking": "{name} solicita conectarse a tu cuenta de Slide Machine. Si lo permites, podrá:",
+    "limits": "No puede eliminar nada, ni compartir una clase, ni publicar un cuestionario, ni cambiar tu plan: eso permanece en la aplicación. Puedes desconectarlo en cualquier momento desde los ajustes de tu cuenta.",
+    "allow": "Permitir",
+    "deny": "No permitir",
+    "expired": "Esta solicitud ha caducado o ya fue respondida. Pide al asistente que vuelva a conectarse.",
+    "failed": "Algo salió mal y no se conectó nada. Inténtalo de nuevo."
+  },
+  "assistants": {
+    "none": "No hay asistentes de IA conectados a esta cuenta.",
+    "connectedOn": "Conectado el {date}",
+    "disconnect": "Desconectar",
+    "failed": "No se pudieron cargar los asistentes conectados.",
+    "connectTitle": "Conectar un asistente",
+    "connectHint": "Pega esta dirección en los ajustes de conectores de tu asistente de IA. Los asistentes compatibles con conectores MCP remotos —como Claude— harán el resto.",
+    "connectApproval": "El asistente te devolverá aquí para que lo apruebes antes de poder ver nada.",
+    "copied": "Copiado"
   }
 }

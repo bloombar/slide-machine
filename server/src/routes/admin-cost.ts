@@ -160,6 +160,10 @@ adminCostRouter.get('/cost/export', async (req, res) => {
       'payerId',
       'actorId',
       'actorKind',
+      // How the request arrived (docs/MCP.md §6). An operator asking "did an
+      // assistant do this" has no other way to tell: an agent's calls are
+      // ordinary calls by the account that authorized them.
+      'channel',
       'projectId',
       'projectName',
       'deckId',
@@ -181,6 +185,7 @@ adminCostRouter.get('/cost/export', async (req, res) => {
         // is no identity here, not a withheld one (§16).
         doc.actorId?.toString(),
         doc.actorKind,
+        doc.channel,
         doc.projectId?.toString(),
         doc.projectName,
         doc.deckId?.toString(),

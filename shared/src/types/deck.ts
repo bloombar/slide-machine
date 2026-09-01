@@ -23,6 +23,18 @@ export type Visibility = 'restricted' | 'public'
 export const GENERATION_FREEDOM_MIN = 1
 export const GENERATION_FREEDOM_MAX = 5
 
+/**
+ * Query parameter that deep-links the deck viewer to one slide, by slide id:
+ * `/d/:permalinkSlug?slide=<slide id>`. An MCP tool writes it so an assistant
+ * can point the instructor at the slide it just changed, and the viewer reads
+ * it; shared so the two cannot drift apart.
+ *
+ * A query parameter rather than a fragment because a fragment never reaches
+ * the server and is dropped by the sign-in round trip, which is exactly the
+ * journey a link from outside the app takes.
+ */
+export const SLIDE_PARAM = 'slide'
+
 export interface Deck {
   id: string
   projectId: string
@@ -70,6 +82,11 @@ export interface Deck {
   /** Per-lecture "Refine all slides" strength (1-5); absent = inherit the
    * server default (REFINE_SLIDES_DEFAULT_LEVEL). Stored only once moved. */
   refineSlidesLevel?: number
+  /** Per-lecture Refine toggle: let a refine break a slide into several when
+   * one slide genuinely cannot hold what it carries (GEN-4). Absent =
+   * default off — splitting changes the shape of the lecture, so it is opted
+   * into rather than out of. */
+  refineSplitEnabled?: boolean
   /** Per-lecture Refine toggle: rewrite the spoken narration.
    * Absent = default on. */
   refineTranscriptEnabled?: boolean

@@ -28,7 +28,8 @@
     "listSeparator": ", ",
     "adminEditNotice": "You are editing another user's {entity, select, account {account} project {project} lecture {lecture} other {settings}} as an admin. Every change you make here is recorded in the audit log.",
     "undo": "Undo",
-    "redo": "Redo"
+    "redo": "Redo",
+    "copy": "Copy"
   },
   "nav": {
     "brand": "The Slide Machine",
@@ -45,8 +46,8 @@
   "landing": {
     "title": "The Slide Machine",
     "tagline": "Speak freely — the slides will follow.",
-    "intro": "The Slide Machine builds your lecture slides live, from what you actually say, while you say it. Start a lecture and talk: your speech is transcribed and our AI agent turns your spoken words into well-formatted slides in real-time, with images we source added at appropriate places as you speak.",
-    "cta": "Sign in to get started",
+    "intro": "The Slide Machine builds your lecture slides live, from what you actually say, while you say it. Start a lecture and talk: our AI agent turns your spoken words into well-formatted slides in real-time.",
+    "cta": "Sign in to start",
     "ctaAbout": "Read more about the project",
     "featuresTitle": "What it does",
     "featureLiveTitle": "Slides written as you speak",
@@ -64,7 +65,7 @@
     "dataGoogleTitle": "Google sign-in",
     "dataGoogleBody": "If you choose to sign in with Google, we receive your name, email address and profile picture from Google. We use them to create and identify your account, and for nothing else. This is the only Google data sign-in gives us.",
     "dataDriveTitle": "Connecting Google Drive",
-    "dataDriveBody": "Exporting a deck to Google Slides or publishing a quiz as a Google Form is optional, and asks for one narrow permission: drive.file. It reaches only the files the app itself creates and the files you hand it by picking them in Google's own file picker. It cannot list, search or read the rest of your Drive.",
+    "dataDriveBody": "Importing or exporting slide decks or quizzes to your Google account is optional and we request the least possible permission from Google to do so. As a result, we cannot and do not view, search, or read the rest of your Google Drive files or folders.",
     "dataSpeechTitle": "Your microphone",
     "dataSpeechBody": "While a lecture is recording, microphone audio is transcribed into text so the slides can be built. We may also keep the recording itself, so that a lecture can be re-transcribed, refined, its speakers separated, its original narration replayed alongside the slides, and its quality analysed. How long a recording is kept depends on your plan and on what still has to be done with it. A kept recording is stored server-side only, is never exposed to anyone without edit access to that lecture, and is deleted when its retention window passes.",
     "dataNever": "We do not sell your data, and we do not use it to train third-party AI models.",
@@ -195,9 +196,12 @@
     "sections": "Settings sections",
     "tabs": {
       "general": "General",
-      "plan": "Plan & Usage",
-      "privacy": "Privacy"
+      "design": "Design",
+      "privacy": "Privacy",
+      "plan": "Plan & Usage"
     },
+    "templateHeading": "Default template",
+    "templateHint": "New projects start with this template, and new lectures inherit it from their project. Each project and lecture keeps its own and can switch any time in its settings.",
     "planSection": "Plan",
     "publicProfileSectionHint": "Saved as you go. What strangers see on your profile page.",
     "privacySectionHint": "Who can see your profile page and the lectures on it.",
@@ -206,7 +210,9 @@
       "hint": "Deleting your account permanently removes your projects, lectures, and slides. This cannot be undone.",
       "title": "Delete your account?",
       "message": "Your account and all of its projects, lectures, and slides will be permanently deleted."
-    }
+    },
+    "assistantsSection": "Connected AI assistants",
+    "assistantsSectionHint": "Assistants you have allowed to read or change your lectures from outside the app. Disconnecting one takes effect immediately and does not sign you out anywhere."
   },
   "language": {
     "label": "Language",
@@ -826,12 +832,6 @@
       "code": "Add code",
       "codeIn": "Add {language} code",
       "preformatted": "Add preformatted text"
-    },
-    "split": {
-      "title": "Split this slide?",
-      "intro": "This slide holds {count} separate ideas ({reason}). Showing it as {count} slides would be clearer:",
-      "confirm": "Split into {count} slides",
-      "untitled": "(untitled part)"
     }
   },
   "image": {
@@ -923,6 +923,15 @@
         "description": "Find an image when the layout has an image box and none is placed."
       }
     },
+    "split": {
+      "label": "Break up crowded slides",
+      "labelSlide": "Break up this slide",
+      "description": "Turn a slide into several, but only when one slide genuinely cannot hold it.",
+      "descriptionSlide": "Turn this slide into several, but only if one slide genuinely cannot hold it.",
+      "needsText": "(Available only while slide text is being refined.)",
+      "done": "{count, plural, one {Slide {number} is now # slide} other {Slide {number} is now # slides}} — {reason}.",
+      "doneNoReason": "{count, plural, one {Slide {number} is now # slide.} other {Slide {number} is now # slides.}}"
+    },
     "speakers": {
       "label": "Identify multiple speakers",
       "description": "Detect who spoke — you versus students — and reframe student turns as questions, not fact.",
@@ -941,7 +950,8 @@
       "levelLabel": "How much to refine this slide",
       "marked": "This slide has whiteboard markings. Refining may change its content or layout, so your highlights and annotations may no longer line up with what’s underneath.",
       "running": "Refining this slide…",
-      "failed": "Could not refine this slide — try again"
+      "failed": "Could not refine this slide — try again",
+      "runningNamed": "Refining slide {number}: {title}…"
     }
   },
   "transcript": {
@@ -1136,11 +1146,19 @@
         "markedTitle": "Refine marked-up slides?",
         "markedMessage": "Some slides have whiteboard markings. Refining may change their content or layout, so highlights and annotations may no longer line up with what's underneath.",
         "markedConfirm": "Refine anyway",
+        "progress": {
+          "speakers": "Identifying who spoke across the recording…",
+          "slides": "Refining slide {index} of {total}: {title}",
+          "slidesUntitled": "Refining slide {index} of {total}…",
+          "narration": "Writing the spoken version of slide {index} of {total}: {title}",
+          "narrationUntitled": "Writing the spoken version of slide {index} of {total}…"
+        },
         "summary": {
           "done": "Done — {changes}.",
           "none": "Done — no changes were needed.",
           "reframed": "{count, plural, one {reframed # student slide} other {reframed # student slides}}",
           "slidesRefined": "{count, plural, one {refined # slide} other {refined # slides}}",
+          "slidesSplit": "{count, plural, one {broke up # slide} other {broke up # slides}}",
           "transcriptsUpdated": "{count, plural, one {updated # narration} other {updated # narrations}}"
         }
       }
@@ -1384,5 +1402,24 @@
       "warnEmails": "Email me before I run out",
       "warnEmailsHint": "A heads-up when an allowance is nearly spent. Notices about a limit that has actually been reached are always sent."
     }
+  },
+  "oauth": {
+    "title": "Connect an assistant",
+    "asking": "{name} is asking to connect to your Slide Machine account. If you allow it, it will be able to:",
+    "limits": "It cannot delete anything, share a lecture, publish a quiz, or change your plan — those stay in the app. You can disconnect it at any time from your account settings.",
+    "allow": "Allow",
+    "deny": "Don't allow",
+    "expired": "This request has expired or was already answered. Ask the assistant to try connecting again.",
+    "failed": "Something went wrong and nothing was connected. Try again."
+  },
+  "assistants": {
+    "none": "No AI assistants are connected to this account.",
+    "connectedOn": "Connected {date}",
+    "disconnect": "Disconnect",
+    "failed": "Could not load connected assistants.",
+    "connectTitle": "Connect an assistant",
+    "connectHint": "Paste this address into your AI assistant's connector settings. Assistants that support remote MCP connectors — such as Claude — will do the rest.",
+    "connectApproval": "The assistant will send you back here to approve it before it can see anything.",
+    "copied": "Copied"
   }
 }

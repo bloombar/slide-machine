@@ -25,6 +25,7 @@ import { SlideModel } from '../../src/models/slide'
 import { SeedAssetModel } from '../../src/models/seed-asset'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
 import { UsageRecordModel } from '../../src/models/usage-record'
+import { defaultTemplateId } from '../../src/templates/builtin'
 import {
   BYTES_PER_MB,
   capFor,
@@ -228,7 +229,7 @@ describe('deck.import (EXP-3)', () => {
       content: yamlFor({ templateId: 'no-such-template' }),
     })
     expect(res.status).toBe(200)
-    expect(res.body.deck.templateId).toBe('classic')
+    expect(res.body.deck.templateId).toBe(defaultTemplateId())
     expect(res.body.warnings.join(' ')).toMatch(/Unknown template/)
   })
 

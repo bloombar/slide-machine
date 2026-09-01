@@ -16,28 +16,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { Trans, useTranslation } from 'react-i18next'
-import { Download, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import {
   findTtsVoice,
   type Deck,
-  type DriveFolder,
-  type ExportDownload,
-  type ExportToDriveResult,
   type DeckRefineResult,
   type DeckRefineStatusResult,
   type DeckSetRefineSettingsInput,
   type Locale,
   type Project,
+  type RefineJobProgress,
   type RefineJobSummary,
   type SlideRefineParts,
   type Template,
 } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
-import { ApiError } from '../api/http'
-import { apiErrorMessage } from '../i18n/apiError'
-import DrivePicker from './DrivePicker'
-import { downloadExport } from '../lib/download'
 import TemplateDesignPanel from './template/TemplateDesignPanel'
+import TemplateExportSection from './template/TemplateExportSection'
 import TemplateUpdateNotice from './template/TemplateUpdateNotice'
 import AccessSettings from './AccessSettings'
 import QuizPanel from './QuizPanel'
@@ -54,6 +49,7 @@ import {
   RefineLevelSlider,
   RefineOption,
   RefinePartsOptions,
+  RefineSplitOption,
 } from './refine/RefineControls'
 import { getTtsEnabled, getRefineSlidesDefaultLevel } from '../runtime-config'
 import { lectureTitle } from '../lib/lecture'
@@ -175,6 +171,10 @@ export default function DeckSettingsModal({
     return { text: on, layout: on, imagery: on }
   })
   const refineSlides = Object.values(parts).some(Boolean)
+  // Whether the pass may break a slide into several (GEN-4). Saved on the
+  // lecture like the other toggles, and off unless the lecture says otherwise:
+  // it changes how many slides the lecture has, so it is opted into.
+  const [allowSplit, setAllowSplit] = useState(deck.refineSplitEnabled ?? false)
   const [refineTranscript, setRefineTranscript] = useState(
     deck.refineTranscriptEnabled ?? false,
   )
@@ -185,6 +185,9 @@ export default function DeckSettingsModal({
       getRefineSlidesDefaultLevel(),
   )
   const [refining, setRefining] = useState(false)
+  // Where the running job has got to, from the last status poll; null before
+  // the first one lands and once the run is over.
+  const [progress, setProgress] = useState<RefineJobProgress | null>(null)
   const [refineMsg, setRefineMsg] = useState<string | null>(null)
   // Confirm before refining slides that carry whiteboard marks (WB-1).
   const [confirmingRefine, setConfirmingRefine] = useState(false)
@@ -337,57 +340,6 @@ export default function DeckSettingsModal({
       })
   }
 
-  const [pickingFolder, setPickingFolder] = useState(false)
-  const [slidesBusy, setSlidesBusy] = useState(false)
-  const [slidesError, setSlidesError] = useState<string | null>(null)
-  const [slidesSaved, setSlidesSaved] = useState<ExportToDriveResult | null>(
-    null,
-  )
-
-  // Export the lecture's current template as a re-importable YAML file (EXP-2).
-  const exportTemplate = (format?: 'pptx') => {
-    setSlidesError(null)
-    dispatchAction<ExportDownload>('template.export', {
-      templateId: deck.templateId,
-      ...(format ? { format } : {}),
-    })
-      .then(downloadExport)
-      .catch((err: Error) => {
-        // Said rather than swallowed. A quiet failure here is indistinguishable
-        // from a button that does nothing, which is how this last went wrong:
-        // the export was refused and the screen reported it by staying still.
-        setSlidesError(apiErrorMessage(err, t, 'template.exportYamlError'))
-      })
-  }
-
-  /**
-   * Saves the lecture's design to Drive as a Google Slides presentation whose
-   * layouts are its layouts (EXP-6). A template in Slides is nothing more
-   * than that, so this is what "export a template" has to mean there.
-   */
-  const exportTemplateToDrive = (folder: DriveFolder) => {
-    setSlidesBusy(true)
-    setSlidesError(null)
-    dispatchAction<ExportToDriveResult>('template.exportToDrive', {
-      templateId: deck.templateId,
-      driveFolderId: folder.id,
-      driveFolderName: folder.name,
-    })
-      .then(res => {
-        setSlidesSaved(res)
-        setPickingFolder(false)
-      })
-      .catch(err => {
-        // A missing Google connection is the one failure the user can act on
-        setSlidesError(
-          err instanceof ApiError && err.status === 403
-            ? t('template.exportSlidesConnect')
-            : t('template.exportSlidesError'),
-        )
-      })
-      .finally(() => setSlidesBusy(false))
-  }
-
   /** Human summary of what a finished refine job changed. Each clause is
    * its own ICU plural, so the counts read correctly in every language,
    * and the list separator comes from the bundle too. */
@@ -396,6 +348,7 @@ export default function DeckSettingsModal({
       [
         ['reframed', s.reframed],
         ['slidesRefined', s.slidesRefined],
+        ['slidesSplit', s.slidesSplit],
         ['transcriptsUpdated', s.transcriptsUpdated],
       ] as const
     )
@@ -410,6 +363,31 @@ export default function DeckSettingsModal({
       : t('deck.settings.refine.summary.none')
   }
 
+  /**
+   * The one-line "what is happening now" under the Refine button: which pass
+   * is running and which slide it is on.
+   *
+   * Null when there is nothing specific to say yet — before the first poll,
+   * or between passes — and the caller falls back to the generic "working in
+   * the background" line rather than showing a half-filled sentence.
+   */
+  const progressMessage = (p: RefineJobProgress | null): string | null => {
+    if (!p) return null
+    if (p.phase === 'speakers')
+      return t('deck.settings.refine.progress.speakers')
+    // Between passes the job reports a phase with no slide in hand. Nothing
+    // to name, so the caller says the generic thing instead.
+    if (!p.index) return null
+    const values = { index: p.index, total: p.total, title: p.title }
+    if (p.phase === 'narration')
+      return p.title
+        ? t('deck.settings.refine.progress.narration', values)
+        : t('deck.settings.refine.progress.narrationUntitled', values)
+    return p.title
+      ? t('deck.settings.refine.progress.slides', values)
+      : t('deck.settings.refine.progress.slidesUntitled', values)
+  }
+
   /** Polls the job until it leaves 'running' (batch diarization can take
    * minutes); returns the summary, or throws on error/timeout. */
   const pollRefine = async (jobId: string): Promise<RefineJobSummary> => {
@@ -419,11 +397,15 @@ export default function DeckSettingsModal({
         'deck.refineStatus',
         { jobId },
       )
+      // Each poll re-states where the job is, so the line under the button
+      // names the slide in hand instead of only saying that work is happening.
+      setProgress(res.progress ?? null)
       if (res.status === 'done')
         return (
           res.summary ?? {
             reframed: 0,
             slidesRefined: 0,
+            slidesSplit: 0,
             transcriptsUpdated: 0,
           }
         )
@@ -437,11 +419,22 @@ export default function DeckSettingsModal({
   const runRefine = async () => {
     setRefining(true)
     setRefineMsg(null)
+    setProgress(null)
     try {
       const { jobId } = await dispatchAction<DeckRefineResult>('deck.refine', {
         deckId: deck.id,
         ...(identifySpeakers ? { identifySpeakers: true } : {}),
-        ...(refineSlides ? { refineSlides: { level, parts } } : {}),
+        ...(refineSlides
+          ? {
+              refineSlides: {
+                level,
+                parts,
+                // Splitting reads the slide's words, so it only applies while
+                // the text pass is on.
+                allowSplit: allowSplit && parts.text,
+              },
+            }
+          : {}),
         ...(refineTranscript ? { refineTranscript: { level } } : {}),
       })
       const summary = await pollRefine(jobId)
@@ -451,6 +444,7 @@ export default function DeckSettingsModal({
       setRefineMsg(t('deck.settings.refine.failed'))
     } finally {
       setRefining(false)
+      setProgress(null)
     }
   }
 
@@ -802,84 +796,7 @@ export default function DeckSettingsModal({
             onChange={switchTemplate}
             onLibraryChanged={loadTemplates}
           />
-          {/* One design, two destinations: a file to keep, or a
-              presentation in Drive to keep working in (EXP-2 / EXP-6). They
-              read as one thing because they are one thing. */}
-          <div className="mt-6 border-t border-slate-100 pt-4">
-            <h3 className="text-sm font-medium text-slate-700">
-              {t('template.exportHeading')}
-            </h3>
-            <p className="mt-1 mb-3 text-xs text-slate-500">
-              {t('template.exportHint')}
-            </p>
-
-            {pickingFolder ? (
-              <DrivePicker
-                kind="folder"
-                title={t('export.folder.title', {
-                  format: t('template.exportToSlides'),
-                })}
-                confirmLabel={t('export.saveHere')}
-                busyLabel={t('export.saving')}
-                busy={slidesBusy}
-                onCancel={() => setPickingFolder(false)}
-                onPick={exportTemplateToDrive}
-                onReconnect={() => setPickingFolder(false)}
-              />
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => exportTemplate()}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  <Download className="h-4 w-4" aria-hidden />
-                  {t('template.exportAsYaml')}
-                </button>
-                {/* The design as a deck anyone can open, its layouts the
-                    slides. YAML is what this app reads back; this is what a
-                    colleague reads. */}
-                <button
-                  type="button"
-                  onClick={() => exportTemplate('pptx')}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  <Download className="h-4 w-4" aria-hidden />
-                  {t('template.exportAsPptx')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSlidesSaved(null)
-                    setSlidesError(null)
-                    setPickingFolder(true)
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  <Download className="h-4 w-4" aria-hidden />
-                  {t('template.exportToSlides')}
-                </button>
-              </div>
-            )}
-
-            {slidesSaved && (
-              <p role="status" className="mt-2 text-xs">
-                <a
-                  href={slidesSaved.fileUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-indigo-600 hover:underline"
-                >
-                  {t('template.exportSlidesDone')}
-                </a>
-              </p>
-            )}
-            {slidesError && (
-              <p role="alert" className="mt-2 text-xs text-red-600">
-                {slidesError}
-              </p>
-            )}
-          </div>
+          <TemplateExportSection templateId={deck.templateId} />
         </section>
       )}
 
@@ -953,6 +870,16 @@ export default function DeckSettingsModal({
               }}
             />
 
+            <RefineSplitOption
+              scope="lecture"
+              checked={allowSplit}
+              textOff={!parts.text}
+              onChange={checked => {
+                setAllowSplit(checked)
+                saveRefineSettings({ splitEnabled: checked })
+              }}
+            />
+
             <RefineOption
               label={t('refine.transcript.label')}
               description={t('refine.transcript.description')}
@@ -985,8 +912,8 @@ export default function DeckSettingsModal({
                 {refining ? t('refine.running') : t('refine.action')}
               </button>
               {refining && (
-                <p className="mt-3 text-sm text-slate-500">
-                  {t('refine.background')}
+                <p role="status" className="mt-3 text-sm text-slate-500">
+                  {progressMessage(progress) ?? t('refine.background')}
                 </p>
               )}
               {refineMsg && (

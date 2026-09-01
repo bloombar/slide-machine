@@ -6,7 +6,11 @@
 import type { Action } from './define'
 import type { ActionContext } from './context'
 import { runWithUsage } from '../billing/usage-context'
-import { entityFromInput } from '../billing/attribution-resolve'
+import {
+  entityFromInput,
+  type EntityAttribution,
+} from '../billing/attribution-resolve'
+import { logAgentAction } from '../audit/agent-log'
 
 export class ActionNotFoundError extends Error {
   constructor(name: string) {
@@ -103,35 +107,88 @@ export const dispatch = async <O = unknown>(
     throw new ActionValidationError(name, issues)
   }
 
-  // Authorization first, metering second (TECH-14). A caller with no rights
-  // to the resource must be refused, not told their plan is exhausted — and
-  // whatever the policy loaded to decide is handed to execute, so the action
-  // does not fetch it a second time.
-  const access = await action.access?.authorize(ctx, parsed.data)
-  await action.meter?.(ctx, parsed.data)
+  // Everything past validation is the pipeline proper. It is a closure rather
+  // than the function body because the agent path below has to see how it
+  // ends, and a refusal is as much a thing to record as a success.
+  const pipeline = async (known?: EntityAttribution): Promise<O> => {
+    // Authorization first, metering second (TECH-14). A caller with no rights
+    // to the resource must be refused, not told their plan is exhausted — and
+    // whatever the policy loaded to decide is handed to execute, so the action
+    // does not fetch it a second time.
+    const access = await action.access?.authorize(ctx, parsed.data)
+    await action.meter?.(ctx, parsed.data)
 
-  // Everything the action does — including provider calls several layers down —
-  // is attributed to the acting user, so adapters can meter what they spend
-  // without taking a userId through the vendor-neutral interfaces (BILL-3).
+    // Everything the action does — including provider calls several layers down —
+    // is attributed to the acting user, so adapters can meter what they spend
+    // without taking a userId through the vendor-neutral interfaces (BILL-3).
+    //
+    // Payer and actor are the same person here, and saying so explicitly is what
+    // lets the cost ledger separate an instructor's own spend from their
+    // audience's (BILL-7). The paths where they differ — a viewer's playback
+    // charged to a deck's owner — set their own attribution.
+    //
+    // The channel rides along for the same reason the actor does: it is known
+    // here and nowhere deeper. A provider adapter counting tokens cannot tell
+    // whether a person or an assistant asked for the work, and by the time the
+    // ledger writes the row the request that would have said so is gone.
+    const run = () => action.execute(ctx, parsed.data, access) as Promise<O>
+    if (!ctx.userId) return run()
+
+    // Which lecture and project this belongs to, read off the input the action
+    // already declared (BILL-7). Doing it here rather than per action is what
+    // keeps sixty definitions from each needing an attribution hook that one of
+    // them would eventually forget. One indexed lookup, and only when the input
+    // names something; an action that names nothing attributes to the user
+    // alone, exactly as before. `known` is that same lookup already done by the
+    // agent path, which needs it whether or not the pipeline gets that far.
+    const entity = known ?? (await entityFromInput(parsed.data))
+    return runWithUsage(
+      {
+        userId: ctx.userId,
+        actorId: ctx.userId,
+        channel: ctx.channel,
+        ...entity,
+      },
+      run,
+    )
+  }
+
+  // The ordinary path: a person clicking, or the server working for itself.
+  if (ctx.channel !== 'agent' || !ctx.userId) return pipeline()
+
+  // The agent path is the same pipeline, watched. Nothing downstream can tell
+  // an assistant's call from a person's — that is the design, and it is why
+  // this has to be recorded here or not at all (docs/MCP.md §6).
   //
-  // Payer and actor are the same person here, and saying so explicitly is what
-  // lets the cost ledger separate an instructor's own spend from their
-  // audience's (BILL-7). The paths where they differ — a viewer's playback
-  // charged to a deck's owner — set their own attribution.
-  const run = () => action.execute(ctx, parsed.data, access) as Promise<O>
-  if (!ctx.userId) return run()
-
-  // Which lecture and project this belongs to, read off the input the action
-  // already declared (BILL-7). Doing it here rather than per action is what
-  // keeps sixty definitions from each needing an attribution hook that one of
-  // them would eventually forget. One indexed lookup, and only when the input
-  // names something; an action that names nothing attributes to the user
-  // alone, exactly as before.
+  // The entity is resolved up front because a refusal is worth as much as a
+  // success in this log and would never reach the lookup below it.
   const entity = await entityFromInput(parsed.data)
-  return runWithUsage(
-    { userId: ctx.userId, actorId: ctx.userId, ...entity },
-    run,
-  )
+  const trail = {
+    userId: ctx.userId,
+    channel: ctx.channel,
+    action: name,
+    requestId: ctx.requestId,
+    entity,
+  }
+  try {
+    const result = await pipeline(entity)
+    await logAgentAction({ ...trail, outcome: 'ok' })
+    return result
+  } catch (error) {
+    // Refused and failed are separated because they read differently in a run
+    // of them: an assistant repeatedly asking for what the account may not
+    // have is a signal, repeatedly hitting an error is a bug.
+    const refused =
+      error instanceof ActionForbiddenError ||
+      error instanceof EmailUnverifiedError ||
+      error instanceof CapabilityRequiredError
+    await logAgentAction({
+      ...trail,
+      outcome: refused ? 'refused' : 'failed',
+      errorName: error instanceof Error ? error.name : undefined,
+    })
+    throw error
+  }
 }
 
 /**
@@ -164,7 +221,12 @@ export const runAction = async <I, O, R>(
   if (!ctx.userId) return run()
   const entity = await entityFromInput(parsed.data)
   return runWithUsage(
-    { userId: ctx.userId, actorId: ctx.userId, ...entity },
+    {
+      userId: ctx.userId,
+      actorId: ctx.userId,
+      channel: ctx.channel,
+      ...entity,
+    },
     run,
   )
 }

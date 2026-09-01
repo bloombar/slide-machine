@@ -39,6 +39,9 @@ describe('SlideRefineModal', () => {
     expect(checkbox(/Refine slide layout/)).toBeChecked()
     expect(checkbox(/Refine slide imagery/)).toBeChecked()
     expect(checkbox(/Refine the spoken transcript/)).not.toBeChecked()
+    // Breaking the slide up changes how many slides the lecture has, so it is
+    // opted into as well.
+    expect(checkbox(/Break up this slide/)).not.toBeChecked()
     // Speaker ID is opted into, not out of: it re-reads the whole recording at
     // the same per-minute rate as capturing it, so refining a slide's wording
     // must not quietly spend a diarization allowance too.
@@ -78,11 +81,67 @@ describe('SlideRefineModal', () => {
     expect(onRefine).toHaveBeenCalledWith({
       identifySpeakers: true,
       parts: { text: true, layout: true, imagery: true },
+      allowSplit: false,
       refineTranscript: true,
       // One slider, applied to the slide and its narration alike.
       level: 5,
     })
     await vi.waitFor(() => expect(onClose).toHaveBeenCalled())
+  })
+
+  /**
+   * Breaking the slide up (GEN-4).
+   *
+   * The checkbox IS the consent — a ticked box is what makes the server write
+   * a split, and there is no dialog afterwards to catch a mistake. So what
+   * matters is that the answer travels: a form that shows the box but sends
+   * nothing would silently never split, and one that sends true regardless
+   * would divide lectures nobody asked to divide.
+   */
+  it('asks for no split while the box is unticked', () => {
+    const { onRefine } = setup()
+    fireEvent.click(refineButton())
+    expect(onRefine).toHaveBeenCalledWith(
+      expect.objectContaining({ allowSplit: false }),
+    )
+  })
+
+  it('asks for one once it is ticked', () => {
+    const { onRefine } = setup()
+    fireEvent.click(checkbox(/Break up this slide/))
+    fireEvent.click(refineButton())
+    expect(onRefine).toHaveBeenCalledWith(
+      expect.objectContaining({ allowSplit: true }),
+    )
+  })
+
+  it('starts from the lecture’s saved answer', () => {
+    setup({ defaultAllowSplit: true })
+    expect(checkbox(/Break up this slide/)).toBeChecked()
+  })
+
+  it('promises that a slide that does not need it is left whole', () => {
+    // The reassurance is the point of the copy: a checkbox that reads as
+    // "divide my slide" gets left off by people who would have wanted it.
+    setup()
+    expect(
+      screen.getByText(/only if one slide genuinely cannot hold it/i),
+    ).toBeInTheDocument()
+  })
+
+  it('goes unavailable when the text pass is off, and asks for nothing', () => {
+    // Splitting is a claim about the slide's WORDS. A refine not reading them
+    // cannot make it, so the box must not quietly ask for one.
+    const { onRefine } = setup()
+    fireEvent.click(checkbox(/Break up this slide/))
+    fireEvent.click(checkbox(/Refine slide text/))
+    expect(checkbox(/Break up this slide/)).toBeDisabled()
+    expect(checkbox(/Break up this slide/)).not.toBeChecked()
+
+    fireEvent.click(refineButton())
+    expect(onRefine).toHaveBeenCalledWith(
+      expect.objectContaining({ allowSplit: false }),
+    )
   })
 
   it('sends only the parts left checked', () => {

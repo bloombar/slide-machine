@@ -28,7 +28,8 @@
     "listSeparator": ", ",
     "adminEditNotice": "Vous modifiez {entity, select, account {le compte} project {le projet} lecture {le cours} other {les paramètres}} d'un autre utilisateur en tant qu'administrateur. Chaque modification est consignée dans le journal d'audit.",
     "undo": "Annuler",
-    "redo": "Rétablir"
+    "redo": "Rétablir",
+    "copy": "Copier"
   },
   "nav": {
     "brand": "The Slide Machine",
@@ -45,7 +46,7 @@
   "landing": {
     "title": "The Slide Machine",
     "tagline": "Parlez librement — les diapositives suivront.",
-    "intro": "The Slide Machine construit vos diapositives en direct, à partir de ce que vous dites vraiment, pendant que vous le dites. Lancez un cours et parlez : votre parole est transcrite et notre agent IA transforme vos mots en diapositives bien mises en page, en temps réel, avec des images que nous trouvons et plaçons aux endroits appropriés pendant que vous parlez.",
+    "intro": "The Slide Machine construit vos diapositives en direct, à partir de ce que vous dites vraiment, pendant que vous le dites. Lancez un cours et parlez : notre agent IA transforme vos mots en diapositives bien mises en page, en temps réel.",
     "cta": "Connectez-vous pour commencer",
     "ctaAbout": "En savoir plus sur le projet",
     "featuresTitle": "Ce que fait l'application",
@@ -64,7 +65,7 @@
     "dataGoogleTitle": "Connexion avec Google",
     "dataGoogleBody": "Si vous choisissez de vous connecter avec Google, nous recevons de Google votre nom, votre adresse e-mail et votre photo de profil. Nous les utilisons pour créer et identifier votre compte, et pour rien d'autre. C'est la seule donnée Google que la connexion nous donne.",
     "dataDriveTitle": "Connecter Google Drive",
-    "dataDriveBody": "Exporter une présentation vers Google Slides ou publier un quiz sous forme de Google Form est facultatif et ne demande qu'une autorisation restreinte : drive.file. Elle n'atteint que les fichiers créés par l'application et ceux que vous lui confiez en les choisissant dans le sélecteur de fichiers de Google. Elle ne peut ni lister, ni rechercher, ni lire le reste de votre Drive.",
+    "dataDriveBody": "Importer ou exporter des présentations ou des quiz vers votre compte Google est facultatif, et nous demandons à Google l’autorisation la plus restreinte possible pour le faire. Par conséquent, nous ne pouvons pas consulter, rechercher ni lire le reste de vos fichiers et dossiers Google Drive, et nous ne le faisons pas.",
     "dataSpeechTitle": "Votre microphone",
     "dataSpeechBody": "Pendant l'enregistrement d'un cours, l'audio du microphone est transcrit en texte afin de construire les diapositives. Nous pouvons également conserver l'enregistrement lui-même, pour qu'un cours puisse être retranscrit, affiné, ses locuteurs distingués, sa narration d'origine rejouée avec les diapositives et sa qualité analysée. La durée de conservation dépend de votre forfait et de ce qu'il reste à faire avec l'enregistrement. Un enregistrement conservé est stocké uniquement côté serveur, n'est jamais exposé à quiconque n'a pas le droit de modifier ce cours, et est supprimé à l'échéance de sa durée de conservation.",
     "dataNever": "Nous ne vendons pas vos données et ne les utilisons pas pour entraîner des modèles d'IA tiers.",
@@ -195,9 +196,12 @@
     "sections": "Sections des réglages",
     "tabs": {
       "general": "Général",
-      "plan": "Forfait et utilisation",
-      "privacy": "Confidentialité"
+      "design": "Apparence",
+      "privacy": "Confidentialité",
+      "plan": "Forfait et utilisation"
     },
+    "templateHeading": "Modèle par défaut",
+    "templateHint": "Les nouveaux projets démarrent avec ce modèle, et les nouveaux cours en héritent de leur projet. Chaque projet et chaque cours conserve le sien et peut en changer à tout moment dans ses paramètres.",
     "planSection": "Forfait",
     "publicProfileSectionHint": "Enregistré au fil de la saisie. Ce que les inconnus voient sur votre profil.",
     "privacySectionHint": "Qui peut voir votre profil et les cours qui y figurent.",
@@ -206,7 +210,9 @@
       "hint": "La suppression de votre compte efface définitivement vos projets, cours et diapositives. Cette action est irréversible.",
       "title": "Supprimer votre compte ?",
       "message": "Votre compte et tous ses projets, cours et diapositives seront définitivement supprimés."
-    }
+    },
+    "assistantsSection": "Assistants IA connectés",
+    "assistantsSectionHint": "Les assistants que vous avez autorisés à consulter ou modifier vos cours depuis l'extérieur de l'application. La déconnexion prend effet immédiatement et ne vous déconnecte nulle part ailleurs."
   },
   "language": {
     "label": "Langue",
@@ -826,12 +832,6 @@
       "code": "Ajouter du code",
       "codeIn": "Ajouter du code {language}",
       "preformatted": "Ajouter du texte préformaté"
-    },
-    "split": {
-      "title": "Diviser cette diapositive ?",
-      "intro": "Cette diapositive contient {count} idées distinctes ({reason}). La présenter en {count} diapositives serait plus clair :",
-      "confirm": "Diviser en {count} diapositives",
-      "untitled": "(partie sans titre)"
     }
   },
   "image": {
@@ -923,6 +923,15 @@
         "description": "Trouver une image lorsque la mise en page comporte un emplacement d'image vide."
       }
     },
+    "split": {
+      "label": "Diviser les diapositives surchargées",
+      "labelSlide": "Diviser cette diapositive",
+      "description": "Transformer une diapositive en plusieurs, mais seulement quand une seule ne suffit pas.",
+      "descriptionSlide": "Transformer cette diapositive en plusieurs, mais seulement si une seule ne suffit pas.",
+      "needsText": "(Disponible uniquement pendant l’amélioration du texte de la diapositive.)",
+      "done": "{count, plural, one {La diapositive {number} est maintenant # diapositive} other {La diapositive {number} est maintenant # diapositives}} — {reason}.",
+      "doneNoReason": "{count, plural, one {La diapositive {number} est maintenant # diapositive.} other {La diapositive {number} est maintenant # diapositives.}}"
+    },
     "speakers": {
       "label": "Identifier plusieurs intervenants",
       "description": "Détecter qui a parlé — vous ou les étudiants — et reformuler les prises de parole des étudiants en questions plutôt qu’en affirmations.",
@@ -941,7 +950,8 @@
       "levelLabel": "Intensité de l’amélioration de cette diapositive",
       "marked": "Cette diapositive comporte des annotations au tableau blanc. L'amélioration peut modifier son contenu ou sa mise en page ; vos surlignages et annotations risquent alors de ne plus correspondre à ce qui se trouve dessous.",
       "running": "Amélioration de cette diapositive…",
-      "failed": "Impossible d'améliorer cette diapositive — réessayez"
+      "failed": "Impossible d'améliorer cette diapositive — réessayez",
+      "runningNamed": "Amélioration de la diapositive {number} : {title}…"
     }
   },
   "transcript": {
@@ -1136,11 +1146,19 @@
         "markedTitle": "Améliorer des diapositives annotées ?",
         "markedMessage": "Certaines diapositives comportent des annotations au tableau blanc. L'amélioration peut modifier leur contenu ou leur mise en page ; les surlignages et annotations risquent alors de ne plus correspondre à ce qui se trouve dessous.",
         "markedConfirm": "Améliorer quand même",
+        "progress": {
+          "speakers": "Identification des personnes qui ont parlé dans l’enregistrement…",
+          "slides": "Amélioration de la diapositive {index} sur {total} : {title}",
+          "slidesUntitled": "Amélioration de la diapositive {index} sur {total}…",
+          "narration": "Rédaction de la version parlée de la diapositive {index} sur {total} : {title}",
+          "narrationUntitled": "Rédaction de la version parlée de la diapositive {index} sur {total}…"
+        },
         "summary": {
           "done": "Terminé — {changes}.",
           "none": "Terminé — aucune modification nécessaire.",
           "reframed": "{count, plural, one {# diapositive étudiante reformulée} other {# diapositives étudiantes reformulées}}",
           "slidesRefined": "{count, plural, one {# diapositive améliorée} other {# diapositives améliorées}}",
+          "slidesSplit": "{count, plural, one {divisé # diapositive} other {divisé # diapositives}}",
           "transcriptsUpdated": "{count, plural, one {# narration mise à jour} other {# narrations mises à jour}}"
         }
       }
@@ -1384,5 +1402,24 @@
       "warnEmails": "M’avertir par e-mail avant épuisement",
       "warnEmailsHint": "Un avis quand un quota est presque épuisé. Les avis de limite réellement atteinte sont toujours envoyés."
     }
+  },
+  "oauth": {
+    "title": "Connecter un assistant",
+    "asking": "{name} demande à se connecter à votre compte Slide Machine. Si vous acceptez, il pourra :",
+    "limits": "Il ne peut rien supprimer, ni partager un cours, ni publier un quiz, ni modifier votre formule — cela reste dans l'application. Vous pouvez le déconnecter à tout moment depuis les paramètres de votre compte.",
+    "allow": "Autoriser",
+    "deny": "Refuser",
+    "expired": "Cette demande a expiré ou a déjà reçu une réponse. Demandez à l'assistant de se reconnecter.",
+    "failed": "Une erreur s'est produite et rien n'a été connecté. Réessayez."
+  },
+  "assistants": {
+    "none": "Aucun assistant IA n'est connecté à ce compte.",
+    "connectedOn": "Connecté le {date}",
+    "disconnect": "Déconnecter",
+    "failed": "Impossible de charger les assistants connectés.",
+    "connectTitle": "Connecter un assistant",
+    "connectHint": "Collez cette adresse dans les paramètres de connecteur de votre assistant IA. Les assistants qui prennent en charge les connecteurs MCP distants — comme Claude — feront le reste.",
+    "connectApproval": "L'assistant vous renverra ici pour approuver la connexion avant de pouvoir voir quoi que ce soit.",
+    "copied": "Copié"
   }
 }

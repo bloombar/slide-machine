@@ -1,8 +1,9 @@
 /**
- * Tests for the Project settings "General" tab title field: it shows the
- * stored title, saves an edit through project.update on blur or Enter, and
- * leaves the project alone when the title is unchanged, blank, or the save
- * fails.
+ * Tests for the Project settings modal: the "General" tab's title field —
+ * it shows the stored title, saves an edit through project.update on blur or
+ * Enter, and leaves the project alone when the title is unchanged, blank, or
+ * the save fails — and the Design tab, which carries the same panels as the
+ * lecture's so a design is chosen and exported the same way in both.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
@@ -16,6 +17,13 @@ import { MemoryRouter } from 'react-router'
 import type { Project } from '@slide-machine/shared'
 import { mockFetchRoutes } from '../test/fetch-mock'
 import ProjectSettingsModal from './ProjectSettingsModal'
+
+// The Design tab's library marks which templates the signed-in user
+// authored; who that is comes from the auth context, which this modal is
+// rendered outside of here.
+vi.mock('../auth/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'u1' } }),
+}))
 
 const baseProject: Project = {
   id: 'p1',
@@ -213,5 +221,104 @@ describe('ProjectSettingsModal — project title', () => {
     fireEvent.change(input, { target: { value: 'Admin renamed' } })
     fireEvent.blur(input)
     await waitFor(() => expect(onProjectChange).toHaveBeenCalledWith(renamed))
+  })
+})
+
+describe('ProjectSettingsModal — Design tab', () => {
+  /** Two built-ins, so "chosen" is distinguishable from "the only one". */
+  const templates = [
+    {
+      id: 'classic',
+      permalinkSlug: 'classic',
+      ownerId: 'system',
+      name: 'Classic',
+      theme: { background: '#ffffff', text: '#000000', accent: '#123456' },
+      layouts: [],
+      visibility: 'public',
+      voteScore: 0,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'seminar',
+      permalinkSlug: 'seminar',
+      ownerId: 'system',
+      name: 'Seminar',
+      theme: { background: '#ffffff', text: '#000000', accent: '#654321' },
+      layouts: [],
+      visibility: 'public',
+      voteScore: 0,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+  ]
+
+  const openDesign = (over: Partial<Project> = {}) => {
+    const result = renderModal(over)
+    fireEvent.click(screen.getByRole('tab', { name: 'Design' }))
+    return result
+  }
+
+  it('shows the project’s template as the chosen one', async () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: templates }),
+    })
+    openDesign()
+
+    expect(
+      await screen.findByRole('radio', { name: /Classic/ }),
+    ).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('saves a switch through project.switchTemplate', async () => {
+    const switched = { ...baseProject, templateId: 'seminar' }
+    const { fetchMock } = mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: templates }),
+      '/api/actions/project.switchTemplate': () => ({
+        status: 200,
+        body: switched,
+      }),
+    })
+    const { onProjectChange } = openDesign()
+
+    fireEvent.click(await screen.findByRole('radio', { name: /Seminar/ }))
+
+    await waitFor(() => expect(onProjectChange).toHaveBeenCalledWith(switched))
+    const body = JSON.parse(
+      (fetchMock.mock.calls.find(([url]) =>
+        String(url).includes('project.switchTemplate'),
+      )?.[1] as RequestInit)!.body as string,
+    )
+    expect(body).toEqual({ projectId: 'p1', templateId: 'seminar' })
+  })
+
+  // The parity the tab used to lack: the lecture's Design tab could take a
+  // design out as a file or into Drive, and the project's could not.
+  it('offers the same three exports the lecture’s Design tab offers', async () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: templates }),
+    })
+    openDesign()
+
+    expect(await screen.findByText('Export this design')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'As YAML' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'As PowerPoint' })).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'As Google Slides' }),
+    ).toBeVisible()
+  })
+
+  it('moves along the tab strip with the arrow keys', () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+    })
+    renderModal()
+
+    const general = screen.getByRole('tab', { name: 'General' })
+    expect(general).toHaveAttribute('aria-selected', 'true')
+    fireEvent.keyDown(general, { key: 'ArrowRight' })
+
+    expect(screen.getByRole('tab', { name: 'Design' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
   })
 })

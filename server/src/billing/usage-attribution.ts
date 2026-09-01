@@ -17,6 +17,10 @@
  * either importing the other.
  */
 import { AsyncLocalStorage } from 'node:async_hooks'
+// Type-only, so it erases at compile and this file still pulls in no
+// project code at runtime — which is what keeps the counters and the cost
+// ledger able to share it without importing each other.
+import type { ActorChannel } from '@slide-machine/shared'
 
 /**
  * What is known about a piece of metered work at the moment it happens.
@@ -48,6 +52,16 @@ export interface UsageAttribution {
    * promises. Those are counted as events instead.
    */
   actorId?: string
+  /**
+   * How the request that caused this work reached the app (docs/MCP.md §6).
+   *
+   * Orthogonal to `audience` and to `actorId`: those say *who*, this says
+   * *through what*. An assistant editing its owner's lecture is the owner
+   * acting, through an agent — and the second half is the part that cannot be
+   * worked out later, because an agent's calls are deliberately ordinary calls
+   * by the account that authorized them.
+   */
+  channel?: ActorChannel
   /** The project the work belonged to, and its name at the time. */
   projectId?: string
   projectName?: string

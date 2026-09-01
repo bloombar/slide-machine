@@ -13,7 +13,7 @@ const testEnv = vi.hoisted(() => ({
 }))
 vi.mock('../config/env', () => ({ env: testEnv }))
 
-import { appOrigin } from './app-origin'
+import { appOrigin, configuredAppOrigin } from './app-origin'
 
 /** A request carrying the headers the fallback reads, plus a hostile Origin
  * that must never be believed. */
@@ -53,5 +53,20 @@ describe('appOrigin', () => {
     // `get('origin')` returns the hostile value in this fixture; a return URL
     // built from it would let anyone redirect a checkout wherever they liked.
     expect(appOrigin(req())).not.toContain('evil.example.com')
+  })
+})
+
+describe('configuredAppOrigin', () => {
+  it('answers with the configured origin, request or no request', () => {
+    testEnv.CLIENT_APP_URL = 'http://localhost:5173'
+    testEnv.PUBLIC_BASE_URL = 'http://localhost:3000'
+
+    expect(configuredAppOrigin()).toBe('http://localhost:5173')
+  })
+
+  it('is undefined when nothing is configured', () => {
+    // A caller with no request has nothing to guess from, so it must be told
+    // there is no answer rather than handed one (deck-link.ts).
+    expect(configuredAppOrigin()).toBeUndefined()
   })
 })

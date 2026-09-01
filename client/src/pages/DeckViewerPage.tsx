@@ -35,8 +35,6 @@ import type {
   Slide,
   SlideEvent,
   SlideRefineOptions,
-  SlideSplitProposal,
-  DeckSplitSlideResult,
   SlideRefitLayoutResult,
   SlotValue,
   Stroke,
@@ -44,6 +42,7 @@ import type {
   WordTiming,
 } from '@slide-machine/shared'
 import {
+  SLIDE_PARAM,
   WHITEBOARD_LAYOUT_TYPE,
   hasVisibleDrawings,
   deckSourceLocale,
@@ -233,6 +232,14 @@ export default function DeckViewerPage() {
     [showingTranslation, translation.perSlide],
   )
   const [error, setError] = useState<string | null>(null)
+  /**
+   * Whether signing in could change the answer — true only for the 404 the
+   * API gives a private deck, which is the same 404 it gives a deck that does
+   * not exist. Someone arriving from outside the app (an assistant's link,
+   * SPEC §18) hits this before they hit a login screen, and "does not exist or
+   * is private" is a dead end unless it offers the one thing that might help.
+   */
+  const [signInMayHelp, setSignInMayHelp] = useState(false)
   // A lecture list's Share option deep-links to the sharing tab; the
   // layout picker's "Change template" link deep-links to the design tab
   const [settingsTab, setSettingsTab] = useState<SettingsTabId | null>(() => {
@@ -314,14 +321,25 @@ export default function DeckViewerPage() {
   // The slide currently being refined via its kebab (drives a status toast)
   const [refiningSlideId, setRefiningSlideId] = useState<string | null>(null)
   /**
-   * A split the refine offered and the instructor has not answered yet
-   * (GEN-4). Nothing has been written: the slide is already refined as one
-   * slide, and this is the offer to show it as several.
+   * A split a refine just applied (GEN-4), while its notice is on screen.
+   *
+   * Nothing is being asked here — the instructor ticked "break this slide up"
+   * before the run, so the slides already exist. This only tells them it
+   * happened, and why, since a deck that quietly grew by two would be a
+   * surprise worth explaining.
    */
-  const [pendingSplit, setPendingSplit] = useState<{
-    slideId: string
-    proposal: SlideSplitProposal
+  const [splitNotice, setSplitNotice] = useState<{
+    /** 1-based position of the slide that was split, as it was shown. */
+    number: number
+    /** How many slides it became. */
+    count: number
+    /** The model's short phrase for what the parts are; may be empty. */
+    reason: string
   } | null>(null)
+  const splitNoticeTimerRef = useRef<number | null>(null)
+  /** How long the split notice stays up. Long, like the refit undo: it is
+   * asking the user to read a sentence before it goes. */
+  const SPLIT_NOTICE_MS = 8000
   // An edit the server did not take. Cleared by the next one that lands, so
   // the notice never outlives the problem it describes.
   const [editFailed, setEditFailed] = useState(false)
@@ -529,7 +547,7 @@ export default function DeckViewerPage() {
   const nav = useSlideNavigation(view?.slides.length ?? 0, mode, index =>
     ttsRef.current?.skipTo(index),
   )
-  const { setCurrent } = nav
+  const { setCurrent, scrollTo } = nav
   // Always-fresh mirror of the current slide index, so voice commands running
   // from stale mic-queue closures can tell whether the deck is at its end.
   const currentRef = useRef(nav.current)
@@ -600,8 +618,10 @@ export default function DeckViewerPage() {
       })
       .catch(err => {
         if (cancelled) return
+        const missing = err instanceof ApiError && err.status === 404
+        setSignInMayHelp(missing)
         setError(
-          err instanceof ApiError && err.status === 404
+          missing
             ? 'This deck does not exist or is private'
             : 'Could not load this deck',
         )
@@ -610,6 +630,33 @@ export default function DeckViewerPage() {
       cancelled = true
     }
   }, [slug, status])
+
+  /**
+   * A link from outside naming one slide — `?slide=<slide id>`, which an
+   * assistant working over MCP hands back so the instructor can look at what
+   * it changed (docs/MCP.md).
+   *
+   * Honoured once per address rather than on every render: the deck reloads
+   * for reasons of its own, and re-running this would drag the reader back to
+   * the linked slide each time they had moved off it.
+   */
+  const jumpedToRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!view) return
+    const wanted = new URLSearchParams(location.search).get(SLIDE_PARAM)
+    if (!wanted || jumpedToRef.current === wanted) return
+    jumpedToRef.current = wanted
+    const index = view.slides.findIndex(slide => slide.id === wanted)
+    // A slide id this deck does not have — one since deleted, a mistyped
+    // link — opens the deck at the beginning rather than failing the page.
+    if (index < 0) return
+    setCurrent(index)
+    // List view scrolls to it; carousel view has already swapped slide. The
+    // frame's wait is what the other jump sites do — the row has to exist
+    // before it can be scrolled to, and landing on index 0 changes no state
+    // for the navigation's own scroll effect to react to.
+    requestAnimationFrame(() => scrollTo(index))
+  }, [view, location.search, setCurrent, scrollTo])
 
   // Stop any in-flight image polling when the viewer unmounts
   useEffect(() => {
@@ -1426,8 +1473,17 @@ export default function DeckViewerPage() {
 
   if (error) {
     return (
-      <div className="flex flex-1 items-center justify-center text-slate-500">
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 text-slate-500">
         <p role="alert">{error}</p>
+        {signInMayHelp && status === 'anonymous' && (
+          <Link
+            className="text-sky-400 underline underline-offset-2 hover:text-sky-300"
+            to="/login"
+            state={{ from: `${location.pathname}${location.search}` }}
+          >
+            {t('auth.signIn')}
+          </Link>
+        )}
       </div>
     )
   }
@@ -1715,48 +1771,24 @@ export default function DeckViewerPage() {
     }
   }
 
-  /**
-   * Writes a split the instructor accepted, and shows it (GEN-4).
-   *
-   * The parts go back exactly as they were displayed, so nothing appears in
-   * the deck that was not in the dialog. The original slide keeps its id and
-   * its place; the rest are spliced in directly after it.
-   */
-  const applySplit = async () => {
-    if (!pendingSplit) return
-    const { slideId, proposal } = pendingSplit
-    setPendingSplit(null)
-    try {
-      const res = await dispatchAction<DeckSplitSlideResult>(
-        'deck.splitSlide',
-        { deckId: view.deck.id, slideId, parts: proposal.parts },
-      )
-      setView(v => {
-        if (!v) return v
-        const at = v.slides.findIndex(s => s.id === res.slide.id)
-        if (at === -1) return v
-        return {
-          ...v,
-          // The order comes from the server rather than being rebuilt here:
-          // it is what decides which slides the deck shows, and inserting into
-          // `slides` alone would add slides the viewer never renders.
-          deck: { ...v.deck, slideOrder: res.slideOrder },
-          slides: [
-            ...v.slides.slice(0, at),
-            res.slide,
-            ...res.added,
-            ...v.slides.slice(at + 1),
-          ],
-        }
-      })
-      touchDeckLocally()
-    } catch {
-      setImageError('Could not split that slide — try again')
-    }
+  /** Raises the "this slide became several" notice and takes it down again
+   * after a while, replacing any notice still showing. */
+  const showSplitNotice = (notice: {
+    number: number
+    count: number
+    reason: string
+  }) => {
+    if (splitNoticeTimerRef.current)
+      window.clearTimeout(splitNoticeTimerRef.current)
+    setSplitNotice(notice)
+    splitNoticeTimerRef.current = window.setTimeout(
+      () => setSplitNotice(null),
+      SPLIT_NOTICE_MS,
+    )
   }
 
   /** Refines one slide with the lecture's Refine settings, then patches it in
-   * place. Runs synchronously (one slide is quick); a toast shows progress. */
+   * place. Runs synchronously (one slide is quick); a toast names the slide. */
   const refineSlide = async (slideId: string, options?: SlideRefineOptions) => {
     setRefiningSlideId(slideId)
     setImageError(null)
@@ -1773,28 +1805,51 @@ export default function DeckViewerPage() {
       const layoutChanged = Boolean(
         prior && prior.layoutType !== res.slide.layoutType,
       )
+      // A refine the instructor allowed to split comes back having already
+      // made the slides. They are spliced in directly after the original,
+      // which kept its id and now holds the first part, and the order comes
+      // from the server rather than being rebuilt here: it is what decides
+      // which slides the deck shows, and adding to `slides` alone would add
+      // slides the viewer never renders.
+      const split = res.split
       const commit = () =>
-        setView(v =>
-          v
-            ? {
-                ...v,
-                slides: v.slides.map(s =>
-                  s.id === res.slide.id ? res.slide : s,
-                ),
-              }
-            : v,
-        )
+        setView(v => {
+          if (!v) return v
+          const slides = v.slides.map(s =>
+            s.id === res.slide.id ? res.slide : s,
+          )
+          if (!split) return { ...v, slides }
+          const at = slides.findIndex(s => s.id === res.slide.id)
+          return {
+            ...v,
+            deck: { ...v.deck, slideOrder: split.slideOrder },
+            slides:
+              at === -1
+                ? slides
+                : [
+                    ...slides.slice(0, at + 1),
+                    ...split.added,
+                    ...slides.slice(at + 1),
+                  ],
+          }
+        })
       if (layoutChanged) {
         void runLayoutFlip(res.slide.id, commit)
       } else {
         commit()
       }
       touchDeckLocally()
-      // The slide is refined either way; this only asks whether to show it as
-      // several. Raised after the refined content is on screen, so the parts
-      // are judged against the slide as it now reads.
-      if (res.splitProposal)
-        setPendingSplit({ slideId: res.slide.id, proposal: res.splitProposal })
+      // Say what happened. The deck just gained slides on a button that said
+      // "refine", so the notice names the slide it came from and the model's
+      // reason for dividing it.
+      if (split)
+        showSplitNotice({
+          number:
+            (viewRef.current?.slides.findIndex(s => s.id === res.slide.id) ??
+              0) + 1,
+          count: split.added.length + 1,
+          reason: split.reason,
+        })
     } catch (error) {
       setImageError('Could not refine that slide — try again')
       // The dialog reports its own failure and stays open to retry.
@@ -1803,6 +1858,21 @@ export default function DeckViewerPage() {
       setRefiningSlideId(null)
     }
   }
+
+  /**
+   * What the "refining" pill says: the slide's number and its title, so a
+   * lecture-length deck shows WHICH slide is being worked on rather than only
+   * that something is. A slide with no text yet falls back to the plain line.
+   */
+  const refiningMessage = (() => {
+    if (!refiningSlideId) return ''
+    const at = view.slides.findIndex(s => s.id === refiningSlideId)
+    const slide = at === -1 ? undefined : view.slides[at]
+    const title = slide?.title?.trim() ?? ''
+    return !slide || !title
+      ? t('refine.slide.running')
+      : t('refine.slide.runningNamed', { number: at + 1, title })
+  })()
 
   // The "Refine this slide" kebab item appears only when a slide-applicable
   // refine pass is enabled in the lecture's Refine settings (defaults on).
@@ -2345,6 +2415,7 @@ export default function DeckViewerPage() {
           defaultLevel={
             view.deck.refineSlidesLevel ?? getRefineSlidesDefaultLevel()
           }
+          defaultAllowSplit={view.deck.refineSplitEnabled ?? false}
           onRefine={options => refineSlide(refineSlideFor, options)}
           // Refining every slide is a lecture setting, so the blurb's link
           // swaps this dialog for the lecture's own Refine tab.
@@ -2371,7 +2442,21 @@ export default function DeckViewerPage() {
       )}
 
       {refiningSlideId && (
-        <NotificationPill>{t('refine.slide.running')}</NotificationPill>
+        <NotificationPill>{refiningMessage}</NotificationPill>
+      )}
+
+      {splitNotice && (
+        <NotificationPill
+          action={{
+            label: '✕',
+            ariaLabel: t('common.dismiss'),
+            onClick: () => setSplitNotice(null),
+          }}
+        >
+          {splitNotice.reason
+            ? t('refine.split.done', splitNotice)
+            : t('refine.split.doneNoReason', splitNotice)}
+        </NotificationPill>
       )}
 
       {refitUndo && (
@@ -2464,38 +2549,6 @@ export default function DeckViewerPage() {
             }}
           />
         )}
-
-      {pendingSplit && (
-        <ConfirmDialog
-          title={t('slide.split.title')}
-          tone="neutral"
-          message={
-            <>
-              <p>
-                {t('slide.split.intro', {
-                  count: pendingSplit.proposal.parts.length,
-                  reason: pendingSplit.proposal.reason,
-                })}
-              </p>
-              <ol className="mt-2 list-decimal space-y-1 pl-5">
-                {pendingSplit.proposal.parts.map((part, i) => (
-                  <li key={i}>
-                    {part.slots.title?.trim() ||
-                      part.slots.body?.trim() ||
-                      part.slots.bullets?.[0] ||
-                      t('slide.split.untitled')}
-                  </li>
-                ))}
-              </ol>
-            </>
-          }
-          confirmLabel={t('slide.split.confirm', {
-            count: pendingSplit.proposal.parts.length,
-          })}
-          onConfirm={() => void applySplit()}
-          onCancel={() => setPendingSplit(null)}
-        />
-      )}
 
       {askAdmin && (
         <ConfirmDialog

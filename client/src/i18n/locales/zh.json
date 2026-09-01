@@ -28,7 +28,8 @@
     "listSeparator": "、",
     "adminEditNotice": "你正以管理员身份编辑其他用户的{entity, select, account {账户} project {项目} lecture {课程} other {设置}}。你在此做的每一处更改都会记入审计日志。",
     "undo": "撤销",
-    "redo": "重做"
+    "redo": "重做",
+    "copy": "复制"
   },
   "nav": {
     "brand": "The Slide Machine",
@@ -45,7 +46,7 @@
   "landing": {
     "title": "The Slide Machine",
     "tagline": "尽管开口讲——幻灯片会跟上。",
-    "intro": "The Slide Machine 会在你讲课的同时，根据你实际说出的内容实时生成幻灯片。开始一堂课，然后开口说：语音被即时转写，我们的 AI 智能体把你的话实时变成排版精良的幻灯片，并在合适的位置配上我们检索到的图片。",
+    "intro": "The Slide Machine 会在你讲课的同时，根据你实际说出的内容实时生成幻灯片。开始一堂课，然后开口说：我们的 AI 智能体把你的话实时变成排版精良的幻灯片。",
     "cta": "登录后开始使用",
     "ctaAbout": "了解更多关于本项目",
     "featuresTitle": "它能做什么",
@@ -64,7 +65,7 @@
     "dataGoogleTitle": "使用 Google 登录",
     "dataGoogleBody": "如果你选择使用 Google 登录，我们会从 Google 获取你的姓名、电子邮箱和头像。我们仅用它们来创建和识别你的账号，别无他用。登录只会给我们这些 Google 数据。",
     "dataDriveTitle": "连接 Google 云端硬盘",
-    "dataDriveBody": "把演示文稿导出到 Google Slides、或把测验发布为 Google 表单都是可选的，且只请求一项范围极窄的权限：drive.file。它只能访问应用自己创建的文件，以及你在 Google 自带的文件选择器中亲手交给它的文件。它无法列出、搜索或读取你云端硬盘中的其他内容。",
+    "dataDriveBody": "把幻灯片或测验导入或导出到你的 Google 账号是可选的，为此我们只向 Google 请求最低限度的权限。因此，我们无法也不会查看、搜索或读取你 Google 云端硬盘中的其他文件或文件夹。",
     "dataSpeechTitle": "你的麦克风",
     "dataSpeechBody": "课程录制期间，麦克风音频会被转写成文字以生成幻灯片。我们也可能保留录音本身，以便对课程重新转写、润色、区分发言人、配合幻灯片回放原始讲述，并分析其质量。保留时长取决于你的套餐，以及录音还需要经过哪些处理。保留的录音仅存放在服务器端，绝不会提供给没有该课程编辑权限的人，并在保留期满后删除。",
     "dataNever": "我们不出售你的数据，也不会用它训练第三方 AI 模型。",
@@ -195,9 +196,12 @@
     "sections": "设置分区",
     "tabs": {
       "general": "常规",
-      "plan": "套餐与用量",
-      "privacy": "隐私"
+      "design": "外观",
+      "privacy": "隐私",
+      "plan": "套餐与用量"
     },
+    "templateHeading": "默认模板",
+    "templateHint": "新项目以此模板开始，新课程从所属项目继承该模板。每个项目和每节课程都保留自己的模板，并可随时在其设置中更换。",
     "planSection": "套餐",
     "publicProfileSectionHint": "编辑后自动保存。陌生人在你的个人资料页看到的内容。",
     "privacySectionHint": "谁可以查看你的个人资料页以及其中的课程。",
@@ -206,7 +210,9 @@
       "hint": "删除账户将永久移除你的项目、课程和幻灯片。此操作无法撤销。",
       "title": "删除你的账户？",
       "message": "你的账户及其所有项目、课程和幻灯片将被永久删除。"
-    }
+    },
+    "assistantsSection": "已连接的 AI 助手",
+    "assistantsSectionHint": "您已允许其在应用之外读取或修改讲座的助手。断开连接会立即生效，且不会让您在任何地方退出登录。"
   },
   "language": {
     "label": "语言",
@@ -826,12 +832,6 @@
       "code": "添加代码",
       "codeIn": "添加 {language} 代码",
       "preformatted": "添加预格式化文本"
-    },
-    "split": {
-      "title": "拆分这张幻灯片？",
-      "intro": "这张幻灯片包含 {count} 个独立的要点（{reason}）。拆成 {count} 张会更清晰：",
-      "confirm": "拆分为 {count} 张幻灯片",
-      "untitled": "（无标题部分）"
     }
   },
   "image": {
@@ -923,6 +923,15 @@
         "description": "当版式留有图片位而尚未放图时，为其寻找一张图片。"
       }
     },
+    "split": {
+      "label": "拆分内容过多的幻灯片",
+      "labelSlide": "拆分这张幻灯片",
+      "description": "在一张幻灯片确实装不下时，将它拆成几张；否则不会拆分。",
+      "descriptionSlide": "如果这张幻灯片确实装不下，就把它拆成几张；否则不会拆分。",
+      "needsText": "（仅在优化幻灯片文字时可用。）",
+      "done": "{count, plural, other {第 {number} 张幻灯片现在是 # 张}} — {reason}。",
+      "doneNoReason": "{count, plural, other {第 {number} 张幻灯片现在是 # 张。}}"
+    },
     "speakers": {
       "label": "识别多位讲话者",
       "description": "识别是谁在讲话——你还是学生——并把学生的发言改写为提问而非事实陈述。",
@@ -941,7 +950,8 @@
       "levelLabel": "这张幻灯片的优化强度",
       "marked": "这张幻灯片上有白板标注。优化可能改变其内容或版式，你的高亮和批注可能不再与下方内容对齐。",
       "running": "正在优化这张幻灯片…",
-      "failed": "无法优化这张幻灯片——请重试"
+      "failed": "无法优化这张幻灯片——请重试",
+      "runningNamed": "正在优化第 {number} 张幻灯片：{title}…"
     }
   },
   "transcript": {
@@ -1136,11 +1146,19 @@
         "markedTitle": "优化带有标注的幻灯片？",
         "markedMessage": "有些幻灯片带有白板标注。优化可能改变其内容或版式，高亮和批注可能不再与下方内容对齐。",
         "markedConfirm": "仍然优化",
+        "progress": {
+          "speakers": "正在识别录音中的发言人…",
+          "slides": "正在优化第 {index} 张幻灯片，共 {total} 张：{title}",
+          "slidesUntitled": "正在优化第 {index} 张幻灯片，共 {total} 张…",
+          "narration": "正在撰写第 {index} 张幻灯片的口述版本，共 {total} 张：{title}",
+          "narrationUntitled": "正在撰写第 {index} 张幻灯片的口述版本，共 {total} 张…"
+        },
         "summary": {
           "done": "完成 — {changes}。",
           "none": "完成 — 无需任何更改。",
           "reframed": "{count, plural, other {改写了 # 张学生发言的幻灯片}}",
           "slidesRefined": "{count, plural, other {优化了 # 张幻灯片}}",
+          "slidesSplit": "{count, plural, other {拆分了 # 张幻灯片}}",
           "transcriptsUpdated": "{count, plural, other {更新了 # 段旁白}}"
         }
       }
@@ -1384,5 +1402,24 @@
       "warnEmails": "额度用尽前发邮件提醒我",
       "warnEmailsHint": "额度快用完时提前通知。已实际达到上限的通知则始终发送。"
     }
+  },
+  "oauth": {
+    "title": "连接助手",
+    "asking": "{name} 请求连接到您的 Slide Machine 账户。如果您允许，它将可以：",
+    "limits": "它无法删除任何内容、分享讲座、发布测验或更改您的套餐——这些仍需在应用中操作。您可以随时在账户设置中断开连接。",
+    "allow": "允许",
+    "deny": "不允许",
+    "expired": "此请求已过期或已被回应。请让助手重新连接。",
+    "failed": "出现问题，未建立任何连接。请重试。"
+  },
+  "assistants": {
+    "none": "此账户尚未连接任何 AI 助手。",
+    "connectedOn": "连接于 {date}",
+    "disconnect": "断开连接",
+    "failed": "无法加载已连接的助手。",
+    "connectTitle": "连接助手",
+    "connectHint": "将此地址粘贴到您的 AI 助手的连接器设置中。支持远程 MCP 连接器的助手（例如 Claude）会完成其余步骤。",
+    "connectApproval": "助手会把您送回这里进行批准，之后才能看到任何内容。",
+    "copied": "已复制"
   }
 }

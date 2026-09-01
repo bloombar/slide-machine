@@ -13,14 +13,7 @@
  * raised for the file rather than chased test by test.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import {
-  render,
-  screen,
-  fireEvent,
-  act,
-  waitFor,
-  within,
-} from '@testing-library/react'
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useParams } from 'react-router'
 import { AuthProvider } from '../auth/AuthContext'
 import { setAccessToken } from '../auth/token'
@@ -440,27 +433,39 @@ describe('DeckViewerPage spoken transcript editing (EDIT-6)', () => {
 })
 
 /**
- * A refine that offers to show one slide as several (GEN-4).
+ * A refine that breaks one slide into several (GEN-4).
  *
- * The offer is the whole point: the refine has already improved the slide as
- * one slide, and splitting changes the shape of the lecture, so nothing is
- * written until the instructor says yes. These assert what reaches the DECK —
- * a dialog that appears is not evidence, because declining must leave the
- * deck exactly as a refine without a proposal would.
+ * The permission is taken up front, in the Refine dialog's "break this slide
+ * up" checkbox, so there is no dialog to answer afterwards: the server writes
+ * the split and the viewer shows it. These assert what reaches the DECK and
+ * what is ASKED FOR — a checkbox that renders is not evidence that the run
+ * carried its answer, and a deck that gains slides when the box was never
+ * ticked is the failure this replaces a confirm dialog with.
  */
-describe('DeckViewerPage split proposal (GEN-4)', () => {
-  const PROPOSAL = {
+describe('DeckViewerPage applied split (GEN-4)', () => {
+  const SPLIT = {
     reason: 'two separate stages',
-    parts: [
-      { layoutType: 'content', slots: { title: 'Light absorption' } },
-      { layoutType: 'content', slots: { title: 'Carbon fixation' } },
+    added: [
+      {
+        id: 's-new',
+        deckId: 'deck1',
+        index: 1,
+        layoutType: 'content',
+        title: 'Carbon fixation',
+      },
     ],
+    slideOrder: ['s1', 's-new'],
   }
 
-  /** Reaches the "would you like to split this?" dialog, and records what
-   * `deck.splitSlide` was sent (never called = never sent). */
-  const afterRefine = async (proposal: unknown = PROPOSAL) => {
-    const sent: { body?: { parts?: unknown[] } } = {}
+  /**
+   * Runs the per-slide refine, optionally ticking "break this slide up"
+   * first, and records what `deck.refineSlide` was asked for.
+   */
+  const afterRefine = async ({
+    split = SPLIT as unknown,
+    tick = true,
+  }: { split?: unknown; tick?: boolean } = {}) => {
+    const sent: { options?: { allowSplit?: boolean } } = {}
     mockFetchRoutes({
       '/api/auth/refresh': () => ({
         status: 200,
@@ -470,17 +475,8 @@ describe('DeckViewerPage split proposal (GEN-4)', () => {
         status: 200,
         body: { ...deckView, canEdit: true },
       }),
-      '/api/actions/deck.refineSlide': () => ({
-        status: 200,
-        body: {
-          slide: { id: 's1', deckId: 'deck1', index: 0, layoutType: 'content' },
-          refined: true,
-          narrationUpdated: false,
-          ...(proposal ? { splitProposal: proposal } : {}),
-        },
-      }),
-      '/api/actions/deck.splitSlide': init => {
-        sent.body = JSON.parse(String(init?.body))
+      '/api/actions/deck.refineSlide': init => {
+        sent.options = JSON.parse(String(init?.body)).options
         return {
           status: 200,
           body: {
@@ -491,16 +487,9 @@ describe('DeckViewerPage split proposal (GEN-4)', () => {
               layoutType: 'content',
               title: 'Light absorption',
             },
-            added: [
-              {
-                id: 's-new',
-                deckId: 'deck1',
-                index: 1,
-                layoutType: 'content',
-                title: 'Carbon fixation',
-              },
-            ],
-            slideOrder: ['s1', 's-new'],
+            refined: true,
+            narrationUpdated: false,
+            ...(split ? { split } : {}),
           },
         }
       },
@@ -519,72 +508,56 @@ describe('DeckViewerPage split proposal (GEN-4)', () => {
     fireEvent.click(
       screen.getByRole('menuitem', { name: 'Refine this slide with AI' }),
     )
+    if (tick)
+      fireEvent.click(
+        screen.getByRole('checkbox', {
+          name: /Break up this slide/i,
+        }),
+      )
     fireEvent.click(screen.getByRole('button', { name: 'Refine' }))
     return sent
   }
 
-  it('asks before splitting, naming the parts it would make', async () => {
-    await afterRefine()
-    expect(
-      await screen.findByRole('alertdialog', { name: /Split this slide/i }),
-    ).toBeInTheDocument()
-    // The instructor decides against what they can read, not a count
-    expect(screen.getByText('Light absorption')).toBeInTheDocument()
-    expect(screen.getByText('Carbon fixation')).toBeInTheDocument()
-    expect(screen.getByText(/two separate stages/)).toBeInTheDocument()
-  })
-
-  it('writes nothing until the offer is accepted', async () => {
+  it('asks the server for a split only when the box is ticked', async () => {
     const sent = await afterRefine()
-    await screen.findByRole('alertdialog', { name: /Split this slide/i })
-    expect(sent.body).toBeUndefined()
+    await vi.waitFor(() => expect(sent.options?.allowSplit).toBe(true))
   })
 
-  it('sends exactly the parts that were shown, on accept', async () => {
-    const sent = await afterRefine()
-    fireEvent.click(
-      await screen.findByRole('button', { name: /Split into 2 slides/i }),
-    )
-    await vi.waitFor(() => expect(sent.body?.parts).toEqual(PROPOSAL.parts))
+  it('leaves the box off by default, and says so in the request', async () => {
+    // The default has to be off in the REQUEST, not just in the markup: a
+    // checkbox that renders unticked while the run asks for a split anyway
+    // would divide lectures nobody asked to divide.
+    const sent = await afterRefine({ split: null, tick: false })
+    await vi.waitFor(() => expect(sent.options?.allowSplit).toBe(false))
   })
 
-  it('shows the split result, and the new slide after it', async () => {
+  it('shows the parts as slides, without asking anything first', async () => {
     // The viewer shows one slide at a time: the original now holds part one,
     // and part two is the slide after it
     await afterRefine()
-    fireEvent.click(
-      await screen.findByRole('button', { name: /Split into 2 slides/i }),
-    )
     await screen.findByText('Light absorption')
+    expect(
+      screen.queryByRole('alertdialog', { name: /Split/i }),
+    ).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Next slide' }))
     await screen.findByText('Carbon fixation')
   })
 
-  it('leaves the deck alone when the offer is declined', async () => {
-    const sent = await afterRefine()
-    const dialog = await screen.findByRole('alertdialog', {
-      name: /Split this slide/i,
-    })
-    // Scoped: more than one dialog on this page has a Cancel
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-    await vi.waitFor(() =>
-      expect(
-        screen.queryByRole('alertdialog', { name: /Split this slide/i }),
-      ).not.toBeInTheDocument(),
-    )
-    expect(sent.body).toBeUndefined()
-    // The refined single slide is what stays on screen
-    expect(screen.queryByText('Light absorption')).not.toBeInTheDocument()
+  it('says which slide became several, and why', async () => {
+    // The deck just grew on a button that said "refine"; an unexplained
+    // extra slide is the thing this notice exists to prevent.
+    await afterRefine()
+    expect(await screen.findByText(/Slide 1 is now 2 slides/)).toBeVisible()
+    expect(screen.getByText(/two separate stages/)).toBeVisible()
   })
 
-  it('says nothing at all when the refine proposed no split', async () => {
-    // Which is most refines — the dialog must not appear for them
-    await afterRefine(null)
-    await vi.waitFor(() =>
-      expect(
-        screen.queryByRole('alertdialog', { name: /Split this slide/i }),
-      ).not.toBeInTheDocument(),
-    )
+  it('adds nothing, and says nothing, when the refine did not split', async () => {
+    // Which is most refines
+    await afterRefine({ split: null })
+    await screen.findByText('Light absorption')
+    expect(screen.queryByText(/is now 2 slides/)).not.toBeInTheDocument()
+    // And no part reached the deck: the refined single slide is all there is.
+    expect(screen.queryByText('Carbon fixation')).not.toBeInTheDocument()
   })
 })
 
@@ -3901,5 +3874,103 @@ describe('DeckViewerPage narration in the translated language (PLAY-3)', () => {
     expect(
       await screen.findByText(/Could not read this lecture aloud/),
     ).toBeInTheDocument()
+  })
+})
+
+/**
+ * Opening the viewer at one slide, and getting in when you are not signed in.
+ *
+ * Both serve the same journey: an assistant working over MCP cannot see the
+ * slides it edits, so it hands the instructor a link (docs/MCP.md). That link
+ * arrives in a chat window, which means it is followed by a browser that may
+ * have no session and by a reader who has not chosen a slide.
+ */
+describe('DeckViewerPage, opened from a link', () => {
+  /** The viewer at an address, with the deck served and the session decided. */
+  const openAt = (entry: string, signedIn = true, deckStatus = 200) => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () =>
+        signedIn
+          ? {
+              status: 200,
+              body: {
+                user: { id: 'u1', displayName: 'Ada' },
+                accessToken: 't',
+              },
+            }
+          : { status: 401 },
+      '/api/decks/shared-abc123': () =>
+        deckStatus === 200
+          ? { status: 200, body: { ...deckView, canEdit: signedIn } }
+          : { status: deckStatus, body: { error: { code: 'not_found' } } },
+    })
+    return render(
+      <MemoryRouter initialEntries={[entry]}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+            <Route path="/login" element={<p>LOGIN PAGE</p>} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+  }
+
+  it('opens on the slide the link names', async () => {
+    openAt('/d/shared-abc123?slide=s2')
+
+    // Carousel view shows one slide, so the second slide being on screen is
+    // the whole assertion.
+    expect(await screen.findByText('Second')).toBeInTheDocument()
+    expect(screen.queryByText('Hello')).not.toBeInTheDocument()
+  })
+
+  it('opens at the beginning when no slide is named', async () => {
+    openAt('/d/shared-abc123')
+    expect(await screen.findByText('Hello')).toBeInTheDocument()
+  })
+
+  it('opens at the beginning when the slide is not in this deck', async () => {
+    // A slide since deleted, or a mistyped link: the deck still opens.
+    openAt('/d/shared-abc123?slide=s99')
+    expect(await screen.findByText('Hello')).toBeInTheDocument()
+  })
+
+  it('offers a signed-out reader the sign-in that might let them in', async () => {
+    // A private deck and a deck that does not exist are the same 404, so the
+    // message cannot say which — but signing in is what resolves the one of
+    // them that is resolvable.
+    openAt('/d/shared-abc123?slide=s2', false, 404)
+
+    expect(
+      await screen.findByText(/does not exist or is private/),
+    ).toBeInTheDocument()
+    const signIn = await screen.findByRole('link', { name: 'Sign in' })
+    fireEvent.click(signIn)
+    expect(await screen.findByText('LOGIN PAGE')).toBeInTheDocument()
+  })
+
+  it('does not offer sign-in to someone already signed in', async () => {
+    // They are signed in and still cannot see it: signing in again is not the
+    // answer, and offering it would send them round a loop.
+    openAt('/d/shared-abc123', true, 404)
+
+    expect(
+      await screen.findByText(/does not exist or is private/),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Sign in' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('does not offer sign-in when the deck simply failed to load', async () => {
+    openAt('/d/shared-abc123', false, 500)
+
+    expect(
+      await screen.findByText(/Could not load this deck/),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Sign in' }),
+    ).not.toBeInTheDocument()
   })
 })

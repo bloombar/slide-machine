@@ -10,6 +10,7 @@ import AppShell from './components/layout/AppShell'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
+import OAuthConsentPage from './pages/OAuthConsentPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import RegisterPage from './pages/RegisterPage'
@@ -72,6 +73,20 @@ export default function App() {
         <Route path="/privacy" element={<PrivacyPolicyPage />} />
         <Route path="/terms" element={<TermsPage />} />
       </Route>
+      {/* "Claude wants to read and edit your lectures. Allow?" (docs/MCP.md
+          §5.1). Outside the app shell on purpose: the user arrives here from
+          an assistant, answers one question, and leaves to a URL that
+          assistant owns — a sidebar and a nav bar would only invite them to
+          wander off mid-flow. Guarded, because approving a grant is something
+          a signed-in person does. */}
+      <Route
+        path="/oauth/consent"
+        element={
+          <RequireAuth>
+            <OAuthConsentPage />
+          </RequireAuth>
+        }
+      />
       <Route
         element={
           <RequireAuth>

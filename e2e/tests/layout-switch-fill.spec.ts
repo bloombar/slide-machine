@@ -17,7 +17,7 @@
  * splits the orphaned paragraph on sentences.
  */
 import { test, expect, type Page } from './fixtures'
-import { createProject } from './helpers'
+import { chooseAccountDesign, createProject } from './helpers'
 
 const stamp = Date.now()
 const user = { email: `lswitch-${stamp}@example.com`, name: 'Switcher' }
@@ -45,6 +45,10 @@ test('a manual layout switch carries content across, then fills what it could no
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page).toHaveURL(/\/app$/)
+  // This spec is written against Classic — its box names and its geometry —
+  // so it says so rather than riding on whatever the deployment defaults to
+  // (TMPL-24).
+  await chooseAccountDesign(page, /classic/i)
 
   await createProject(page, `Switch${stamp}`)
   await page

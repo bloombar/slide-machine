@@ -109,9 +109,20 @@ export const projectCreate = defineAction<ProjectCreateInput, Project, Signed>({
     // account nobody has proved they own is publishing without ever being
     // asked. Confirming the address lets them open it up.
     const restricted = !(await emailVerified(ownerId))
+    // The owner's account default is the creation-time design (TMPL-24); the
+    // project stores its own copy and can switch independently afterwards,
+    // exactly as a lecture does with its project's. A stale choice — a
+    // template since deleted — is dropped rather than inherited, so the model
+    // default (the deployment's template) applies instead.
+    const owner = await UserModel.findById(ownerId).catch(() => null)
+    const templateId =
+      owner?.templateId && (await templateExists(owner.templateId))
+        ? owner.templateId
+        : undefined
     const doc = await ProjectModel.create({
       ...input,
       ownerId,
+      ...(templateId ? { templateId } : {}),
       ...(restricted ? { visibility: 'restricted' } : {}),
     })
     return toProjectDto(doc)
