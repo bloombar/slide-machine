@@ -138,6 +138,7 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
   'user.setLanguage': { resource: 'self', level: 'self' },
   'user.setLocale': { resource: 'self', level: 'self' },
   'user.setProfileVisibility': { resource: 'self', level: 'self' },
+  'user.setTemplate': { resource: 'self', level: 'self' },
   'user.updateProfile': { resource: 'self', level: 'self' },
   'user.usage': { resource: 'self', level: 'self' },
   'export.delete': { resource: 'deck', level: 'edit' },

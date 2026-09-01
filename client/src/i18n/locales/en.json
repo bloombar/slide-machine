@@ -196,9 +196,12 @@
     "sections": "Settings sections",
     "tabs": {
       "general": "General",
-      "plan": "Plan & Usage",
-      "privacy": "Privacy"
+      "design": "Design",
+      "privacy": "Privacy",
+      "plan": "Plan & Usage"
     },
+    "templateHeading": "Default template",
+    "templateHint": "New projects start with this template, and new lectures inherit it from their project. Each project and lecture keeps its own and can switch any time in its settings.",
     "planSection": "Plan",
     "publicProfileSectionHint": "Saved as you go. What strangers see on your profile page.",
     "privacySectionHint": "Who can see your profile page and the lectures on it.",

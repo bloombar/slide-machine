@@ -1,8 +1,9 @@
 /**
- * Everything about one account, in one place (AUTH-5 / SHARE-1 / BILL-4):
- * the public profile fields, the account's plan and what it has used, profile
- * visibility, and both languages. Signing out is not here — it lives in the
- * shell's hamburger menu, which every page carries.
+ * Everything about one account, in one place (AUTH-5 / SHARE-1 / BILL-4 /
+ * TMPL-24): the public profile fields, the account's plan and what it has
+ * used, profile visibility, both languages, and the design new projects start
+ * from. Signing out is not here — it lives in the shell's hamburger menu,
+ * which every page carries.
  *
  * A full page at a canonical route rather than a modal, and rather than half
  * of it living on the profile page. Settings is somewhere you go and stay for
@@ -44,6 +45,7 @@ import {
   type PlanTier,
   type ProfileVisibility,
   type SafeUser,
+  type Template,
 } from '@slide-machine/shared'
 import { useAuth } from '../auth/AuthContext'
 import { dispatchAction } from '../api/actions'
@@ -59,6 +61,9 @@ import UsagePanel from '../components/UsagePanel'
 import BillingPanel from '../components/BillingPanel'
 import EmailVerificationNotice from '../components/EmailVerificationNotice'
 import ConnectedAssistantsPanel from '../components/ConnectedAssistantsPanel'
+import { getDefaultTemplateId } from '../runtime-config'
+import TemplateDesignPanel from '../components/template/TemplateDesignPanel'
+import TemplateExportSection from '../components/template/TemplateExportSection'
 
 /** One settings change, as the account itself holds it: an absent
  * `language`/`locale` means "unchanged", an explicit `undefined` one
@@ -87,9 +92,9 @@ interface ProfileEdits {
 const textInputClass =
   'w-full rounded-md border border-slate-300 px-3 py-2 text-sm'
 
-/** General is what the account *is*, Privacy is who may see it, Plan is what
- * it may spend. */
-const TABS = ['general', 'privacy', 'plan'] as const
+/** General is what the account *is*, Design is what its new work looks
+ * like, Privacy is who may see it, Plan is what it may spend. */
+const TABS = ['general', 'design', 'privacy', 'plan'] as const
 type SettingsTab = (typeof TABS)[number]
 
 /** One titled group of controls, styled like the lecture and project settings
@@ -145,7 +150,12 @@ export default function AccountSettingsPage() {
   // on General would hide the very thing the user just paid for.
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab')
-  const tab: SettingsTab = TABS.includes(requestedTab as SettingsTab)
+  // An admin sees a shorter strip — Design is the caller's own library — so a
+  // deep link into the tab they do not have lands on General instead.
+  const tabs: readonly SettingsTab[] = adminUserId
+    ? TABS.filter(name => name !== 'design')
+    : TABS
+  const tab: SettingsTab = tabs.includes(requestedTab as SettingsTab)
     ? (requestedTab as SettingsTab)
     : 'general'
   const setTab = (next: SettingsTab) => {
@@ -159,6 +169,10 @@ export default function AccountSettingsPage() {
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [edits, setEdits] = useState<ProfileEdits>({})
   const [profileError, setProfileError] = useState<string | null>(null)
+  // The library the Design tab chooses from (TMPL-1). Loaded once for the
+  // page rather than per tab switch, so returning to Design does not blank
+  // the list while it reloads.
+  const [templates, setTemplates] = useState<Template[]>([])
 
   // Bumped after a plan grant changes, to re-read what actually landed —
   // the endpoint answers 204, and the effective tier it produces is the
@@ -184,6 +198,32 @@ export default function AccountSettingsPage() {
 
   const reloadPlan = useCallback(() => setPlanVersion(v => v + 1), [])
 
+  const loadTemplates = useCallback(() => {
+    dispatchAction<Template[]>('template.list')
+      .then(setTemplates)
+      .catch(() => {
+        // Quiet failure: the section simply stays empty
+      })
+  }, [])
+
+  useEffect(() => {
+    // Only the owner's own path has a Design tab, so only it needs the
+    // library: asking for it on the admin path would fetch the admin's own
+    // templates for a tab that is not there.
+    if (adminUserId) return
+    let cancelled = false
+    dispatchAction<Template[]>('template.list')
+      .then(list => {
+        if (!cancelled) setTemplates(list)
+      })
+      .catch(() => {
+        // Quiet failure: the section simply stays empty
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [adminUserId])
+
   const user = adminUserId ? target : viewer
   // An admin looking at someone else's settings cannot send their mail
   const isSelf = !adminUserId
@@ -191,6 +231,10 @@ export default function AccountSettingsPage() {
   // typed, and what the account holds otherwise.
   const displayName = edits.displayName ?? user?.displayName ?? ''
   const bio = edits.bio ?? user?.bio ?? ''
+  // An account that has never chosen shows what its new projects will
+  // actually get, which is the deployment's default — not an empty picker
+  // (TMPL-24).
+  const accountTemplateId = user?.templateId ?? getDefaultTemplateId()
 
   if (userId && userId === viewer?.id) {
     return <Navigate to="/app/settings" replace />
@@ -212,10 +256,10 @@ export default function AccountSettingsPage() {
   const onTabKeyDown = (e: KeyboardEvent) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
     e.preventDefault()
-    const index = TABS.indexOf(tab)
+    const index = tabs.indexOf(tab)
     const next =
-      TABS[
-        (index + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length
+      tabs[
+        (index + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length
       ]!
     setTab(next)
     tabRefs.current.get(next)?.focus()
@@ -315,6 +359,18 @@ export default function AccountSettingsPage() {
       })
   }
 
+  // The design new projects start from (TMPL-24). Owner-only, like the
+  // assistant connections below: `template.list` and every action behind the
+  // panel are self-scoped, so an admin on someone else's settings would be
+  // choosing from — and saving into — their own library.
+  const setTemplate = (templateId: string) => {
+    dispatchAction<SafeUser>('user.setTemplate', { templateId })
+      .then(updateUser)
+      .catch(() => {
+        // Quiet failure: the picker stays on the saved template
+      })
+  }
+
   // Owner-side switching lives in LocaleSwitcher, which also re-renders
   // the app; this is only the admin's copy of the control.
   const setLocale = (locale: Locale | null) =>
@@ -370,7 +426,7 @@ export default function AccountSettingsPage() {
             onKeyDown={onTabKeyDown}
             className="mb-6 flex gap-1 border-b border-slate-200"
           >
-            {TABS.map(name => (
+            {tabs.map(name => (
               <button
                 key={name}
                 ref={el => {
@@ -547,6 +603,32 @@ export default function AccountSettingsPage() {
                   </button>
                 </div>
               )}
+            </section>
+          )}
+
+          {/* Owner-only, and the tab strip says so by dropping it: the
+              panels below choose from the *caller's* template library, so an
+              admin editing another account would be shown their own designs
+              and would save a choice into their own account. */}
+          {tab === 'design' && !adminUserId && (
+            <section
+              role="tabpanel"
+              id="settings-panel-design"
+              aria-labelledby="settings-tab-design"
+            >
+              <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                {t('profile.templateHeading')}
+              </h3>
+              <p className="mb-4 text-sm text-slate-500">
+                {t('profile.templateHint')}
+              </p>
+              <TemplateDesignPanel
+                templates={templates}
+                value={accountTemplateId}
+                onChange={setTemplate}
+                onLibraryChanged={loadTemplates}
+              />
+              <TemplateExportSection templateId={accountTemplateId} />
             </section>
           )}
 

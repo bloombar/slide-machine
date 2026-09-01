@@ -13,7 +13,11 @@
  */
 import { readFileSync } from 'node:fs'
 import { test, expect } from './fixtures'
-import { createProject, openProjectSettings } from './helpers'
+import {
+  chooseAccountDesign,
+  createProject,
+  openProjectSettings,
+} from './helpers'
 
 const stamp = Date.now()
 const user = { email: `tmplfile-${stamp}@example.com`, name: 'Round Tripper' }
@@ -29,6 +33,10 @@ test('template round trip: export a design to a file, import it back', async ({
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page).toHaveURL(/\/app$/)
+  // This spec is written against Classic — its box names and its geometry —
+  // so it says so rather than riding on whatever the deployment defaults to
+  // (TMPL-24).
+  await chooseAccountDesign(page, /classic/i)
 
   // Exporting a design lives in a lecture's settings, so the round trip runs
   // from there — which is also where an instructor would actually be.
@@ -85,6 +93,10 @@ test('a file that is not a template is refused, and says why', async ({
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page).toHaveURL(/\/app$/)
+  // This spec is written against Classic — its box names and its geometry —
+  // so it says so rather than riding on whatever the deployment defaults to
+  // (TMPL-24).
+  await chooseAccountDesign(page, /classic/i)
 
   await createProject(page, `${projectName}Bad`)
   await openProjectSettings(page, `${projectName}Bad`)

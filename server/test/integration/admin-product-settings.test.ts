@@ -19,6 +19,7 @@ import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
 import { AdminActionLogModel } from '../../src/models/admin-action-log'
+import { defaultTemplateId } from '../../src/templates/builtin'
 
 const ADMIN_EMAIL = 'admin@example.com'
 
@@ -237,7 +238,9 @@ describe("an admin editing another user's lecture", () => {
       changes: { title: { from: 'Waves', to: 'Sound waves' } },
     })
     expect(entries[1]?.details).toMatchObject({
-      changes: { templateId: { from: 'classic', to: 'midnight' } },
+      changes: {
+        templateId: { from: defaultTemplateId(), to: 'midnight' },
+      },
     })
   })
 

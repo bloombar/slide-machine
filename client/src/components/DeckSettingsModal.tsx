@@ -16,13 +16,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { Trans, useTranslation } from 'react-i18next'
-import { Download, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import {
   findTtsVoice,
   type Deck,
-  type DriveFolder,
-  type ExportDownload,
-  type ExportToDriveResult,
   type DeckRefineResult,
   type DeckRefineStatusResult,
   type DeckSetRefineSettingsInput,
@@ -34,11 +31,8 @@ import {
   type Template,
 } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
-import { ApiError } from '../api/http'
-import { apiErrorMessage } from '../i18n/apiError'
-import DrivePicker from './DrivePicker'
-import { downloadExport } from '../lib/download'
 import TemplateDesignPanel from './template/TemplateDesignPanel'
+import TemplateExportSection from './template/TemplateExportSection'
 import TemplateUpdateNotice from './template/TemplateUpdateNotice'
 import AccessSettings from './AccessSettings'
 import QuizPanel from './QuizPanel'
@@ -344,57 +338,6 @@ export default function DeckSettingsModal({
       .catch(() => {
         // Quiet failure: the picker stays on the saved template
       })
-  }
-
-  const [pickingFolder, setPickingFolder] = useState(false)
-  const [slidesBusy, setSlidesBusy] = useState(false)
-  const [slidesError, setSlidesError] = useState<string | null>(null)
-  const [slidesSaved, setSlidesSaved] = useState<ExportToDriveResult | null>(
-    null,
-  )
-
-  // Export the lecture's current template as a re-importable YAML file (EXP-2).
-  const exportTemplate = (format?: 'pptx') => {
-    setSlidesError(null)
-    dispatchAction<ExportDownload>('template.export', {
-      templateId: deck.templateId,
-      ...(format ? { format } : {}),
-    })
-      .then(downloadExport)
-      .catch((err: Error) => {
-        // Said rather than swallowed. A quiet failure here is indistinguishable
-        // from a button that does nothing, which is how this last went wrong:
-        // the export was refused and the screen reported it by staying still.
-        setSlidesError(apiErrorMessage(err, t, 'template.exportYamlError'))
-      })
-  }
-
-  /**
-   * Saves the lecture's design to Drive as a Google Slides presentation whose
-   * layouts are its layouts (EXP-6). A template in Slides is nothing more
-   * than that, so this is what "export a template" has to mean there.
-   */
-  const exportTemplateToDrive = (folder: DriveFolder) => {
-    setSlidesBusy(true)
-    setSlidesError(null)
-    dispatchAction<ExportToDriveResult>('template.exportToDrive', {
-      templateId: deck.templateId,
-      driveFolderId: folder.id,
-      driveFolderName: folder.name,
-    })
-      .then(res => {
-        setSlidesSaved(res)
-        setPickingFolder(false)
-      })
-      .catch(err => {
-        // A missing Google connection is the one failure the user can act on
-        setSlidesError(
-          err instanceof ApiError && err.status === 403
-            ? t('template.exportSlidesConnect')
-            : t('template.exportSlidesError'),
-        )
-      })
-      .finally(() => setSlidesBusy(false))
   }
 
   /** Human summary of what a finished refine job changed. Each clause is
@@ -853,84 +796,7 @@ export default function DeckSettingsModal({
             onChange={switchTemplate}
             onLibraryChanged={loadTemplates}
           />
-          {/* One design, two destinations: a file to keep, or a
-              presentation in Drive to keep working in (EXP-2 / EXP-6). They
-              read as one thing because they are one thing. */}
-          <div className="mt-6 border-t border-slate-100 pt-4">
-            <h3 className="text-sm font-medium text-slate-700">
-              {t('template.exportHeading')}
-            </h3>
-            <p className="mt-1 mb-3 text-xs text-slate-500">
-              {t('template.exportHint')}
-            </p>
-
-            {pickingFolder ? (
-              <DrivePicker
-                kind="folder"
-                title={t('export.folder.title', {
-                  format: t('template.exportToSlides'),
-                })}
-                confirmLabel={t('export.saveHere')}
-                busyLabel={t('export.saving')}
-                busy={slidesBusy}
-                onCancel={() => setPickingFolder(false)}
-                onPick={exportTemplateToDrive}
-                onReconnect={() => setPickingFolder(false)}
-              />
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => exportTemplate()}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  <Download className="h-4 w-4" aria-hidden />
-                  {t('template.exportAsYaml')}
-                </button>
-                {/* The design as a deck anyone can open, its layouts the
-                    slides. YAML is what this app reads back; this is what a
-                    colleague reads. */}
-                <button
-                  type="button"
-                  onClick={() => exportTemplate('pptx')}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  <Download className="h-4 w-4" aria-hidden />
-                  {t('template.exportAsPptx')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSlidesSaved(null)
-                    setSlidesError(null)
-                    setPickingFolder(true)
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  <Download className="h-4 w-4" aria-hidden />
-                  {t('template.exportToSlides')}
-                </button>
-              </div>
-            )}
-
-            {slidesSaved && (
-              <p role="status" className="mt-2 text-xs">
-                <a
-                  href={slidesSaved.fileUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-indigo-600 hover:underline"
-                >
-                  {t('template.exportSlidesDone')}
-                </a>
-              </p>
-            )}
-            {slidesError && (
-              <p role="alert" className="mt-2 text-xs text-red-600">
-                {slidesError}
-              </p>
-            )}
-          </div>
+          <TemplateExportSection templateId={deck.templateId} />
         </section>
       )}
 

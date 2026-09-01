@@ -2,9 +2,9 @@
  * User account settings actions (AUTH-5): the display name and bio shown
  * on the profile, the profile visibility that gates the public profile
  * page (SHARE-1), the account type that chooses the account's privacy
- * defaults (AUTH-6), and the lecturing and interface languages. Every
- * change is recorded in the settings change log — see
- * docs/ADMINISTRATION.md ("Settings change log").
+ * defaults (AUTH-6), the lecturing and interface languages, and the default
+ * design new projects start from (TMPL-24). Every change is recorded in the
+ * settings change log — see docs/ADMINISTRATION.md ("Settings change log").
  */
 import { z } from 'zod'
 import type { HydratedDocument } from 'mongoose'
@@ -15,12 +15,14 @@ import type {
   UserSetLanguageInput,
   UserSetLocaleInput,
   UserSetProfileVisibilityInput,
+  UserSetTemplateInput,
   UserUpdateProfileInput,
 } from '@slide-machine/shared'
 import { ACCOUNT_TYPES, LOCALES } from '@slide-machine/shared'
 import { defineAction } from './define'
 import { self, type SelfAccess } from './access'
-import { registerAction } from './dispatch'
+import { registerAction, ActionValidationError } from './dispatch'
+import { templateExists } from '../templates/resolve'
 import { toUserDto, type UserDb } from '../models/user'
 import { accountUsage } from '../billing/usage-view'
 import { effectivePlanTier } from '../billing/plan-grant'
@@ -168,6 +170,40 @@ export const userSetLocale = defineAction<
 })
 
 registerAction(userSetLocale)
+
+/**
+ * The account's default design (TMPL-24): the template new projects start
+ * from, and through them the lectures those projects hold.
+ *
+ * Mirrors userSetLanguage in every way that matters — nothing is stored until
+ * a design is explicitly chosen, and null clears the choice so new projects
+ * follow the deployment's default again. The id is checked against the
+ * template store, because an account pointing at a template that does not
+ * exist would silently hand every new project a broken reference.
+ */
+export const userSetTemplate = defineAction<
+  UserSetTemplateInput,
+  SafeUser,
+  SelfAccess
+>({
+  name: 'user.setTemplate',
+  access: self(),
+  input: z.object({ templateId: z.string().min(1).nullable() }),
+  execute: async (ctx, input, { user }) => {
+    if (input.templateId && !(await templateExists(input.templateId))) {
+      throw new ActionValidationError('user.setTemplate', [
+        'templateId: unknown template',
+      ])
+    }
+    const before = userSettingsSnapshot(user)
+    user.templateId = input.templateId ?? undefined
+    await user.save()
+    await recordSelfChange(user, before)
+    return toUserDto(user)
+  },
+})
+
+registerAction(userSetTemplate)
 
 /**
  * Whether the account wants the advisory cap warning by email (BILL-8).

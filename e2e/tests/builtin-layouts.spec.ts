@@ -13,7 +13,7 @@
  * these moves.
  */
 import { test, expect, type Locator, type Page } from './fixtures'
-import { createProject } from './helpers'
+import { chooseAccountDesign, createProject } from './helpers'
 
 const stamp = Date.now()
 const user = { email: `blayout-${stamp}@example.com`, name: 'Layouts' }
@@ -67,6 +67,10 @@ test('the built-in layouts keep the geometry their components had', async ({
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page).toHaveURL(/\/app$/)
+  // This spec is written against Classic — its box names and its geometry —
+  // so it says so rather than riding on whatever the deployment defaults to
+  // (TMPL-24).
+  await chooseAccountDesign(page, /classic/i)
 
   await createProject(page, `Layouts${stamp}`)
   await page

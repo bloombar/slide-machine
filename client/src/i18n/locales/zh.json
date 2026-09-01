@@ -196,9 +196,12 @@
     "sections": "设置分区",
     "tabs": {
       "general": "常规",
-      "plan": "套餐与用量",
-      "privacy": "隐私"
+      "design": "外观",
+      "privacy": "隐私",
+      "plan": "套餐与用量"
     },
+    "templateHeading": "默认模板",
+    "templateHint": "新项目以此模板开始，新课程从所属项目继承该模板。每个项目和每节课程都保留自己的模板，并可随时在其设置中更换。",
     "planSection": "套餐",
     "publicProfileSectionHint": "编辑后自动保存。陌生人在你的个人资料页看到的内容。",
     "privacySectionHint": "谁可以查看你的个人资料页以及其中的课程。",

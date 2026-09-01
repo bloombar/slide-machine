@@ -2,8 +2,10 @@
  * Project settings as a full-width modal, mirroring the lecture
  * settings chrome, in tabs: General (the project's title, then seed notes
  * + seed material, which apply to every lecture, PROJ-1/SEED-1; plus an
- * owner Danger zone that deletes the whole project after confirmation)
- * and Privacy & Sharing —
+ * owner Danger zone that deletes the whole project after confirmation),
+ * Design (the template new lectures start from, inherited from the owner's
+ * account default when the project was created — TMPL-24 — and exportable
+ * from here, the same panels the lecture settings use) and Privacy & Sharing —
  * the project's ACL, which every lecture without its own override
  * inherits (SHARE-1). Closes from the top-right icon or Escape.
  *
@@ -13,7 +15,13 @@
  * the exception — uploading files into another user's project is content
  * authoring, not a settings edit, so that section stays with its owner.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import type { Project, Template } from '@slide-machine/shared'
@@ -30,6 +38,7 @@ import LanguageSelect from './LanguageSelect'
 import VoiceSelect from './VoiceSelect'
 import { getTtsEnabled } from '../runtime-config'
 import TemplateDesignPanel from './template/TemplateDesignPanel'
+import TemplateExportSection from './template/TemplateExportSection'
 
 /** The tabs in order; each id also keys its label under
  * `deck.settings.tabs.<id>` — the same names the lecture settings use. */
@@ -90,6 +99,21 @@ export default function ProjectSettingsModal({
     }
   }, [])
   const closeRef = useRef<HTMLButtonElement>(null)
+  const tabRefs = useRef(new Map<TabId, HTMLButtonElement>())
+
+  /** Left/Right on the tab list moves and focuses the adjacent tab — the
+   * same keyboard as the lecture settings, so one habit works in both. */
+  const onTabKeyDown = (e: KeyboardEvent) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    e.preventDefault()
+    const index = TABS.findIndex(t => t.id === tab)
+    const next =
+      TABS[
+        (index + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length
+      ]!
+    setTab(next.id)
+    tabRefs.current.get(next.id)?.focus()
+  }
 
   // Editable project title. A project must keep a name — the server
   // rejects a blank one — so an emptied field is left unsaved and reverts
@@ -152,11 +176,15 @@ export default function ProjectSettingsModal({
       <div
         role="tablist"
         aria-label={t('deck.settings.sections')}
+        onKeyDown={onTabKeyDown}
         className="mb-6 flex gap-1 border-b border-slate-200"
       >
         {TABS.map(tab_ => (
           <button
             key={tab_.id}
+            ref={el => {
+              if (el) tabRefs.current.set(tab_.id, el)
+            }}
             role="tab"
             id={`project-tab-${tab_.id}`}
             aria-selected={tab === tab_.id}
@@ -201,6 +229,7 @@ export default function ProjectSettingsModal({
                 })
             }}
           />
+          <TemplateExportSection templateId={project.templateId} />
         </section>
       )}
 

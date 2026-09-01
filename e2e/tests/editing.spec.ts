@@ -4,7 +4,7 @@
  * roundtrip, and persistence.
  */
 import { test, expect, type Page } from './fixtures'
-import { createProject } from './helpers'
+import { chooseAccountDesign, createProject } from './helpers'
 
 const email = `edit-${Date.now()}@example.com`
 const password = 'sturdy-passw0rd'
@@ -15,6 +15,10 @@ const buildDeck = async (page: Page) => {
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Create account' }).click()
+  // This spec is written against Classic — its box names and its geometry —
+  // so it says so rather than riding on whatever the deployment defaults to
+  // (TMPL-24).
+  await chooseAccountDesign(page, /classic/i)
 
   await createProject(page, 'Chemistry')
   await page
@@ -271,6 +275,10 @@ test('a slot hint clears its box, and the type keeps its size', async ({
   await page.getByLabel('Email').fill(hintEmail)
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Create account' }).click()
+  // This spec is written against Classic — its box names and its geometry —
+  // so it says so rather than riding on whatever the deployment defaults to
+  // (TMPL-24).
+  await chooseAccountDesign(page, /classic/i)
 
   await createProject(page, 'Hints')
   await page

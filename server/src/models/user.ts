@@ -88,6 +88,12 @@ const userSchema = new Schema<UserDb>(
     // Lecturing/generation language: stored ONLY when explicitly chosen
     // (no default) — absent falls through to the browser's language
     language: { type: String, enum: LOCALES },
+    // The design new projects start from (TMPL-24). Stored ONLY when
+    // explicitly chosen — absent falls through to the deployment's default
+    // template, so an account that never opened the Design tab follows the
+    // deployment rather than being pinned to whatever shipped the day it
+    // signed up.
+    templateId: { type: String, default: undefined },
     // Whether the account wants the advisory "you are close to a limit"
     // email (BILL-8). Stored as an opt-OUT: everyone gets the warning until
     // they say otherwise, because the whole point of it is reaching people who
@@ -162,6 +168,7 @@ export const toUserDto = (doc: HydratedDocument<UserDb>): SafeUser => ({
   avatarUrl: doc.avatarUrl,
   locale: doc.locale,
   language: doc.language,
+  templateId: doc.templateId,
   projectDefaults: doc.projectDefaults,
   notifyCapWarnings: doc.notifyCapWarnings !== false,
   planTier: effectivePlanTier(doc),

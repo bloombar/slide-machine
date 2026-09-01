@@ -35,6 +35,7 @@ let runtime: RuntimeConfig = {
   agentAccessEnabled: false,
   mailEnabled: false,
   operator: NO_OPERATOR,
+  defaultTemplateId: '',
   refineSlidesDefaultLevel: 2,
   refineTranscriptDefaultLevel: 2,
   simulatedSpeechEnabled: false,
@@ -63,6 +64,13 @@ export const getSttEngine = (): SttEngine => runtime.sttEngine
 
 /** Whether TTS playback is available; false (feature hidden) until config loads. */
 export const getTtsEnabled = (): boolean => runtime.ttsEnabled
+
+/** The design an account that has never chosen one starts from (TMPL-24).
+ * Blank until config loads, and blank from a server too old to send it — a
+ * picker reading it then simply shows nothing selected rather than pointing
+ * at a template the deployment may not have. */
+export const getDefaultTemplateId = (): string =>
+  runtime.defaultTemplateId ?? ''
 
 /** Whether translated viewing is available (SHARE-2); false (switcher hidden)
  * until config loads. */

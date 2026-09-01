@@ -86,6 +86,11 @@ export interface RuntimeConfig {
    * Blank fields fall back to the client's placeholders, which read as the
    * draft they are. */
   operator: OperatorDetails
+  /** The design an account that has never chosen one starts from (TMPL-24),
+   * and what an unknown template id falls back to. Sent rather than assumed:
+   * a deployment ships its own template set, so no id belongs in client
+   * code. */
+  defaultTemplateId: string
   /** Default strength (1–5) the "Refine all slides" slider starts at (GEN-4). */
   refineSlidesDefaultLevel: number
   /** Default strength (1–5) the "Refine the spoken transcript" slider starts at. */
