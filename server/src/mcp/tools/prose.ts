@@ -26,3 +26,14 @@ export const onDay = (value: string | Date | undefined): string =>
  */
 export const projectName = (title: string | undefined): string =>
   title === undefined ? 'unknown' : title.trim() ? title : 'Untitled project'
+
+/**
+ * The clause that tells a reader where to open something, or nothing at all
+ * when there is no link to give (deck-link.ts explains when that happens).
+ *
+ * A separate helper because the alternative — an `undefined` interpolated into
+ * a template string — prints the word "undefined" at the end of a sentence,
+ * which a model will happily repeat to the user as if it were an address.
+ */
+export const openAt = (url: string | undefined): string =>
+  url ? `, open at ${url}` : ''

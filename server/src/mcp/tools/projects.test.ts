@@ -130,7 +130,12 @@ describe('create_lecture, on choosing a project', () => {
 
   it('still files the lecture in exactly the project it was given', async () => {
     const call = fakeCall({
-      'deck.create': { id: 'd1', title: 'Week 4', projectId: 'p2' },
+      'deck.create': {
+        id: 'd1',
+        title: 'Week 4',
+        projectId: 'p2',
+        permalinkSlug: 'week-4',
+      },
     })
     const out = await createLecture.run(call, {
       projectId: 'p2',
@@ -139,7 +144,12 @@ describe('create_lecture, on choosing a project', () => {
     expect(call.calls).toEqual([
       ['deck.create', { projectId: 'p2', title: 'Week 4' }],
     ])
-    expect(out.data).toEqual({ id: 'd1', title: 'Week 4', projectId: 'p2' })
+    expect(out.data).toEqual({
+      id: 'd1',
+      title: 'Week 4',
+      projectId: 'p2',
+      url: 'http://localhost:3000/d/week-4',
+    })
   })
 })
 

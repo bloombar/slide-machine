@@ -26,7 +26,20 @@ export default function LoginPage() {
   )
   const [submitting, setSubmitting] = useState(false)
 
-  if (status === 'authenticated') return <Navigate to="/app" replace />
+  /**
+   * Where signing in should land. A guard that turned someone away carries
+   * the address they were headed for (RequireAuth), and so does a link out of
+   * a page that could not show itself — a private lecture an assistant sent
+   * someone to, say (docs/MCP.md). Absent one, the home page.
+   */
+  const destination =
+    (location.state as { from?: string } | null)?.from ?? '/app'
+
+  // Read here too, not just after a successful submit: signing in flips this
+  // component to `authenticated` while it is still mounted, so this guard
+  // renders before the navigate below can run. Sending it to /app would
+  // silently drop the destination on every journey that had one.
+  if (status === 'authenticated') return <Navigate to={destination} replace />
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -34,9 +47,7 @@ export default function LoginPage() {
     setSubmitting(true)
     try {
       await login(email, password)
-      navigate((location.state as { from?: string } | null)?.from ?? '/app', {
-        replace: true,
-      })
+      navigate(destination, { replace: true })
     } catch (err) {
       setError(apiErrorMessage(err, t, 'auth.errors.signIn'))
     } finally {

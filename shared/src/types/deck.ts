@@ -23,6 +23,18 @@ export type Visibility = 'restricted' | 'public'
 export const GENERATION_FREEDOM_MIN = 1
 export const GENERATION_FREEDOM_MAX = 5
 
+/**
+ * Query parameter that deep-links the deck viewer to one slide, by slide id:
+ * `/d/:permalinkSlug?slide=<slide id>`. An MCP tool writes it so an assistant
+ * can point the instructor at the slide it just changed, and the viewer reads
+ * it; shared so the two cannot drift apart.
+ *
+ * A query parameter rather than a fragment because a fragment never reaches
+ * the server and is dropped by the sign-in round trip, which is exactly the
+ * journey a link from outside the app takes.
+ */
+export const SLIDE_PARAM = 'slide'
+
 export interface Deck {
   id: string
   projectId: string

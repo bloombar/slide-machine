@@ -15,6 +15,9 @@ import { z } from 'zod'
 import type { Deck, Slide } from '@slide-machine/shared'
 import { defineTool } from '../tool'
 import { registerTool } from '../registry'
+import { openAt } from './prose'
+import { lectureUrlById } from './links'
+import { lectureUrl } from '../../lib/deck-link'
 
 /** One slide's edit — every field optional, since a caller may change one. */
 const slideEdit = z.object({
@@ -44,7 +47,10 @@ export const editSlides = defineTool({
     'field you pass REPLACES what was there; fields you omit are left alone. ' +
     'Slide ids come from read_lecture.',
   readOnly: false,
-  uses: ['slide.editContent', 'slide.setLayout'],
+  // `deck.get` is here only to turn a slide's lecture id into the address the
+  // instructor can open it at (tools/links.ts). It reads nothing this tool
+  // reports beyond that link.
+  uses: ['slide.editContent', 'slide.setLayout', 'deck.get'],
   input: {
     edits: z
       .array(slideEdit)
@@ -54,21 +60,37 @@ export const editSlides = defineTool({
   },
   run: async (call, input) => {
     const done: string[] = []
+    // Which lecture was edited is not an input here — an edit is addressed to
+    // slide ids — so it comes back off the slides the actions return.
+    let deckId: string | undefined
     for (const edit of input.edits) {
       const { slideId, layoutType, ...content } = edit
       // Layout first: switching layout remaps the slide's slots, so applying
       // content afterwards writes into the boxes the new layout actually has.
       if (layoutType) {
-        await call<Slide>('slide.setLayout', { slideId, layoutType })
+        const slide = await call<Slide>('slide.setLayout', {
+          slideId,
+          layoutType,
+        })
+        deckId ??= slide.deckId
       }
       if (Object.keys(content).length > 0) {
-        await call<Slide>('slide.editContent', { slideId, ...content })
+        const slide = await call<Slide>('slide.editContent', {
+          slideId,
+          ...content,
+        })
+        deckId ??= slide.deckId
       }
       done.push(slideId)
     }
+    // Pointed at the first slide edited: a batch touching six slides has no
+    // one place to look, and the first is where a reader would start.
+    const url = deckId ? await lectureUrlById(call, deckId, done[0]) : undefined
     return {
-      text: `Edited ${done.length} slide${done.length === 1 ? '' : 's'}: ${done.join(', ')}.`,
-      data: { edited: done },
+      text:
+        `Edited ${done.length} slide${done.length === 1 ? '' : 's'}: ${done.join(', ')}` +
+        `${url ? `. The first of them is at ${url}` : ''}.`,
+      data: { edited: done, url: url ?? null },
     }
   },
 })
@@ -80,7 +102,8 @@ export const addSlide = defineTool({
     'Appends a new slide to the end of a lecture and fills in its content. ' +
     'Use reorder_slides afterwards if it belongs somewhere other than last.',
   readOnly: false,
-  uses: ['slide.add', 'slide.editContent'],
+  // `deck.get` only supplies the lecture's address — see edit_slides.
+  uses: ['slide.add', 'slide.editContent', 'deck.get'],
   input: {
     lectureId: z.string().min(1).describe('The lecture id.'),
     layoutType: z
@@ -109,12 +132,16 @@ export const addSlide = defineTool({
           ...content,
         })
       : slide
+    const url = await lectureUrlById(call, lectureId, filled.id)
     return {
-      text: `Added slide ${filled.id} to lecture ${lectureId} as slide ${filled.index + 1}, using the "${filled.layoutType}" layout.`,
+      text:
+        `Added slide ${filled.id} to lecture ${lectureId} as slide ${filled.index + 1}, ` +
+        `using the "${filled.layoutType}" layout${openAt(url)}.`,
       data: {
         id: filled.id,
         index: filled.index,
         layoutType: filled.layoutType,
+        url: url ?? null,
       },
     }
   },
@@ -141,9 +168,10 @@ export const reorderSlides = defineTool({
       deckId: input.lectureId,
       slideOrder: input.slideIds,
     })
+    const url = lectureUrl(deck.permalinkSlug)
     return {
-      text: `Reordered the ${deck.slideOrder.length} slides of lecture ${deck.id}.`,
-      data: { id: deck.id, slideOrder: deck.slideOrder },
+      text: `Reordered the ${deck.slideOrder.length} slides of lecture ${deck.id}${openAt(url)}.`,
+      data: { id: deck.id, slideOrder: deck.slideOrder, url: url ?? null },
     }
   },
 })

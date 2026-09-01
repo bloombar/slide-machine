@@ -118,9 +118,13 @@ export const createMcpServer = (
         'slides inside a project, drawn with a template. Start with ' +
         'find_lectures to get a lecture id, then read_lecture to get slide ids ' +
         '— nothing else will give you either. Prefer one batched edit_slides ' +
-        'call over several single edits. Deleting, sharing, publishing and ' +
-        'anything that spends money are deliberately not available here; if ' +
-        'the user asks for one of those, tell them to do it in the app.',
+        'call over several single edits. Tools hand back an address the ' +
+        'lecture can be opened at — you cannot see the slides, so offer that ' +
+        'link whenever the user should look at what changed. Opening it needs ' +
+        'them to be signed in to the app, as usual. Deleting, sharing, ' +
+        'publishing and anything that spends money are deliberately not ' +
+        'available here; if the user asks for one of those, tell them to do ' +
+        'it in the app.',
     },
   )
 
