@@ -5,11 +5,35 @@ for preparing and revising decks, and a **remote MCP server** that lets an
 external AI assistant (Claude, ChatGPT, Gemini) do the same work from outside
 the app.
 
-Neither is built. Both are future work — [SPEC.md §18](SPEC.md#18-future-work),
-open question [§19.11](SPEC.md#19-open-questions). This page is the design
-record: what the value is, what the two features share, what they don't, and
-what would have to change in the spec. It is a plan to argue with, not a
-specification to implement.
+This page began as the design record: what the value is, what the two features
+share, what they don't, and what would have to change in the spec. Both remain
+future work in the spec — [SPEC.md §18](SPEC.md#18-future-work), open question
+[§19.11](SPEC.md#19-open-questions) — and the spec has not been edited.
+
+**What is built** (branch `mcp-server`, tracked by
+[issue #129](https://github.com/bloombar/slide-machine/issues/129)):
+
+| | State |
+| --- | --- |
+| Schema derivation and action descriptions (§3.1, §3.2) | Built — [actions/catalog.ts](../server/src/actions/catalog.ts) |
+| Model-legible errors (§3.3) | Built — [actions/agent-error.ts](../server/src/actions/agent-error.ts) |
+| The MCP tool surface (§4) | A first set of twelve tools — [mcp/tools/](../server/src/mcp/tools/) |
+| The safety boundary (§6) | Built and enforced by test — [mcp/forbidden.ts](../server/src/mcp/forbidden.ts) |
+| The endpoint | `POST /api/mcp` — [routes/mcp.ts](../server/src/routes/mcp.ts) |
+| **OAuth authorization server (§5)** | Built — [oauth/](../server/src/oauth/) and [routes/oauth.ts](../server/src/routes/oauth.ts). Dynamic client registration, PKCE, scopes, refresh-token rotation, revocation, and the two discovery documents. |
+| The consent screen (§5.1) | Built — [OAuthConsentPage.tsx](../client/src/pages/OAuthConsentPage.tsx) |
+| Connected-assistants list and disconnect (§5.3) | Built — [ConnectedAssistantsPanel.tsx](../client/src/components/ConnectedAssistantsPanel.tsx), account settings → Privacy. The same panel hands over the address to paste into an assistant, which is the only part of connecting the app can offer: an authorization flow starts at the client, so there is no "connect" button and cannot be. |
+| Agent actions recorded distinguishably (§6) | Built — [audit/agent-log.ts](../server/src/audit/agent-log.ts), written from the dispatcher on the `agent` channel |
+| The in-app chat assistant (§3.4) | Not built |
+
+**What has not been done:** the tool set has still not been validated against
+real usage (§4.1, §8 below), no assistant vendor's connector has been
+registered or tested against a live deployment (§5.6), and the institutional
+question in §5.6 — whether NYU IT will approve a third-party connector for
+managed faculty accounts — remains open and is not a technical matter.
+
+The rest of this page is unchanged, and is still a plan to argue with rather
+than a specification to implement.
 
 The dependency runs one way, and not the way it first appears:
 
@@ -296,7 +320,11 @@ and not the tool surface, is the expensive part.
 - **Consent that means something.** The instructor sees what is being granted
   before it is granted.
 - **Revocation without collateral damage.** Disconnect one assistant; stay
-  signed in everywhere else.
+  signed in everywhere else. Access tokens last an hour and refresh tokens six
+  months — the latter an *idle* window, since rotation restarts the clock on
+  every use, so a connection in regular use never lapses. Six months rather
+  than one because this application runs on a semester calendar, and a shorter
+  window would disconnect instructors over every winter break.
 - **Limited blast radius.** Scopes let a token be read-only, or barred from
   billing and account deletion, independent of what the person can do.
 - **Visibility.** The app knows which assistant is calling, which is the
@@ -354,7 +382,16 @@ resolved by building it well.
 **Ongoing maintenance.** The MCP authorization spec is young and still moving.
 This is code that needs tracking, not code that is finished.
 
-### 5.5 The cheaper alternative
+### 5.5 The cheaper alternative — **not taken**
+
+**Decided: the full authorization server**, built in stages, per
+[issue #129](https://github.com/bloombar/slide-machine/issues/129). The tool
+surface ships first behind the app's own bearer token so it can be built and
+tested against something; the authorization server replaces that token check
+without touching a tool. The alternative below is recorded because the reasons
+for it have not gone away, and because the staging means it remains a live
+fallback if the authorization-server work proves too large.
+
 
 **Per-user API tokens.** The instructor generates a token in their settings and
 pastes it into the assistant. It verifies through the existing bearer path with
@@ -394,16 +431,40 @@ scheduled rather than trusting this page.
   `ws/audio-socket.ts`. An agent therefore gets edits but not media reads or
   streams — a real usability constraint that should be stated rather than
   discovered.
-- **Agent calls are indistinguishable from human ones.**
-  [`ActionContext`](../server/src/actions/context.ts) carries
-  `userId`/`requestId`/`origin` — no actor channel. Admin actions get an
-  immutable audit trail ([ADMIN-7](SPEC.md#admin-7-audit-log)); agent edits get
-  nothing comparable, which is exactly the FERPA surface
-  [§19.11](SPEC.md#19-open-questions) gestures at. Adding a channel field now is
-  small and keeps the audit story available later.
+- **Agent calls are distinguishable from human ones — now.**
+  [`ActionContext`](../server/src/actions/context.ts) carries a `channel`
+  alongside `userId`/`requestId`/`origin`. Both HTTP entry points set it
+  explicitly — `app` on [routes/actions.ts](../server/src/routes/actions.ts),
+  `agent` on [routes/mcp.ts](../server/src/routes/mcp.ts) — and the dispatcher
+  writes every agent-channel action to an append-only trail
+  ([models/agent-action-log.ts](../server/src/models/agent-action-log.ts)):
+  the action, the account, the lecture, and whether it succeeded, was refused,
+  or failed. It records reads as well as writes, since an assistant that read
+  every lecture on an account did something worth being able to see.
+
+  **The input is deliberately not kept.** Tracing which lecture an assistant
+  renamed needs the action and the lecture, not the words; keeping payloads
+  would stand up a second copy of lecture content under a different retention
+  story than the deck it came from
+  ([§16](SPEC.md#16-privacy-security--compliance), P-1/P-2).
+
+  Two things this is not. It has **no retention window** — like the admin log
+  ([ADMIN-7](SPEC.md#admin-7-audit-log)) it grows without bound, which is
+  tolerable while agent traffic is rate-limited and a small minority of calls,
+  and is the next thing to decide about it. And it has **no UI**: rows are
+  readable from the database and nowhere else, so an instructor cannot yet see
+  what their own assistant did. Both are follow-on work, not oversights.
+
+  The channel also rides onto the cost ledger (BILL-7), where it is
+  **provisioning rather than a live signal**: no action an assistant can reach
+  spends anything today, because the tool surface excludes generation, exports,
+  imports and quizzes — every metered path there is. The column is there so
+  that the first metered tool arrives with its spend already attributable.
 - **Caps bound spend, not volume.** An agent loops faster than a human clicks.
-  [lib/rate-limit.ts](../server/src/lib/rate-limit.ts) exists and should apply
-  to this path.
+  Applied: [routes/mcp.ts](../server/src/routes/mcp.ts) rate-limits per
+  account rather than per address, since an assistant's calls arrive from a
+  vendor's servers and one instructor's runaway loop must not lock out the
+  others sharing that IP.
 - **Destructive and student-facing operations need confirmation, not just
   authorization.** `quiz.publish`, the `export.*` family, `deck.diarize`, and
   anything touching [EVAL](SPEC.md#eval-1-live-session-telemetry) exports either
@@ -435,19 +496,32 @@ Four edits, none yet applied.
 
 ## 8. Sequencing
 
-1. `description` field on `Action`; Zod → JSON Schema derivation; model-legible
-   errors. Small, and unblocks everything.
+The order below was written before any of it was built, and the MCP half was
+taken first — so steps 3 and 4 were reached without step 2. The tool set is
+therefore a designed first guess rather than one drawn from observed usage
+(§4.1), and revisiting it against [EVAL-1](SPEC.md#eval-1-live-session-telemetry)
+telemetry and pilot feedback is outstanding work rather than a step that was
+skipped and forgotten.
+
+1. ~~`description` field on `Action`; Zod → JSON Schema derivation;
+   model-legible errors.~~ **Done.**
 2. Conversational loop in the provider abstraction; declared exposure. Ship the
-   in-app assistant — PREP-4 generalized beyond preflight.
-3. Design the intent tool set (§4.1) against real usage.
-4. Decide the auth fork (§5), then build the MCP server. By this point it is
-   what [§18](SPEC.md#18-future-work) already claims: a thin facade whose only
-   substantial remaining work is auth.
+   in-app assistant — PREP-4 generalized beyond preflight. **Not started.**
+3. ~~Design the intent tool set (§4.1)~~ **A first set exists**; it has not yet
+   been tested against real usage.
+4. ~~Decide the auth fork (§5), then build the MCP server.~~ **Done.** The
+   authorization server is built: an assistant nobody arranged registers
+   itself, the instructor approves it on a consent screen, and the token it
+   receives is scoped, short-lived, rotated on refresh, and revocable from
+   account settings.
 
 ## 9. Open questions
 
-- Full OAuth authorization server, or per-user API tokens? (§5.5)
-- What is the intent tool set, for beginners and experts alike? (§4.1)
+- ~~Full OAuth authorization server, or per-user API tokens?~~ **Decided and
+  built: the authorization server** (§5.5).
+- Is the first tool set (§4.1) the right one, for beginners and experts alike?
+  It was designed rather than observed, which is the weakest part of what is
+  built.
 - Which operations require explicit confirmation rather than authorization
   alone? (§5.4, §6)
 - What scopes exist, and are they legible enough that a consent screen means
@@ -455,7 +529,9 @@ Four edits, none yet applied.
 - What is the answer to prompt injection beyond confirmation and a narrow tool
   surface — and is that answer good enough to expose student-adjacent data at
   all? (§5.4)
-- Are agent-originated actions audited distinguishably, and does FERPA require
-  it? ([§19.11](SPEC.md#19-open-questions))
+- ~~Are agent-originated actions audited distinguishably?~~ **They are** (§6).
+  What remains open is the FERPA half — whether that trail is what an
+  institutional review would ask for, how long it must be kept, and whether an
+  instructor has a right to see it ([§19.11](SPEC.md#19-open-questions)).
 - Will NYU IT approve a third-party connector for managed faculty accounts? (§5)
 - Do the non-action routes (§6) ever need agent-reachable equivalents?

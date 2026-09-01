@@ -20,7 +20,18 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
     )
   }
   if (status === 'anonymous') {
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />
+    // The query string comes along. Most guarded routes carry their whole
+    // identity in the path, but not all: an OAuth consent screen IS its
+    // `?request=` parameter, and sending someone to sign in used to drop it —
+    // so they signed in and landed on a page that no longer knew what it was
+    // asked.
+    return (
+      <Navigate
+        to="/login"
+        state={{ from: `${location.pathname}${location.search}` }}
+        replace
+      />
+    )
   }
   return children
 }

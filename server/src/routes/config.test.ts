@@ -25,6 +25,10 @@ const envState = {
   OPERATOR_JURISDICTION: '',
   OPERATOR_CONTACT_EMAIL: '',
   OPERATOR_POSTAL_ADDRESS: '',
+  // The origin decides whether this deployment can host an OAuth
+  // authorization server, and so whether it offers agent access at all.
+  PUBLIC_BASE_URL: 'http://localhost:3000' as string | undefined,
+  CLIENT_APP_URL: undefined as string | undefined,
   EXPORT_MODE: 'mock',
   QUIZ_PUBLISH_MODE: 'mock',
   GOOGLE_PICKER_API_KEY: undefined as string | undefined,
@@ -56,6 +60,10 @@ beforeEach(() => {
   envState.OPERATOR_JURISDICTION = ''
   envState.OPERATOR_CONTACT_EMAIL = ''
   envState.OPERATOR_POSTAL_ADDRESS = ''
+  // Reset too: the agent-access flag reads it, and a test that changes it
+  // would otherwise decide the answer for every test after it.
+  envState.PUBLIC_BASE_URL = 'http://localhost:3000'
+  envState.CLIENT_APP_URL = undefined
   feedbackEnabled.mockReturnValue(false)
   envState.EXPORT_MODE = 'mock'
   envState.QUIZ_PUBLISH_MODE = 'mock'
@@ -81,6 +89,9 @@ describe('GET /api/config', () => {
       translationEnabled: false,
       feedbackEnabled: false,
       mailEnabled: false,
+      // True under the suite's own origin, which is localhost — the one
+      // exemption from the https an OAuth issuer otherwise needs.
+      agentAccessEnabled: true,
       operator: {
         name: '',
         jurisdiction: '',
@@ -96,6 +107,20 @@ describe('GET /api/config', () => {
   it('reports the feedback form as usable once mail is configured', async () => {
     feedbackEnabled.mockReturnValue(true)
     expect(await getConfig()).toMatchObject({ feedbackEnabled: true })
+  })
+
+  // A deployment reached over plain http cannot host an OAuth authorization
+  // server, so it does not offer agent access — and the account page uses this
+  // to decide whether to hand out a connection address at all, rather than one
+  // that would refuse the assistant.
+  it('reports agent access as unavailable without an https origin', async () => {
+    envState.PUBLIC_BASE_URL = 'http://slides.example.edu'
+    expect(await getConfig()).toMatchObject({ agentAccessEnabled: false })
+  })
+
+  it('reports it as available on an https deployment', async () => {
+    envState.PUBLIC_BASE_URL = 'https://slides.example.edu'
+    expect(await getConfig()).toMatchObject({ agentAccessEnabled: true })
   })
 
   // The privacy policy and the terms name whoever runs the deployment, and

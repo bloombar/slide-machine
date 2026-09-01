@@ -28,7 +28,8 @@
     "listSeparator": ", ",
     "adminEditNotice": "Estás editando {entity, select, account {la cuenta} project {el proyecto} lecture {la clase} other {los ajustes}} de otra persona como administrador. Cada cambio que hagas aquí queda registrado en el registro de auditoría.",
     "undo": "Deshacer",
-    "redo": "Rehacer"
+    "redo": "Rehacer",
+    "copy": "Copiar"
   },
   "nav": {
     "brand": "The Slide Machine",
@@ -206,7 +207,9 @@
       "hint": "Eliminar tu cuenta borra definitivamente tus proyectos, clases y diapositivas. Esta acción no se puede deshacer.",
       "title": "¿Eliminar tu cuenta?",
       "message": "Tu cuenta y todos sus proyectos, clases y diapositivas se eliminarán definitivamente."
-    }
+    },
+    "assistantsSection": "Asistentes de IA conectados",
+    "assistantsSectionHint": "Asistentes a los que has permitido leer o cambiar tus clases desde fuera de la aplicación. Desconectar uno surte efecto de inmediato y no cierra tu sesión en ningún sitio."
   },
   "language": {
     "label": "Idioma",
@@ -1396,5 +1399,24 @@
       "warnEmails": "Avisarme por correo antes de agotarlo",
       "warnEmailsHint": "Un aviso cuando un cupo está casi agotado. Los avisos de límite realmente alcanzado siempre se envían."
     }
+  },
+  "oauth": {
+    "title": "Conectar un asistente",
+    "asking": "{name} solicita conectarse a tu cuenta de Slide Machine. Si lo permites, podrá:",
+    "limits": "No puede eliminar nada, ni compartir una clase, ni publicar un cuestionario, ni cambiar tu plan: eso permanece en la aplicación. Puedes desconectarlo en cualquier momento desde los ajustes de tu cuenta.",
+    "allow": "Permitir",
+    "deny": "No permitir",
+    "expired": "Esta solicitud ha caducado o ya fue respondida. Pide al asistente que vuelva a conectarse.",
+    "failed": "Algo salió mal y no se conectó nada. Inténtalo de nuevo."
+  },
+  "assistants": {
+    "none": "No hay asistentes de IA conectados a esta cuenta.",
+    "connectedOn": "Conectado el {date}",
+    "disconnect": "Desconectar",
+    "failed": "No se pudieron cargar los asistentes conectados.",
+    "connectTitle": "Conectar un asistente",
+    "connectHint": "Pega esta dirección en los ajustes de conectores de tu asistente de IA. Los asistentes compatibles con conectores MCP remotos —como Claude— harán el resto.",
+    "connectApproval": "El asistente te devolverá aquí para que lo apruebes antes de poder ver nada.",
+    "copied": "Copiado"
   }
 }

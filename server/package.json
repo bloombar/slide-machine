@@ -19,6 +19,7 @@
     "@aws-sdk/lib-storage": "^3.1098.0",
     "@google-cloud/speech": "^7.5.0",
     "@google-cloud/storage": "^7.21.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "adm-zip": "^0.6.0",
     "argon2": "^0.44.0",
     "cookie-parser": "^1.4.7",

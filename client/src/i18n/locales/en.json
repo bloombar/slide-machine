@@ -28,7 +28,8 @@
     "listSeparator": ", ",
     "adminEditNotice": "You are editing another user's {entity, select, account {account} project {project} lecture {lecture} other {settings}} as an admin. Every change you make here is recorded in the audit log.",
     "undo": "Undo",
-    "redo": "Redo"
+    "redo": "Redo",
+    "copy": "Copy"
   },
   "nav": {
     "brand": "The Slide Machine",
@@ -206,7 +207,9 @@
       "hint": "Deleting your account permanently removes your projects, lectures, and slides. This cannot be undone.",
       "title": "Delete your account?",
       "message": "Your account and all of its projects, lectures, and slides will be permanently deleted."
-    }
+    },
+    "assistantsSection": "Connected AI assistants",
+    "assistantsSectionHint": "Assistants you have allowed to read or change your lectures from outside the app. Disconnecting one takes effect immediately and does not sign you out anywhere."
   },
   "language": {
     "label": "Language",
@@ -1396,5 +1399,24 @@
       "warnEmails": "Email me before I run out",
       "warnEmailsHint": "A heads-up when an allowance is nearly spent. Notices about a limit that has actually been reached are always sent."
     }
+  },
+  "oauth": {
+    "title": "Connect an assistant",
+    "asking": "{name} is asking to connect to your Slide Machine account. If you allow it, it will be able to:",
+    "limits": "It cannot delete anything, share a lecture, publish a quiz, or change your plan — those stay in the app. You can disconnect it at any time from your account settings.",
+    "allow": "Allow",
+    "deny": "Don't allow",
+    "expired": "This request has expired or was already answered. Ask the assistant to try connecting again.",
+    "failed": "Something went wrong and nothing was connected. Try again."
+  },
+  "assistants": {
+    "none": "No AI assistants are connected to this account.",
+    "connectedOn": "Connected {date}",
+    "disconnect": "Disconnect",
+    "failed": "Could not load connected assistants.",
+    "connectTitle": "Connect an assistant",
+    "connectHint": "Paste this address into your AI assistant's connector settings. Assistants that support remote MCP connectors — such as Claude — will do the rest.",
+    "connectApproval": "The assistant will send you back here to approve it before it can see anything.",
+    "copied": "Copied"
   }
 }

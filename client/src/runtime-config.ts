@@ -32,6 +32,7 @@ let runtime: RuntimeConfig = {
   ttsEnabled: false,
   translationEnabled: false,
   feedbackEnabled: false,
+  agentAccessEnabled: false,
   mailEnabled: false,
   operator: NO_OPERATOR,
   refineSlidesDefaultLevel: 2,
@@ -66,6 +67,9 @@ export const getTtsEnabled = (): boolean => runtime.ttsEnabled
 /** Whether translated viewing is available (SHARE-2); false (switcher hidden)
  * until config loads. */
 export const getTranslationEnabled = (): boolean => runtime.translationEnabled
+
+/** Whether this deployment can host an external AI assistant (docs/MCP.md). */
+export const getAgentAccessEnabled = (): boolean => runtime.agentAccessEnabled
 
 /** Whether the "Send feedback" form can deliver; false (menu entry and page
  * hidden) until config loads. A server with no mail transport or no address

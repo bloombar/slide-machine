@@ -15,6 +15,7 @@ import { translationEnabled } from '../lib/translate-slides'
 import { feedbackEnabled } from './feedback'
 import { googleLive } from '../lib/export-mode'
 import { mailerAvailable } from '../lib/mailer'
+import { oauthAvailable } from './oauth'
 
 export const configRouter = Router()
 
@@ -63,6 +64,7 @@ const drivePicker = (): DrivePickerConfig => {
 
 configRouter.get('/config', (_req, res) => {
   const body: RuntimeConfig = {
+    agentAccessEnabled: oauthAvailable(),
     sttEngine: sttEngine(),
     ttsEnabled: ttsEnabled(),
     translationEnabled: translationEnabled(),

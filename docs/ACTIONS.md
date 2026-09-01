@@ -11,8 +11,10 @@ how to add to it. The design record for exposing the layer to AI assistants is
 
 > **Status.** Built and in use — the React UI reaches the server almost entirely
 > through this layer. The machine-readable catalog TECH-13 describes
-> (descriptions + JSON Schema derivation for AI channels) is future work; see
-> [MCP.md §3](MCP.md#3-the-shared-substrate).
+> (descriptions + JSON Schema derivation for AI channels) is now built as well:
+> [actions/catalog.ts](../server/src/actions/catalog.ts). Descriptions are
+> written per action as something exposes it rather than backfilled across all
+> ninety — see [MCP.md §3](MCP.md#3-the-shared-substrate).
 
 ## 1. Why a layer
 
@@ -56,6 +58,9 @@ these guarantees, which is why the boundary is documented rather than assumed.
 | The authoritative index of every action's guard | `ACCESS_INDEX` in [actions/access-registry.test.ts](../server/src/actions/access-registry.test.ts) |
 | HTTP entry point (`POST /api/actions/:name`) | [routes/actions.ts](../server/src/routes/actions.ts) |
 | Client caller | `dispatchAction` in [client/src/api/actions.ts](../client/src/api/actions.ts) |
+| The machine-readable catalog for AI channels (TECH-13) | [actions/catalog.ts](../server/src/actions/catalog.ts) |
+| Dispatch errors rendered as prose for a model | [actions/agent-error.ts](../server/src/actions/agent-error.ts) |
+| The agent tool surface built on the layer | [mcp/](../server/src/mcp/) — start at [MCP.md](MCP.md) |
 
 Action definitions live one file per family in
 [server/src/actions/](../server/src/actions/): `deck.*` (lectures), `project.*`,

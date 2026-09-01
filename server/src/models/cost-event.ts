@@ -30,7 +30,11 @@
  * students, and an average over two would be an order of magnitude wrong.
  */
 import { Schema, type Types } from 'mongoose'
-import type { UsageMetric } from '@slide-machine/shared'
+import {
+  ACTOR_CHANNELS,
+  type ActorChannel,
+  type UsageMetric,
+} from '@slide-machine/shared'
 import { defineModel } from './define-model'
 
 /** How the person who caused an event related to the deck it belonged to. */
@@ -50,6 +54,16 @@ export interface CostEventDb {
   /** Whether the payer caused this themselves, a viewer did, or the system
    * did on nobody's behalf. The instructor-versus-student split reads this. */
   actorKind: CostActorKind
+  /**
+   * How the request arrived — the app's own front end, or an external AI
+   * assistant over MCP (docs/MCP.md §6). Separate from `actorKind`, which
+   * says how the person relates to the deck: an assistant working on its
+   * owner's lecture is `owner` through the `agent` channel, and collapsing
+   * the two would lose whichever one was not asked about.
+   *
+   * Rows written before this field existed have none, and mean `app`.
+   */
+  channel: ActorChannel
   projectId?: Types.ObjectId | null
   /** The project's title when the event happened; the row outlives it. */
   projectName?: string
@@ -76,6 +90,12 @@ const costEventSchema = new Schema<CostEventDb>({
   payerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   actorId: { type: Schema.Types.ObjectId, ref: 'User', default: null },
   actorKind: { type: String, enum: COST_ACTOR_KINDS, required: true },
+  channel: {
+    type: String,
+    enum: ACTOR_CHANNELS,
+    required: true,
+    default: 'app',
+  },
   projectId: { type: Schema.Types.ObjectId, ref: 'Project', default: null },
   projectName: String,
   deckId: { type: Schema.Types.ObjectId, ref: 'Deck', default: null },
@@ -97,6 +117,10 @@ costEventSchema.index({ deckId: 1, occurredAt: -1 })
 costEventSchema.index({ projectId: 1, occurredAt: -1 })
 // Deployment-wide totals and the retention sweep both walk by time alone.
 costEventSchema.index({ occurredAt: -1 })
+// "What has an assistant been doing on this account, and when" — the question
+// the channel exists to answer, and one that would otherwise scan the whole
+// ledger, since agent rows are a small minority of it.
+costEventSchema.index({ payerId: 1, channel: 1, occurredAt: -1 })
 
 // Deliberately no soft-delete plugin: a deleted lecture's cost still happened,
 // and a ledger that disappears with the thing it describes cannot answer what
