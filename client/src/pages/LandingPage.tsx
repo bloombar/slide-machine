@@ -21,7 +21,6 @@ import {
   FileDown,
   FileUp,
   Languages,
-  LogIn,
   Mic,
   PenLine,
 } from 'lucide-react'
@@ -65,23 +64,47 @@ export default function LandingPage() {
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6">
       <NavLocaleSwitcher />
 
-      {/* Hero: who this is and what it is for, above the fold. */}
-      <section className="flex flex-col items-center gap-5 text-center">
-        <img src={getBadgeUrl()} alt="" aria-hidden className="h-20 w-auto" />
-        <h1 className="text-4xl font-bold tracking-tight">
-          {t('landing.title')}
-        </h1>
-        <p className="text-lg text-slate-600">{t('landing.tagline')}</p>
-        <p className="max-w-2xl text-left leading-7 text-slate-700 sm:text-center">
-          {t('landing.intro')}
-        </p>
-        <Link
-          to="/login"
-          className="flex items-center gap-2 rounded-md bg-indigo-600 px-5 py-3 font-medium text-white"
-        >
-          <LogIn className="h-5 w-5" aria-hidden />
-          {t('landing.cta')}
-        </Link>
+      {/* Hero: who this is and what it is for, above the fold — drawn as a
+          slide, since a slide is what the app makes. The frame borrows
+          SlideView's idiom (a 16:9 white surface, rounded, with a dropped
+          shadow) and sits on a tinted band, without which a white slide on
+          a white page has no edge to read. Inside it is the oldest slide
+          arrangement there is: a picture holding one side, the words the
+          other.
+
+          The ratio is a MINIMUM height, not a fixed one: `56.25cqw` is 16:9
+          of the band's own width (hence the `@container`), so a wide page
+          gets a slide-shaped box, and a phone — where the columns stack and
+          this much text is taller than a box that narrow — gets a taller
+          box instead of clipped words. */}
+      <section className="@container rounded-2xl bg-slate-100 p-3 sm:p-5">
+        <div className="grid min-h-[56.25cqw] items-center gap-8 rounded-xl border border-slate-200 bg-white px-6 py-10 shadow-2xl sm:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] sm:gap-10 sm:px-12">
+          <div className="flex justify-center">
+            {/* The picture is the slide's whole left column: it fills the
+                column's width, and only stops growing if the slide is too
+                short to hold it. */}
+            <img
+              src={getBadgeUrl()}
+              alt=""
+              aria-hidden
+              className="h-36 w-auto sm:h-auto sm:max-h-80 sm:w-full"
+            />
+          </div>
+          <div className="flex flex-col items-center gap-5 text-center sm:items-start sm:text-left">
+            <h1 className="text-4xl font-bold tracking-tight">
+              {t('landing.title')}
+            </h1>
+            <p className="text-lg text-slate-600">{t('landing.tagline')}</p>
+            <p className="leading-7 text-slate-700">{t('landing.intro')}</p>
+            <Link
+              to="/login"
+              className="flex items-center gap-2 rounded-md bg-indigo-600 px-5 py-3 font-medium text-white"
+            >
+              <Mic className="h-5 w-5" aria-hidden />
+              {t('landing.cta')}
+            </Link>
+          </div>
+        </div>
       </section>
 
       {/* What it does — the functionality description Google asks for, and

@@ -15,7 +15,7 @@ test('landing page shows the hero and a healthy API footer', async ({
     page.getByRole('heading', { level: 1, name: 'The Slide Machine' }),
   ).toBeVisible()
   await expect(
-    page.getByRole('link', { name: /sign in to get started/i }),
+    page.getByRole('link', { name: /sign in to start/i }),
   ).toBeVisible()
 
   const bar = page.getByTestId('health-bar')

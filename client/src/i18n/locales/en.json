@@ -45,8 +45,8 @@
   "landing": {
     "title": "The Slide Machine",
     "tagline": "Speak freely — the slides will follow.",
-    "intro": "The Slide Machine builds your lecture slides live, from what you actually say, while you say it. Start a lecture and talk: your speech is transcribed and our AI agent turns your spoken words into well-formatted slides in real-time, with images we source added at appropriate places as you speak.",
-    "cta": "Sign in to get started",
+    "intro": "The Slide Machine builds your lecture slides live, from what you actually say, while you say it. Start a lecture and talk: our AI agent turns your spoken words into well-formatted slides in real-time.",
+    "cta": "Sign in to start",
     "ctaAbout": "Read more about the project",
     "featuresTitle": "What it does",
     "featureLiveTitle": "Slides written as you speak",
