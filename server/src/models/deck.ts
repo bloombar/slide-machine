@@ -229,6 +229,7 @@ const deckSchema = new Schema<DeckDb>(
     refineIdentifySpeakers: { type: Boolean, default: undefined },
     refineSlidesEnabled: { type: Boolean, default: undefined },
     refineSlidesLevel: { type: Number, min: 1, max: 5, default: undefined },
+    refineSplitEnabled: { type: Boolean, default: undefined },
     refineTranscriptEnabled: { type: Boolean, default: undefined },
     refineTranscriptLevel: { type: Number, min: 1, max: 5, default: undefined },
     // Explicit lecturing language only; absent = inherit (project, then
@@ -405,6 +406,7 @@ export const toDeckDto = (
   refineIdentifySpeakers: doc.refineIdentifySpeakers,
   refineSlidesEnabled: doc.refineSlidesEnabled,
   refineSlidesLevel: doc.refineSlidesLevel,
+  refineSplitEnabled: doc.refineSplitEnabled,
   refineTranscriptEnabled: doc.refineTranscriptEnabled,
   refineTranscriptLevel: doc.refineTranscriptLevel,
   language: doc.language,

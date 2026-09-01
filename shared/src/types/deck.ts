@@ -70,6 +70,11 @@ export interface Deck {
   /** Per-lecture "Refine all slides" strength (1-5); absent = inherit the
    * server default (REFINE_SLIDES_DEFAULT_LEVEL). Stored only once moved. */
   refineSlidesLevel?: number
+  /** Per-lecture Refine toggle: let a refine break a slide into several when
+   * one slide genuinely cannot hold what it carries (GEN-4). Absent =
+   * default off — splitting changes the shape of the lecture, so it is opted
+   * into rather than out of. */
+  refineSplitEnabled?: boolean
   /** Per-lecture Refine toggle: rewrite the spoken narration.
    * Absent = default on. */
   refineTranscriptEnabled?: boolean

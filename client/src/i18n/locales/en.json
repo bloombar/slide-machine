@@ -826,12 +826,6 @@
       "code": "Add code",
       "codeIn": "Add {language} code",
       "preformatted": "Add preformatted text"
-    },
-    "split": {
-      "title": "Split this slide?",
-      "intro": "This slide holds {count} separate ideas ({reason}). Showing it as {count} slides would be clearer:",
-      "confirm": "Split into {count} slides",
-      "untitled": "(untitled part)"
     }
   },
   "image": {
@@ -923,6 +917,15 @@
         "description": "Find an image when the layout has an image box and none is placed."
       }
     },
+    "split": {
+      "label": "Break slides up when they need it",
+      "labelSlide": "Break this slide up if it needs it",
+      "description": "When a slide is carrying more than one slide can hold, let the refine turn it into several. Nothing is broken up unless it is genuinely necessary — a slide that only needs better wording is reworded, not divided, and most slides come back as one.",
+      "descriptionSlide": "If this slide is carrying more than one slide can hold, let the refine turn it into several. It will only happen if it is genuinely necessary — a slide that only needs better wording is reworded, not divided.",
+      "needsText": "(Available only while slide text is being refined.)",
+      "done": "{count, plural, one {Slide {number} is now # slide} other {Slide {number} is now # slides}} — {reason}.",
+      "doneNoReason": "{count, plural, one {Slide {number} is now # slide.} other {Slide {number} is now # slides.}}"
+    },
     "speakers": {
       "label": "Identify multiple speakers",
       "description": "Detect who spoke — you versus students — and reframe student turns as questions, not fact.",
@@ -941,7 +944,8 @@
       "levelLabel": "How much to refine this slide",
       "marked": "This slide has whiteboard markings. Refining may change its content or layout, so your highlights and annotations may no longer line up with what’s underneath.",
       "running": "Refining this slide…",
-      "failed": "Could not refine this slide — try again"
+      "failed": "Could not refine this slide — try again",
+      "runningNamed": "Refining slide {number}: {title}…"
     }
   },
   "transcript": {
@@ -1136,11 +1140,19 @@
         "markedTitle": "Refine marked-up slides?",
         "markedMessage": "Some slides have whiteboard markings. Refining may change their content or layout, so highlights and annotations may no longer line up with what's underneath.",
         "markedConfirm": "Refine anyway",
+        "progress": {
+          "speakers": "Identifying who spoke across the recording…",
+          "slides": "Refining slide {index} of {total}: {title}",
+          "slidesUntitled": "Refining slide {index} of {total}…",
+          "narration": "Writing the spoken version of slide {index} of {total}: {title}",
+          "narrationUntitled": "Writing the spoken version of slide {index} of {total}…"
+        },
         "summary": {
           "done": "Done — {changes}.",
           "none": "Done — no changes were needed.",
           "reframed": "{count, plural, one {reframed # student slide} other {reframed # student slides}}",
           "slidesRefined": "{count, plural, one {refined # slide} other {refined # slides}}",
+          "slidesSplit": "{count, plural, one {broke up # slide} other {broke up # slides}}",
           "transcriptsUpdated": "{count, plural, one {updated # narration} other {updated # narrations}}"
         }
       }

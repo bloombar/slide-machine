@@ -87,6 +87,11 @@ describe('DeckSettingsModal — Refine tab', () => {
     expect(
       screen.getByRole('checkbox', { name: /Refine the spoken transcript/ }),
     ).not.toBeChecked()
+    // Breaking slides up starts off for the same reason: it changes how many
+    // slides the lecture has.
+    expect(
+      screen.getByRole('checkbox', { name: /Break slides up/ }),
+    ).not.toBeChecked()
   })
 
   it('gates the button when every option is cleared', () => {
@@ -128,7 +133,12 @@ describe('DeckSettingsModal — Refine tab', () => {
         status: 200,
         body: {
           status: 'done',
-          summary: { reframed: 0, slidesRefined: 1, transcriptsUpdated: 1 },
+          summary: {
+            reframed: 0,
+            slidesRefined: 1,
+            slidesSplit: 0,
+            transcriptsUpdated: 1,
+          },
         },
       }),
     })
@@ -372,7 +382,12 @@ describe('DeckSettingsModal — Refine tab', () => {
         status: 200,
         body: {
           status: 'done',
-          summary: { reframed: 1, slidesRefined: 2, transcriptsUpdated: 2 },
+          summary: {
+            reframed: 1,
+            slidesRefined: 2,
+            slidesSplit: 0,
+            transcriptsUpdated: 2,
+          },
         },
       }),
       '/api/actions/deck.refine': () => ({
@@ -385,12 +400,145 @@ describe('DeckSettingsModal — Refine tab', () => {
     // All options are checked by default; just submit.
     fireEvent.click(screen.getByRole('button', { name: 'Refine' }))
 
-    // The status poll waits ~2 s before its first check, so allow for it.
-    const status = await screen.findByRole('status', {}, { timeout: 4000 })
-    expect(status.textContent).toMatch(
+    // The status poll waits ~2 s before its first check, so allow for it. The
+    // progress line is a status region too, so this waits for the summary's
+    // own words rather than for whichever region appears first.
+    await screen.findByText(
       /Done — reframed 1 student slide, refined 2 slides, updated 2 narrations\./,
+      {},
+      { timeout: 4000 },
     )
     expect(onReformatted).toHaveBeenCalledOnce()
+  })
+
+  /**
+   * Breaking slides up, lecture-wide (GEN-4).
+   *
+   * A batch pass has nowhere to ask, which is exactly why the permission is a
+   * checkbox taken before the run. The box therefore has to do two things:
+   * persist to the lecture like the other Refine settings, and reach the job
+   * that acts on it. A box that renders but sends nothing is a setting that
+   * silently does not exist.
+   */
+  it('saves the split setting on the lecture, and asks the job for it', async () => {
+    let saved: { splitEnabled?: boolean } = {}
+    let refineBody: { refineSlides?: { allowSplit?: boolean } } = {}
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.setRefineSettings': init => {
+        saved = JSON.parse(String(init?.body))
+        return { status: 200, body: { ...baseDeck, refineSplitEnabled: true } }
+      },
+      '/api/actions/deck.refineStatus': () => ({
+        status: 200,
+        body: {
+          status: 'done',
+          summary: {
+            reframed: 0,
+            slidesRefined: 1,
+            slidesSplit: 1,
+            transcriptsUpdated: 0,
+          },
+        },
+      }),
+      '/api/actions/deck.refine': init => {
+        refineBody = JSON.parse(String(init?.body))
+        return { status: 200, body: { jobId: 'job-1' } }
+      },
+    })
+    renderModal()
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /Break slides up/ }))
+    expect(saved.splitEnabled).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refine' }))
+    await vi.waitFor(() =>
+      expect(refineBody.refineSlides?.allowSplit).toBe(true),
+    )
+    // And the run says how many slides it actually divided.
+    await screen.findByText(/broke up 1 slide/, {}, { timeout: 4000 })
+  })
+
+  it('opens ticked when the lecture saved it on', () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+    })
+    renderModal({ refineSplitEnabled: true })
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
+    expect(
+      screen.getByRole('checkbox', { name: /Break slides up/ }),
+    ).toBeChecked()
+  })
+
+  it('asks for no split while the box is unticked', async () => {
+    let refineBody: { refineSlides?: { allowSplit?: boolean } } = {}
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.refineStatus': () => ({
+        status: 200,
+        body: {
+          status: 'done',
+          summary: {
+            reframed: 0,
+            slidesRefined: 1,
+            slidesSplit: 0,
+            transcriptsUpdated: 0,
+          },
+        },
+      }),
+      '/api/actions/deck.refine': init => {
+        refineBody = JSON.parse(String(init?.body))
+        return { status: 200, body: { jobId: 'job-1' } }
+      },
+    })
+    renderModal()
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Refine' }))
+    await vi.waitFor(() =>
+      expect(refineBody.refineSlides?.allowSplit).toBe(false),
+    )
+  })
+
+  /**
+   * Naming the slide being refined.
+   *
+   * "Working in the background" is true of a run that is progressing and of
+   * one that has hung, which is why a long pass needs to say where it is.
+   * The generic line stays as the fallback for the gap before the first
+   * status poll lands.
+   */
+  it('names the slide being refined as the job reports it', async () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.refineStatus': () => ({
+        status: 200,
+        body: {
+          status: 'running',
+          progress: {
+            phase: 'slides',
+            done: 2,
+            total: 9,
+            index: 3,
+            title: 'Carbon fixation',
+          },
+        },
+      }),
+      '/api/actions/deck.refine': () => ({
+        status: 200,
+        body: { jobId: 'job-1' },
+      }),
+    })
+    renderModal()
+    fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
+    // Before the first poll there is nothing specific to say.
+    fireEvent.click(screen.getByRole('button', { name: 'Refine' }))
+    expect(screen.getByText(/Working in the background/)).toBeVisible()
+
+    await screen.findByText(
+      'Refining slide 3 of 9: Carbon fixation',
+      {},
+      { timeout: 4000 },
+    )
   })
 
   it('confirms before refining when slides carry whiteboard marks', async () => {
@@ -401,7 +549,12 @@ describe('DeckSettingsModal — Refine tab', () => {
         status: 200,
         body: {
           status: 'done',
-          summary: { reframed: 0, slidesRefined: 1, transcriptsUpdated: 0 },
+          summary: {
+            reframed: 0,
+            slidesRefined: 1,
+            slidesSplit: 0,
+            transcriptsUpdated: 0,
+          },
         },
       }),
       '/api/actions/deck.refine': () => {
@@ -434,7 +587,12 @@ describe('DeckSettingsModal — Refine tab', () => {
         status: 200,
         body: {
           status: 'done',
-          summary: { reframed: 0, slidesRefined: 0, transcriptsUpdated: 1 },
+          summary: {
+            reframed: 0,
+            slidesRefined: 0,
+            slidesSplit: 0,
+            transcriptsUpdated: 1,
+          },
         },
       }),
       '/api/actions/deck.refine': () => {

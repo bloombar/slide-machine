@@ -28,6 +28,7 @@ import {
   type DeckSetRefineSettingsInput,
   type Locale,
   type Project,
+  type RefineJobProgress,
   type RefineJobSummary,
   type SlideRefineParts,
   type Template,
@@ -54,6 +55,7 @@ import {
   RefineLevelSlider,
   RefineOption,
   RefinePartsOptions,
+  RefineSplitOption,
 } from './refine/RefineControls'
 import { getTtsEnabled, getRefineSlidesDefaultLevel } from '../runtime-config'
 import { lectureTitle } from '../lib/lecture'
@@ -175,6 +177,10 @@ export default function DeckSettingsModal({
     return { text: on, layout: on, imagery: on }
   })
   const refineSlides = Object.values(parts).some(Boolean)
+  // Whether the pass may break a slide into several (GEN-4). Saved on the
+  // lecture like the other toggles, and off unless the lecture says otherwise:
+  // it changes how many slides the lecture has, so it is opted into.
+  const [allowSplit, setAllowSplit] = useState(deck.refineSplitEnabled ?? false)
   const [refineTranscript, setRefineTranscript] = useState(
     deck.refineTranscriptEnabled ?? false,
   )
@@ -185,6 +191,9 @@ export default function DeckSettingsModal({
       getRefineSlidesDefaultLevel(),
   )
   const [refining, setRefining] = useState(false)
+  // Where the running job has got to, from the last status poll; null before
+  // the first one lands and once the run is over.
+  const [progress, setProgress] = useState<RefineJobProgress | null>(null)
   const [refineMsg, setRefineMsg] = useState<string | null>(null)
   // Confirm before refining slides that carry whiteboard marks (WB-1).
   const [confirmingRefine, setConfirmingRefine] = useState(false)
@@ -396,6 +405,7 @@ export default function DeckSettingsModal({
       [
         ['reframed', s.reframed],
         ['slidesRefined', s.slidesRefined],
+        ['slidesSplit', s.slidesSplit],
         ['transcriptsUpdated', s.transcriptsUpdated],
       ] as const
     )
@@ -410,6 +420,31 @@ export default function DeckSettingsModal({
       : t('deck.settings.refine.summary.none')
   }
 
+  /**
+   * The one-line "what is happening now" under the Refine button: which pass
+   * is running and which slide it is on.
+   *
+   * Null when there is nothing specific to say yet — before the first poll,
+   * or between passes — and the caller falls back to the generic "working in
+   * the background" line rather than showing a half-filled sentence.
+   */
+  const progressMessage = (p: RefineJobProgress | null): string | null => {
+    if (!p) return null
+    if (p.phase === 'speakers')
+      return t('deck.settings.refine.progress.speakers')
+    // Between passes the job reports a phase with no slide in hand. Nothing
+    // to name, so the caller says the generic thing instead.
+    if (!p.index) return null
+    const values = { index: p.index, total: p.total, title: p.title }
+    if (p.phase === 'narration')
+      return p.title
+        ? t('deck.settings.refine.progress.narration', values)
+        : t('deck.settings.refine.progress.narrationUntitled', values)
+    return p.title
+      ? t('deck.settings.refine.progress.slides', values)
+      : t('deck.settings.refine.progress.slidesUntitled', values)
+  }
+
   /** Polls the job until it leaves 'running' (batch diarization can take
    * minutes); returns the summary, or throws on error/timeout. */
   const pollRefine = async (jobId: string): Promise<RefineJobSummary> => {
@@ -419,11 +454,15 @@ export default function DeckSettingsModal({
         'deck.refineStatus',
         { jobId },
       )
+      // Each poll re-states where the job is, so the line under the button
+      // names the slide in hand instead of only saying that work is happening.
+      setProgress(res.progress ?? null)
       if (res.status === 'done')
         return (
           res.summary ?? {
             reframed: 0,
             slidesRefined: 0,
+            slidesSplit: 0,
             transcriptsUpdated: 0,
           }
         )
@@ -437,11 +476,22 @@ export default function DeckSettingsModal({
   const runRefine = async () => {
     setRefining(true)
     setRefineMsg(null)
+    setProgress(null)
     try {
       const { jobId } = await dispatchAction<DeckRefineResult>('deck.refine', {
         deckId: deck.id,
         ...(identifySpeakers ? { identifySpeakers: true } : {}),
-        ...(refineSlides ? { refineSlides: { level, parts } } : {}),
+        ...(refineSlides
+          ? {
+              refineSlides: {
+                level,
+                parts,
+                // Splitting reads the slide's words, so it only applies while
+                // the text pass is on.
+                allowSplit: allowSplit && parts.text,
+              },
+            }
+          : {}),
         ...(refineTranscript ? { refineTranscript: { level } } : {}),
       })
       const summary = await pollRefine(jobId)
@@ -451,6 +501,7 @@ export default function DeckSettingsModal({
       setRefineMsg(t('deck.settings.refine.failed'))
     } finally {
       setRefining(false)
+      setProgress(null)
     }
   }
 
@@ -953,6 +1004,16 @@ export default function DeckSettingsModal({
               }}
             />
 
+            <RefineSplitOption
+              scope="lecture"
+              checked={allowSplit}
+              textOff={!parts.text}
+              onChange={checked => {
+                setAllowSplit(checked)
+                saveRefineSettings({ splitEnabled: checked })
+              }}
+            />
+
             <RefineOption
               label={t('refine.transcript.label')}
               description={t('refine.transcript.description')}
@@ -985,8 +1046,8 @@ export default function DeckSettingsModal({
                 {refining ? t('refine.running') : t('refine.action')}
               </button>
               {refining && (
-                <p className="mt-3 text-sm text-slate-500">
-                  {t('refine.background')}
+                <p role="status" className="mt-3 text-sm text-slate-500">
+                  {progressMessage(progress) ?? t('refine.background')}
                 </p>
               )}
               {refineMsg && (

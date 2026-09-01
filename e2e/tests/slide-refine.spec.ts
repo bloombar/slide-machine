@@ -122,3 +122,103 @@ test('refining only the narration leaves the slide’s words alone', async ({
     page.getByRole('textbox', { name: 'Spoken transcript' }),
   ).toHaveValue(`${PHRASE} (refined)`)
 })
+
+/**
+ * Breaking a slide up (GEN-4), through the real stack.
+ *
+ * The permission is a checkbox taken before the run, not a dialog afterwards,
+ * so nothing catches a split the instructor did not want — which makes both
+ * directions worth proving against a live deck. The mock generator turns
+ * "a, b, c" into a three-bullet list slide, and offers to divide a slide of
+ * three or more bullets when (and only when) the run allowed it.
+ */
+const THREE_IDEAS = 'Light absorption, energy transfer, carbon fixation'
+
+/** Registers a user and dictates one phrase that lands as a list slide. */
+const buildWideDeck = async (page: Page, who: string) => {
+  const project = `Split ${who}`
+  await page.goto('/register')
+  await page.getByLabel('Display name').fill('Splitter')
+  await page.getByLabel('Email').fill(`split-${who}-${Date.now()}@example.com`)
+  await page.getByLabel('Password').fill(password)
+  await page.getByRole('button', { name: 'Create account' }).click()
+
+  await createProject(page, project)
+  await page
+    .getByRole('button', { name: `Start a new lecture in ${project}` })
+    .click()
+  await expect(page).toHaveURL(/\/d\//)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
+  await page.getByLabel('Spoken phrase').fill(THREE_IDEAS)
+  await page.getByRole('button', { name: 'Speak' }).click()
+  await expect(page.getByTestId('slide')).toContainText('Light absorption')
+}
+
+test('a refine leaves the lecture whole unless the box is ticked', async ({
+  page,
+}) => {
+  await buildWideDeck(page, 'untouched')
+  const dialog = await openRefineDialog(page)
+
+  // Off by default: the deck's shape is not something a refine changes on
+  // its own, however full the slide is.
+  const box = dialog.getByRole('checkbox', {
+    name: /Break this slide up if it needs it/,
+  })
+  await expect(box).not.toBeChecked()
+  // And the copy promises what the default implies.
+  await expect(dialog).toContainText(/only happen if it is genuinely necessary/)
+
+  const refined = page.waitForResponse(
+    r => r.url().includes('/actions/deck.refineSlide') && r.status() === 200,
+  )
+  await dialog.getByRole('button', { name: 'Refine' }).click()
+  const body = await (await refined).json()
+  expect(body.refined).toBe(true)
+  expect(body.split).toBeUndefined()
+
+  // The lecture still has exactly the slide it had.
+  const view = page.waitForResponse(
+    r => /\/api\/decks\/[^/]+$/.test(r.url()) && r.status() === 200,
+  )
+  await page.reload()
+  expect((await (await view).json()).slides).toHaveLength(1)
+})
+
+test('ticking the box turns one crowded slide into several', async ({
+  page,
+}) => {
+  await buildWideDeck(page, 'divided')
+  const dialog = await openRefineDialog(page)
+  await dialog
+    .getByRole('checkbox', { name: /Break this slide up if it needs it/ })
+    .check()
+
+  const refined = page.waitForResponse(
+    r => r.url().includes('/actions/deck.refineSlide') && r.status() === 200,
+  )
+  await dialog.getByRole('button', { name: 'Refine' }).click()
+  const body = await (await refined).json()
+  expect(body.split.added).toHaveLength(2)
+  await expect(dialog).toBeHidden()
+
+  // No second question: the slides are already there, and the viewer says so
+  // rather than leaving the extra slides unexplained.
+  await expect(page.getByText(/Slide 1 is now 3 slides/)).toBeVisible()
+  await expect(page.getByRole('alertdialog')).toBeHidden()
+
+  // The parts are real slides, in order, and they survive a reload.
+  const view = page.waitForResponse(
+    r => /\/api\/decks\/[^/]+$/.test(r.url()) && r.status() === 200,
+  )
+  await page.reload()
+  const slides = (await (await view).json()).slides as Array<{
+    title?: string
+  }>
+  expect(slides).toHaveLength(3)
+  expect(slides.map(s => s.title)).toEqual([
+    expect.stringContaining('(1)'),
+    expect.stringContaining('(2)'),
+    expect.stringContaining('(3)'),
+  ])
+})

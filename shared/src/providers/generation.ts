@@ -261,6 +261,18 @@ export interface SlideRefineRequest {
    * this is the original spoken words; on later refines it is the previously
    * refined narration, so refinement compounds. Absent = none available. */
   transcript?: string
+  /**
+   * Whether this refine is allowed to break the slide into several (GEN-4).
+   *
+   * The instructor grants this with a checkbox before the run, so a proposal
+   * that comes back is APPLIED rather than offered. That raises the bar: the
+   * prompt is only shown the split instructions when this is true, and it is
+   * told to keep one slide unless several are genuinely necessary.
+   *
+   * Absent/false leaves splitting out of the prompt entirely, so nothing is
+   * billed for parts that would be discarded.
+   */
+  allowSplit?: boolean
 }
 
 export interface SlideRefineResult {
@@ -281,31 +293,30 @@ export interface SlideRefineResult {
    * the only improvement left, and it is a change to the SHAPE of the
    * lecture rather than to its wording.
    *
-   * So it is proposed, never applied. `refineSlide` returns this alongside
-   * the refined slide and changes nothing; the instructor is shown what the
-   * parts would be and decides. Absent whenever one slide is the right
+   * The provider never writes it: `refineSlide` returns this alongside its
+   * single-slide version, and the caller applies it only when the instructor
+   * allowed splitting (`allowSplit`). Absent whenever one slide is the right
    * answer, which is most of the time.
    */
   splitProposal?: SlideSplitProposal
 }
 
-/** How many slides one slide may be proposed as. Bounded because a refine
- * that offered to become eight slides is proposing a different lecture, not
- * a clearer one — and the instructor has to read every part before saying
- * yes. */
+/** How many slides one slide may be broken into. Bounded because a refine
+ * that turned one slide into eight would be writing a different lecture, not
+ * a clearer one. */
 export const MAX_SPLIT_PARTS = 3
 
 /**
  * One slide, shown as several (GEN-4).
  *
- * Carries the whole content of each part, not an instruction to re-generate:
- * what the instructor is shown in the confirm dialog is exactly what will be
- * written if they accept, so nothing can be produced on acceptance that they
- * did not read.
+ * Carries the whole content of each part, not an instruction to re-generate,
+ * so the split is written from what the model actually produced in the same
+ * call — nothing is generated a second time on the way to the deck.
  */
 export interface SlideSplitProposal {
-  /** Why this slide wants to be several, in one short phrase, for the
-   * dialog — "three separate stages", "a definition and two examples". */
+  /** Why this slide became several, in one short phrase — "three separate
+   * stages", "a definition and two examples". Reported back to the
+   * instructor after the split is applied. */
   reason: string
   /** The parts, in the order they would appear. The FIRST replaces the
    * original slide; the rest are inserted after it. */

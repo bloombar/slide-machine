@@ -1622,7 +1622,10 @@ describe('image keywords are cut to a searchable length (IMG-1)', () => {
  * deck on the model's say-so and produce slides nobody read.
  */
 describe('split proposals from a refine (GEN-4)', () => {
-  const refineWith = async (reply: Record<string, unknown>) => {
+  const refineWith = async (
+    reply: Record<string, unknown>,
+    allowSplit = true,
+  ) => {
     fetchMock.mockResolvedValue(geminiReply(reply))
     return new GeminiGenerationProvider().refineSlide({
       current: { layoutType: 'content', title: 'Stages', body: 'Three of.' },
@@ -1631,6 +1634,7 @@ describe('split proposals from a refine (GEN-4)', () => {
         { type: 'content', label: 'Content', purpose: 'x', slots: [] },
         { type: 'list', label: 'List', purpose: 'y', slots: [] },
       ],
+      allowSplit,
     } as never)
   }
 
@@ -1746,6 +1750,45 @@ describe('split proposals from a refine (GEN-4)', () => {
       'list',
     ])
   })
+
+  /**
+   * Splitting is now applied rather than offered, so a proposal that arrives
+   * without permission is not a suggestion the instructor can decline — it
+   * would restructure their lecture. The prompt never asks for one, and a
+   * model that volunteers one anyway is ignored.
+   */
+  it('drops a proposal the caller never allowed', async () => {
+    const res = await refineWith(
+      {
+        layoutType: 'content',
+        slots: { title: 'Stages' },
+        splitProposal: {
+          reason: 'three separate stages',
+          parts: [part('Absorption'), part('Transfer')],
+        },
+      },
+      false,
+    )
+    expect(res.splitProposal).toBeUndefined()
+    // The refine itself still lands — only the split is dropped.
+    expect(res.slots.title).toBe('Stages')
+  })
+
+  it('leaves the split instructions out of the prompt entirely', async () => {
+    await refineWith(
+      { layoutType: 'content', slots: { title: 'Stages' } },
+      false,
+    )
+    const sent = String(fetchMock.mock.calls[0]?.[1]?.body ?? '')
+    expect(sent).not.toContain('splitProposal')
+    expect(sent).toContain('Refinement strength 3 of 5')
+  })
+
+  it('puts them in when the caller allowed one', async () => {
+    await refineWith({ layoutType: 'content', slots: { title: 'Stages' } })
+    const sent = String(fetchMock.mock.calls[0]?.[1]?.body ?? '')
+    expect(sent).toContain('splitProposal')
+  })
 })
 
 /**
@@ -1763,6 +1806,7 @@ describe('the slide’s load in the refine prompt (GEN-4)', () => {
   const promptFor = async (
     current: Record<string, unknown>,
     constraints?: Record<string, number>,
+    allowSplit = true,
   ) => {
     fetchMock.mockResolvedValue(geminiReply({ layoutType: 'list', slots: {} }))
     await new GeminiGenerationProvider().refineSlide({
@@ -1777,6 +1821,7 @@ describe('the slide’s load in the refine prompt (GEN-4)', () => {
           ...(constraints ? { constraints } : {}),
         },
       ],
+      allowSplit,
     } as never)
     const [, init] = fetchMock.mock.calls[0]!
     return JSON.parse(String(init.body)).contents[0].parts[0].text as string
@@ -1807,6 +1852,24 @@ describe('the slide’s load in the refine prompt (GEN-4)', () => {
     expect(prompt).toContain('6 of at most 6 bullets')
     expect(prompt).toContain('AT its limit')
     expect(prompt).toContain('propose one unless')
+  })
+
+  /**
+   * The measurement is useful either way, but "so propose a split" is only
+   * true when the instructor allowed one. Told to split by a refine that
+   * cannot, the model would spend the reply arguing for something the caller
+   * will throw away — and the honest instruction for a full slide it must
+   * keep as one slide is to tighten it.
+   */
+  it('asks a refine that cannot split to tighten instead', async () => {
+    const prompt = await promptFor(
+      { bullets: ['a', 'b', 'c', 'd', 'e', 'f'] },
+      { maxBullets: 6 },
+      false,
+    )
+    expect(prompt).toContain('AT its limit')
+    expect(prompt).not.toContain('propose one unless')
+    expect(prompt).toContain('tighten rather than add')
   })
 
   it('counts a body against its character budget too', async () => {

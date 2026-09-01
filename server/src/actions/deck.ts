@@ -1584,6 +1584,7 @@ export const deckSetRefineSettings = defineAction<
     identifySpeakers: z.boolean().nullable().optional(),
     slidesEnabled: z.boolean().nullable().optional(),
     slidesLevel: z.number().int().min(1).max(5).nullable().optional(),
+    splitEnabled: z.boolean().nullable().optional(),
     transcriptEnabled: z.boolean().nullable().optional(),
     transcriptLevel: z.number().int().min(1).max(5).nullable().optional(),
   }),
@@ -1595,6 +1596,8 @@ export const deckSetRefineSettings = defineAction<
         deck.refineSlidesEnabled = input.slidesEnabled ?? undefined
       if (input.slidesLevel !== undefined)
         deck.refineSlidesLevel = input.slidesLevel ?? undefined
+      if (input.splitEnabled !== undefined)
+        deck.refineSplitEnabled = input.splitEnabled ?? undefined
       if (input.transcriptEnabled !== undefined)
         deck.refineTranscriptEnabled = input.transcriptEnabled ?? undefined
       if (input.transcriptLevel !== undefined)

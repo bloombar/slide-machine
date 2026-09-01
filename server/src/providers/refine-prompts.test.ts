@@ -11,6 +11,7 @@ vi.mock('../config/env', () => ({ env: testEnv }))
 
 import {
   renderRefinePrompt,
+  renderRefineSplitPrompt,
   renderNarratePrompt,
   renderReformatPrompt,
   renderRefitPrompt,
@@ -29,8 +30,8 @@ describe('renderRefinePrompt', () => {
       context: '\n\nLecture context:\nSEED',
       language: '\n\nWrite the slide text in: fr',
       layouts: '- content: General slide',
-      maxSplitParts: '3',
       load: '',
+      split: '',
     })
     expect(prompt).toContain('Refinement strength 4 of 5')
     expect(prompt).toContain('{"title":"Stars"}')
@@ -52,12 +53,58 @@ describe('renderRefinePrompt', () => {
       context: '',
       language: '',
       layouts: '- content: x',
-      maxSplitParts: '3',
       load: '',
+      split: '',
     })
     expect(prompt).not.toContain('Original spoken transcript')
     expect(prompt).not.toContain('Lecture context')
     expect(prompt).not.toContain('Write the slide text in')
+  })
+
+  /**
+   * A refine the instructor did not allow to split must not be shown the
+   * split instructions at all. Not a matter of ignoring the reply later: a
+   * model that is never told the shape exists cannot spend tokens filling it,
+   * and cannot be tempted to divide a slide nobody asked it to divide.
+   */
+  it('says nothing about splitting when the split fragment is empty', () => {
+    const prompt = renderRefinePrompt({
+      level: '2',
+      current: '{}',
+      transcript: '',
+      context: '',
+      language: '',
+      layouts: '- content: x',
+      load: '',
+      split: '',
+    })
+    expect(prompt).not.toContain('splitProposal')
+    expect(prompt).not.toContain('SEPARATE IDEAS')
+  })
+})
+
+describe('renderRefineSplitPrompt', () => {
+  it('states the cap, that the split is applied, and when to decline', () => {
+    const prompt = renderRefineSplitPrompt({ maxSplitParts: '3' })
+    expect(prompt).toContain('WILL BE APPLIED')
+    expect(prompt).toContain('Never return more than 3 parts')
+    expect(prompt).toContain('CLOSE CALL')
+    expect(prompt).toContain('"splitProposal"')
+  })
+
+  it('is what puts the split instructions into a refine prompt', () => {
+    const prompt = renderRefinePrompt({
+      level: '2',
+      current: '{}',
+      transcript: '',
+      context: '',
+      language: '',
+      layouts: '- content: x',
+      load: '',
+      split: renderRefineSplitPrompt({ maxSplitParts: '3' }),
+    })
+    expect(prompt).toContain('"splitProposal"')
+    expect(prompt).toContain('SEPARATE IDEAS')
   })
 })
 
@@ -178,8 +225,8 @@ describe('Markdown in the post-lecture prompts', () => {
       context: '',
       language: '',
       layouts: '- content: x',
-      maxSplitParts: '3',
       load: '',
+      split: '',
     })
 
   const reformat = () =>

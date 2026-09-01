@@ -826,12 +826,6 @@
       "code": "Añadir código",
       "codeIn": "Añadir código {language}",
       "preformatted": "Añadir texto preformateado"
-    },
-    "split": {
-      "title": "¿Dividir esta diapositiva?",
-      "intro": "Esta diapositiva contiene {count} ideas distintas ({reason}). Mostrarla como {count} diapositivas sería más claro:",
-      "confirm": "Dividir en {count} diapositivas",
-      "untitled": "(parte sin título)"
     }
   },
   "image": {
@@ -923,6 +917,15 @@
         "description": "Buscar una imagen cuando el diseño tiene un hueco para imagen y no hay ninguna."
       }
     },
+    "split": {
+      "label": "Dividir las diapositivas cuando haga falta",
+      "labelSlide": "Dividir esta diapositiva si hace falta",
+      "description": "Cuando una diapositiva contiene más de lo que cabe en una sola, permite que el refinamiento la convierta en varias. No se divide nada salvo que sea realmente necesario: una diapositiva que solo necesita mejor redacción se reescribe, no se divide, y la mayoría vuelve como una sola.",
+      "descriptionSlide": "Si esta diapositiva contiene más de lo que cabe en una sola, permite que el refinamiento la convierta en varias. Solo ocurrirá si es realmente necesario: una diapositiva que solo necesita mejor redacción se reescribe, no se divide.",
+      "needsText": "(Disponible solo mientras se refina el texto de la diapositiva.)",
+      "done": "{count, plural, one {La diapositiva {number} ahora es # diapositiva} other {La diapositiva {number} ahora son # diapositivas}} — {reason}.",
+      "doneNoReason": "{count, plural, one {La diapositiva {number} ahora es # diapositiva.} other {La diapositiva {number} ahora son # diapositivas.}}"
+    },
     "speakers": {
       "label": "Identificar a varios hablantes",
       "description": "Detectar quién habló —tú o el alumnado— y reformular las intervenciones del alumnado como preguntas, no como hechos.",
@@ -941,7 +944,8 @@
       "levelLabel": "Cuánto mejorar esta diapositiva",
       "marked": "Esta diapositiva tiene anotaciones de pizarra. La mejora puede cambiar su contenido o su diseño, así que puede que tus subrayados y anotaciones dejen de coincidir con lo que hay debajo.",
       "running": "Mejorando esta diapositiva…",
-      "failed": "No se pudo mejorar esta diapositiva: inténtalo de nuevo"
+      "failed": "No se pudo mejorar esta diapositiva: inténtalo de nuevo",
+      "runningNamed": "Refinando la diapositiva {number}: {title}…"
     }
   },
   "transcript": {
@@ -1136,11 +1140,19 @@
         "markedTitle": "¿Mejorar diapositivas anotadas?",
         "markedMessage": "Algunas diapositivas tienen anotaciones de pizarra. La mejora puede cambiar su contenido o su diseño, así que puede que los subrayados y las anotaciones dejen de coincidir con lo que hay debajo.",
         "markedConfirm": "Mejorar de todos modos",
+        "progress": {
+          "speakers": "Identificando quién habló en la grabación…",
+          "slides": "Refinando la diapositiva {index} de {total}: {title}",
+          "slidesUntitled": "Refinando la diapositiva {index} de {total}…",
+          "narration": "Escribiendo la versión hablada de la diapositiva {index} de {total}: {title}",
+          "narrationUntitled": "Escribiendo la versión hablada de la diapositiva {index} de {total}…"
+        },
         "summary": {
           "done": "Listo: {changes}.",
           "none": "Listo: no hizo falta ningún cambio.",
           "reframed": "{count, plural, one {# diapositiva del alumnado reformulada} other {# diapositivas del alumnado reformuladas}}",
           "slidesRefined": "{count, plural, one {# diapositiva mejorada} other {# diapositivas mejoradas}}",
+          "slidesSplit": "{count, plural, one {dividió # diapositiva} other {dividió # diapositivas}}",
           "transcriptsUpdated": "{count, plural, one {# narración actualizada} other {# narraciones actualizadas}}"
         }
       }

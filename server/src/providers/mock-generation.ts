@@ -400,15 +400,17 @@ export class MockGenerationProvider implements GenerationProvider {
   }
 
   /**
-   * Deterministic refine. A slide carrying three or more bullets also comes
-   * back with a split proposal, one bullet per part (GEN-4).
+   * Deterministic refine. When the caller allowed a split, a slide carrying
+   * three or more bullets also comes back with a proposal, one bullet per
+   * part (GEN-4).
    *
-   * Deterministic on purpose: the confirm-before-split flow has a branch that
-   * only exists when a proposal arrives, and without a way to produce one
-   * without the live model, that branch could only ever be tested by mocking
-   * the provider — which tests the mock, not the flow. Three bullets is the
-   * trigger because it is exactly the shape the real prompt is asked to split
-   * on: separate ideas sharing one slide.
+   * Deterministic on purpose: the split flow has a branch that only exists
+   * when a proposal arrives, and without a way to produce one without the
+   * live model, that branch could only ever be tested by mocking the provider
+   * — which tests the mock, not the flow. Three bullets is the trigger because
+   * it is exactly the shape the real prompt is asked to split on: separate
+   * ideas sharing one slide. Without `allowSplit` nothing is proposed, which
+   * is what the real provider does too — the prompt never mentions splitting.
    */
   async refineSlide(req: SlideRefineRequest): Promise<SlideRefineResult> {
     const bullets = req.current.bullets ?? []
@@ -429,7 +431,7 @@ export class MockGenerationProvider implements GenerationProvider {
         bullets: req.current.bullets,
         caption: `Refined (level ${req.level})`,
       },
-      ...(bullets.length >= 3
+      ...(req.allowSplit && bullets.length >= 3
         ? {
             splitProposal: {
               reason: `${parts.length} separate points`,
