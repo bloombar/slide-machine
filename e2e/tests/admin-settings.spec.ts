@@ -93,7 +93,7 @@ test('a user owns a project with a lecture', async ({ request }) => {
   const headers = { Authorization: `Bearer ${accessToken}` }
   // A public project needs a confirmed address (AUTH-3)
   await request.post('/api/auth/verify-email', {
-    data: { token: verificationTokenFor(owner.email) },
+    data: { token: await verificationTokenFor(owner.email) },
   })
 
   const project = await request.post('/api/actions/project.create', {

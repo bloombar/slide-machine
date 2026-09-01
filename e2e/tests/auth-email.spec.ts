@@ -7,24 +7,21 @@
  * with an inbox does. `MAIL_PROVIDER=log` plus `MAIL_LOG_FILE` gives the run
  * the same text a relay would have delivered.
  */
-import { readFileSync } from 'node:fs'
 import { test, expect, type Page } from './fixtures'
-import { MAIL_LOG } from '../playwright.config'
-import { createProject, openProjectSettings } from './helpers'
+import {
+  createProject,
+  lastMatch,
+  mailTo,
+  openProjectSettings,
+} from './helpers'
 
 const password = 'sturdy-passw0rd'
 
 /** The most recent link of a kind in the mail sent to one address, or '' if
- * no such message has arrived yet. Each logged message is one `---` block,
- * headed by a line naming its recipient. */
-const linkTo = (path: string, to: string): string => {
-  const blocks = readFileSync(MAIL_LOG, 'utf8').split('\n---\n')
-  const mine = blocks.filter(block => block.includes(`to=${to} `))
-  const matches = [
-    ...mine.join('\n').matchAll(new RegExp(`(https?://\\S*${path}\\S*)`, 'g')),
-  ]
-  return matches.at(-1)?.[1] ?? ''
-}
+ * no such message has arrived yet. `mailTo` is what scopes it to the
+ * recipient; see there for why that matters. */
+const linkTo = (path: string, to: string): string =>
+  lastMatch(mailTo(to), new RegExp(`(https?://\\S*${path}\\S*)`, 'g'))
 
 /**
  * Waits for the link the server mailed to one address, and returns it.
