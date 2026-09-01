@@ -299,6 +299,11 @@ const envSchema = z
     // SMTP_USER, which is the account most relays require to be the sender
     // anyway.
     MAIL_FROM: z.string().optional(),
+    // The display name beside that address in a recipient's inbox — "The
+    // Slide Machine" rather than a bare `noreply@`. Cosmetic, but it is the
+    // first thing a reader sees and the main signal that a message is ours.
+    // Unset sends the address alone, which is what a plain relay does.
+    MAIL_FROM_NAME: z.string().optional(),
     // Where the "Send feedback" form delivers (bug reports, feature requests).
     // Unset hides the form: there is no address to send to.
     FEEDBACK_EMAIL: z.string().optional(),

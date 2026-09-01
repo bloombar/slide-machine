@@ -1,7 +1,7 @@
 /**
  * Shared e2e helpers.
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { expect, type Locator, type Page } from '@playwright/test'
 import { MAIL_LOG } from '../playwright.config'
 
@@ -67,31 +67,52 @@ export async function chooseAccountDesign(page: Page, design: RegExp) {
 }
 
 /**
- * Confirms a freshly registered account by following the link the server
- * mailed it (AUTH-3).
+ * Every message the log transport wrote to one address, as one string, or ''
+ * if none has arrived yet. Each logged message is one `---` block, headed by
+ * a line naming its recipient — so scoping by recipient is what keeps
+ * parallel specs out of each other's mail, and is why a spec reading too
+ * early waits instead of quietly answering with someone else's link.
  *
- * Specs that publish or share need this: an unconfirmed account's projects
- * start restricted, which is the point of the requirement. The link is read
- * out of the message the server actually sent — the token is stored hashed,
- * so there is nothing else to read — and matched by recipient, so parallel
- * specs cannot pick up each other's.
+ * The trailing space matters: `to=` is followed by ` subject=`, so it pins
+ * the whole address rather than matching one this is a prefix of.
  */
-export function verificationTokenFor(email: string): string {
-  const log = readFileSync(MAIL_LOG, 'utf8')
-  const forThisUser = log
+export function mailTo(email: string): string {
+  const log = existsSync(MAIL_LOG) ? readFileSync(MAIL_LOG, 'utf8') : ''
+  return log
     .split('\n---\n')
-    .filter(block => block.includes(`to=${email}`))
-    .at(-1)
-  const token = forThisUser?.match(/\/verify-email\?token=(\S+)/)?.[1]
-  if (!token) throw new Error(`no verification link was mailed to ${email}`)
-  return decodeURIComponent(token)
+    .filter(block => block.includes(`to=${email} `))
+    .join('\n')
+}
+
+/** The last match of `pattern`'s first group in `text`, or ''. */
+export const lastMatch = (text: string, pattern: RegExp): string =>
+  [...text.matchAll(pattern)].at(-1)?.[1] ?? ''
+
+/**
+ * Waits for the verification token the server mailed an address (AUTH-3).
+ *
+ * Specs that publish or share need it: an unconfirmed account's projects
+ * start restricted, which is the point of the requirement. The token is
+ * stored hashed, so the message is the only place it exists.
+ *
+ * This waits rather than reads once because registration hands the message
+ * off without awaiting it — the 201 means the account exists, and the mail
+ * follows a moment later. A spec that read on the very next line would find
+ * nothing at all.
+ */
+export async function verificationTokenFor(email: string): Promise<string> {
+  const token = () => lastMatch(mailTo(email), /\/verify-email\?token=(\S+)/g)
+  await expect
+    .poll(token, { message: `no verification link was mailed to ${email}` })
+    .not.toBe('')
+  return decodeURIComponent(token())
 }
 
 export async function verifyEmail(page: Page, email: string) {
   // Confirming is a detour, so put the caller back where it was — otherwise
   // every spec would have to navigate home again afterwards.
   const wasAt = page.url()
-  await page.goto(`/verify-email?token=${verificationTokenFor(email)}`)
+  await page.goto(`/verify-email?token=${await verificationTokenFor(email)}`)
   await expect(page.getByText(/your address is confirmed/i)).toBeVisible()
   await page.goto(wasAt)
 }
