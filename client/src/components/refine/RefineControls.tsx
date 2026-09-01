@@ -4,9 +4,9 @@
  * way — one checkbox-with-explanation, one strength slider.
  *
  * `SLIDE_REFINE_PARTS` names the three separable aspects of a slide the content
- * pass can change. The per-slide dialog offers all three today; the
- * lecture-wide tab still refines a slide wholesale, and can adopt the same list
- * (and the same `SlideRefineParts` payload) whenever it grows the split.
+ * pass can change; both surfaces offer all three. Breaking a slide into several
+ * is offered beside them as its own checkbox (`RefineSplitOption`), because it
+ * changes how many slides the lecture has rather than what one slide says.
  */
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -114,5 +114,58 @@ export function RefinePartsOptions({ value, onChange }: PartsProps) {
         />
       ))}
     </>
+  )
+}
+
+interface SplitProps {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  /** Which surface is asking, so the label can say "this slide" where only
+   * one slide is in scope. */
+  scope: 'slide' | 'lecture'
+  /** True when the text pass is off. Splitting is a claim about a slide's
+   * words — that they are two ideas, or more than one slide can hold — and a
+   * refine that is not reading the words cannot make it, so the option goes
+   * unavailable rather than quietly doing nothing. */
+  textOff?: boolean
+}
+
+/**
+ * "Break up crowded slides" (GEN-4).
+ *
+ * Permission granted before the run, not a question afterwards: a refine that
+ * has this ticked writes the split itself. So the one line of explanation has
+ * to carry the condition as well as the offer — ticking it is not a promise to
+ * divide anything, and the model is told to keep a slide whole unless one
+ * slide genuinely cannot hold it.
+ */
+export function RefineSplitOption({
+  checked,
+  onChange,
+  scope,
+  textOff,
+}: SplitProps) {
+  const { t } = useTranslation()
+  return (
+    <RefineOption
+      label={t(
+        scope === 'slide' ? 'refine.split.labelSlide' : 'refine.split.label',
+      )}
+      description={
+        <>
+          {t(
+            scope === 'slide'
+              ? 'refine.split.descriptionSlide'
+              : 'refine.split.description',
+          )}
+          {textOff && ` ${t('refine.split.needsText')}`}
+        </>
+      }
+      // Shown off while unavailable, so the box never claims something the
+      // run will not do.
+      checked={checked && !textOff}
+      onChange={onChange}
+      disabled={textOff}
+    />
   )
 }

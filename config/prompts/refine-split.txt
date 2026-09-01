@@ -1,0 +1,28 @@
+This instructor has allowed you to break this slide into several, so anything
+you propose here WILL BE APPLIED to their lecture without them being asked
+again. Use it only where it is genuinely necessary.
+
+Add "splitProposal" to the JSON above when EITHER of these is true:
+
+- The slide carries SEPARATE IDEAS that each deserve their own development —
+  distinct stages, a definition and its worked examples, two positions set
+  against each other.
+- The slide is OVERLOADED: more than an audience can take in while listening.
+  Five or six points where three would land, or a body that has to be read
+  rather than glanced at. Length is a real reason on its own — a crowded
+  slide is the commonest thing a refine cannot fix.
+
+Give the COMPLETE content of each part, exactly as you would write those
+slides, and order them as they should appear; the first replaces this slide.
+Split the material between them — do not repeat the same points in every part.
+
+Leave "splitProposal" out when the slide is already ONE clear idea at a size
+an audience can read at a glance. That is still the answer for most slides,
+and a slide that is merely worded poorly is refined, not split. When it is a
+CLOSE CALL, leave it out and return one well-refined slide: turning a lecture
+into more slides than it needs costs the instructor more than a slightly full
+slide does. Never return more than {{maxSplitParts}} parts, and never a part
+with no content of its own. Fill "slots" with your best single-slide version
+either way, so there is a refined slide to keep when you do not split.
+
+"splitProposal": { "reason": "<a short phrase naming what the parts are>", "parts": [ { "layoutType": "<one of the layouts above>", "slots": { ... }, "imageGuidance"?: { ... } } ] }

@@ -152,6 +152,7 @@ describe('deck.refine', () => {
     expect(done.summary).toEqual({
       reframed: 1,
       slidesRefined: 2,
+      slidesSplit: 0,
       transcriptsUpdated: 2,
     })
 
@@ -267,6 +268,176 @@ describe('deck.refine', () => {
     expect(refine).toHaveBeenCalledTimes(2)
     for (const [request] of refine.mock.calls)
       expect(request.layoutDescriptors.map(d => d.type)).toEqual(['content'])
+    refine.mockRestore()
+  })
+
+  /**
+   * Breaking slides up across a whole lecture (GEN-4).
+   *
+   * The batch pass used to drop every proposal, because a background job has
+   * nowhere to ask. The permission now arrives with the request, so the job
+   * writes the split — and the thing to check is the DECK, not the summary: a
+   * count that says "1" while the parts were never created reports exactly
+   * what success reports.
+   *
+   * The mock provider proposes a split for any slide of three or more
+   * bullets, and only when asked.
+   */
+  const seedSplittable = async () => {
+    const wide = await SlideModel.create({
+      deckId,
+      index: 0,
+      layoutType: 'list',
+      title: 'Stages',
+      bullets: ['Absorption', 'Transfer', 'Fixation'],
+    })
+    const plain = await SlideModel.create({
+      deckId,
+      index: 1,
+      layoutType: 'content',
+      title: 'Summary',
+      body: 'One idea',
+    })
+    await DeckModel.updateOne(
+      { _id: deckId },
+      { slideOrder: [wide._id.toString(), plain._id.toString()] },
+    )
+    return { wide: wide._id.toString(), plain: plain._id.toString() }
+  }
+
+  it('breaks a slide up when the run allowed it, and says how many', async () => {
+    const { wide, plain } = await seedSplittable()
+
+    const { body } = await act(ada, 'deck.refine', {
+      deckId,
+      refineSlides: { level: 3, allowSplit: true },
+    })
+    const done = await awaitJob(body.jobId)
+    expect(done.summary.slidesSplit).toBe(1)
+
+    // The parts are real slides, placed after the original, which kept its id.
+    const deck = await DeckModel.findById(deckId)
+    expect(deck?.slideOrder).toHaveLength(4)
+    expect(deck?.slideOrder[0]).toBe(wide)
+    expect(deck?.slideOrder[3]).toBe(plain)
+    const slides = await SlideModel.find({ deckId }).sort({ index: 1 })
+    expect(slides.map(s => s.title)).toEqual([
+      'Stages (1)',
+      'Stages (2)',
+      'Stages (3)',
+      'Summary',
+    ])
+    // index agrees with position, as every other reorder guarantees.
+    expect(slides.map(s => s.index)).toEqual([0, 1, 2, 3])
+  })
+
+  it('gives every new part its own narration', async () => {
+    // A part with no narration is a slide TTS cannot read. The transcript pass
+    // is off here: the parts must be narrated because they are new, not
+    // because everything was.
+    await seedSplittable()
+    const { body } = await act(ada, 'deck.refine', {
+      deckId,
+      refineSlides: { level: 3, allowSplit: true },
+    })
+    await awaitJob(body.jobId)
+
+    const parts = await SlideModel.find({ deckId, title: /^Stages/ })
+    expect(parts).toHaveLength(3)
+    for (const part of parts) expect(part.sourceTranscript).toBeTruthy()
+  })
+
+  it('does not re-refine the parts it just made', async () => {
+    // The parts are already the refined text. Refining them again would
+    // rework what was just written — and could split it a second time.
+    const gen = registry.get<GenerationProvider>('generation')
+    const refine = vi.spyOn(gen, 'refineSlide')
+    await seedSplittable()
+
+    const { body } = await act(ada, 'deck.refine', {
+      deckId,
+      refineSlides: { level: 3, allowSplit: true },
+    })
+    await awaitJob(body.jobId)
+    // The two slides the lecture had when the pass began, and no more.
+    expect(refine).toHaveBeenCalledTimes(2)
+    refine.mockRestore()
+  })
+
+  it('leaves the lecture whole when the run did not allow a split', async () => {
+    // Which is the default, and the case that must never surprise anyone.
+    const { wide } = await seedSplittable()
+    const { body } = await act(ada, 'deck.refine', {
+      deckId,
+      refineSlides: { level: 3 },
+    })
+    const done = await awaitJob(body.jobId)
+    expect(done.summary.slidesSplit).toBe(0)
+
+    const deck = await DeckModel.findById(deckId)
+    expect(deck?.slideOrder).toHaveLength(2)
+    const w = await SlideModel.findById(wide)
+    expect(w?.bullets).toEqual(['Absorption', 'Transfer', 'Fixation'])
+  })
+
+  /**
+   * Reporting which slide is being refined.
+   *
+   * A pass over a long lecture is minutes of silence otherwise, and
+   * "working in the background" reads the same whether it is progressing or
+   * has hung. Caught mid-run rather than after it: a finished job reports no
+   * progress at all, so polling only at the end would find nothing and prove
+   * nothing.
+   */
+  it('reports the slide it is working on while it runs', async () => {
+    const gen = registry.get<GenerationProvider>('generation')
+    // Hold the first slide open so there is a mid-run moment to observe.
+    let release = () => {}
+    const held = new Promise<void>(resolve => {
+      release = resolve
+    })
+    const original = gen.refineSlide.bind(gen)
+    const refine = vi
+      .spyOn(gen, 'refineSlide')
+      .mockImplementationOnce(async req => {
+        await held
+        return original(req)
+      })
+
+    for (const [index, title] of ['Photosynthesis', 'Respiration'].entries())
+      await SlideModel.create({
+        deckId,
+        index,
+        layoutType: 'content',
+        title,
+        body: 'Body',
+      })
+
+    const { body } = await act(ada, 'deck.refine', {
+      deckId,
+      refineSlides: { level: 3 },
+    })
+    const jobId = body.jobId as string
+
+    const mid = await vi.waitFor(
+      async () => {
+        const res = await act(ada, 'deck.refineStatus', { jobId })
+        expect(res.body.progress?.index).toBeDefined()
+        return res.body.progress
+      },
+      { timeout: 5000, interval: 25 },
+    )
+    expect(mid).toMatchObject({
+      phase: 'slides',
+      index: 1,
+      total: 2,
+      title: 'Photosynthesis',
+    })
+
+    release()
+    const done = await awaitJob(jobId)
+    // Finished work is described by the summary; nothing is still in flight.
+    expect(done.progress).toBeUndefined()
     refine.mockRestore()
   })
 

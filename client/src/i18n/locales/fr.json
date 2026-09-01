@@ -826,12 +826,6 @@
       "code": "Ajouter du code",
       "codeIn": "Ajouter du code {language}",
       "preformatted": "Ajouter du texte préformaté"
-    },
-    "split": {
-      "title": "Diviser cette diapositive ?",
-      "intro": "Cette diapositive contient {count} idées distinctes ({reason}). La présenter en {count} diapositives serait plus clair :",
-      "confirm": "Diviser en {count} diapositives",
-      "untitled": "(partie sans titre)"
     }
   },
   "image": {
@@ -923,6 +917,15 @@
         "description": "Trouver une image lorsque la mise en page comporte un emplacement d'image vide."
       }
     },
+    "split": {
+      "label": "Diviser les diapositives surchargées",
+      "labelSlide": "Diviser cette diapositive",
+      "description": "Transformer une diapositive en plusieurs, mais seulement quand une seule ne suffit pas.",
+      "descriptionSlide": "Transformer cette diapositive en plusieurs, mais seulement si une seule ne suffit pas.",
+      "needsText": "(Disponible uniquement pendant l’amélioration du texte de la diapositive.)",
+      "done": "{count, plural, one {La diapositive {number} est maintenant # diapositive} other {La diapositive {number} est maintenant # diapositives}} — {reason}.",
+      "doneNoReason": "{count, plural, one {La diapositive {number} est maintenant # diapositive.} other {La diapositive {number} est maintenant # diapositives.}}"
+    },
     "speakers": {
       "label": "Identifier plusieurs intervenants",
       "description": "Détecter qui a parlé — vous ou les étudiants — et reformuler les prises de parole des étudiants en questions plutôt qu’en affirmations.",
@@ -941,7 +944,8 @@
       "levelLabel": "Intensité de l’amélioration de cette diapositive",
       "marked": "Cette diapositive comporte des annotations au tableau blanc. L'amélioration peut modifier son contenu ou sa mise en page ; vos surlignages et annotations risquent alors de ne plus correspondre à ce qui se trouve dessous.",
       "running": "Amélioration de cette diapositive…",
-      "failed": "Impossible d'améliorer cette diapositive — réessayez"
+      "failed": "Impossible d'améliorer cette diapositive — réessayez",
+      "runningNamed": "Amélioration de la diapositive {number} : {title}…"
     }
   },
   "transcript": {
@@ -1136,11 +1140,19 @@
         "markedTitle": "Améliorer des diapositives annotées ?",
         "markedMessage": "Certaines diapositives comportent des annotations au tableau blanc. L'amélioration peut modifier leur contenu ou leur mise en page ; les surlignages et annotations risquent alors de ne plus correspondre à ce qui se trouve dessous.",
         "markedConfirm": "Améliorer quand même",
+        "progress": {
+          "speakers": "Identification des personnes qui ont parlé dans l’enregistrement…",
+          "slides": "Amélioration de la diapositive {index} sur {total} : {title}",
+          "slidesUntitled": "Amélioration de la diapositive {index} sur {total}…",
+          "narration": "Rédaction de la version parlée de la diapositive {index} sur {total} : {title}",
+          "narrationUntitled": "Rédaction de la version parlée de la diapositive {index} sur {total}…"
+        },
         "summary": {
           "done": "Terminé — {changes}.",
           "none": "Terminé — aucune modification nécessaire.",
           "reframed": "{count, plural, one {# diapositive étudiante reformulée} other {# diapositives étudiantes reformulées}}",
           "slidesRefined": "{count, plural, one {# diapositive améliorée} other {# diapositives améliorées}}",
+          "slidesSplit": "{count, plural, one {divisé # diapositive} other {divisé # diapositives}}",
           "transcriptsUpdated": "{count, plural, one {# narration mise à jour} other {# narrations mises à jour}}"
         }
       }

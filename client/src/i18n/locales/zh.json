@@ -826,12 +826,6 @@
       "code": "添加代码",
       "codeIn": "添加 {language} 代码",
       "preformatted": "添加预格式化文本"
-    },
-    "split": {
-      "title": "拆分这张幻灯片？",
-      "intro": "这张幻灯片包含 {count} 个独立的要点（{reason}）。拆成 {count} 张会更清晰：",
-      "confirm": "拆分为 {count} 张幻灯片",
-      "untitled": "（无标题部分）"
     }
   },
   "image": {
@@ -923,6 +917,15 @@
         "description": "当版式留有图片位而尚未放图时，为其寻找一张图片。"
       }
     },
+    "split": {
+      "label": "拆分内容过多的幻灯片",
+      "labelSlide": "拆分这张幻灯片",
+      "description": "在一张幻灯片确实装不下时，将它拆成几张；否则不会拆分。",
+      "descriptionSlide": "如果这张幻灯片确实装不下，就把它拆成几张；否则不会拆分。",
+      "needsText": "（仅在优化幻灯片文字时可用。）",
+      "done": "{count, plural, other {第 {number} 张幻灯片现在是 # 张}} — {reason}。",
+      "doneNoReason": "{count, plural, other {第 {number} 张幻灯片现在是 # 张。}}"
+    },
     "speakers": {
       "label": "识别多位讲话者",
       "description": "识别是谁在讲话——你还是学生——并把学生的发言改写为提问而非事实陈述。",
@@ -941,7 +944,8 @@
       "levelLabel": "这张幻灯片的优化强度",
       "marked": "这张幻灯片上有白板标注。优化可能改变其内容或版式，你的高亮和批注可能不再与下方内容对齐。",
       "running": "正在优化这张幻灯片…",
-      "failed": "无法优化这张幻灯片——请重试"
+      "failed": "无法优化这张幻灯片——请重试",
+      "runningNamed": "正在优化第 {number} 张幻灯片：{title}…"
     }
   },
   "transcript": {
@@ -1136,11 +1140,19 @@
         "markedTitle": "优化带有标注的幻灯片？",
         "markedMessage": "有些幻灯片带有白板标注。优化可能改变其内容或版式，高亮和批注可能不再与下方内容对齐。",
         "markedConfirm": "仍然优化",
+        "progress": {
+          "speakers": "正在识别录音中的发言人…",
+          "slides": "正在优化第 {index} 张幻灯片，共 {total} 张：{title}",
+          "slidesUntitled": "正在优化第 {index} 张幻灯片，共 {total} 张…",
+          "narration": "正在撰写第 {index} 张幻灯片的口述版本，共 {total} 张：{title}",
+          "narrationUntitled": "正在撰写第 {index} 张幻灯片的口述版本，共 {total} 张…"
+        },
         "summary": {
           "done": "完成 — {changes}。",
           "none": "完成 — 无需任何更改。",
           "reframed": "{count, plural, other {改写了 # 张学生发言的幻灯片}}",
           "slidesRefined": "{count, plural, other {优化了 # 张幻灯片}}",
+          "slidesSplit": "{count, plural, other {拆分了 # 张幻灯片}}",
           "transcriptsUpdated": "{count, plural, other {更新了 # 段旁白}}"
         }
       }

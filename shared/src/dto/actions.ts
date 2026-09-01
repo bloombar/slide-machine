@@ -12,10 +12,7 @@ import type {
 } from '../types/deck'
 import type { AccountType, ProfileVisibility } from '../types/user'
 import type { WordTiming } from '../providers/transcription'
-import type {
-  SlideSplitPart,
-  SlideSplitProposal,
-} from '../providers/generation'
+import type { SlideSplitPart } from '../providers/generation'
 
 export interface ProjectCreateInput {
   /** Optional: a blank title stores a titleless "default" project, which
@@ -256,6 +253,8 @@ export interface DeckSetRefineSettingsInput {
   identifySpeakers?: boolean | null
   slidesEnabled?: boolean | null
   slidesLevel?: number | null
+  /** Whether a refine may break a slide into several when one cannot hold it. */
+  splitEnabled?: boolean | null
   transcriptEnabled?: boolean | null
   transcriptLevel?: number | null
 }
@@ -313,11 +312,14 @@ export interface DeckDiarizeResult {
 /**
  * Which aspects of a slide the content pass may change. Refining a slide is one
  * generation call whose result has three separable parts, so a caller can ask
- * for any subset: the per-slide Refine dialog exposes all three, while the
- * lecture-wide pass currently asks for all of them (its UI has no split yet —
- * when it grows one, it passes this same shape).
+ * for any subset; both the per-slide Refine dialog and the lecture-wide Refine
+ * tab expose all three.
  *
  * Absent fields mean "yes": omitting the object entirely refines everything.
+ *
+ * Breaking a slide into several is NOT one of these — it changes how many
+ * slides the lecture has rather than what one slide says, so it is its own
+ * permission (`allowSplit`) alongside this object.
  */
 export interface SlideRefineParts {
   /** Rewrite the slide's words, within its current layout. */
@@ -337,8 +339,13 @@ export interface DeckRefineInput {
   /** Identify lecturer vs students and reframe student turns as questions. */
   identifySpeakers?: boolean
   /** Improve each slide's content/layout/image in place. `parts` narrows what
-   * may change; absent = all of them. */
-  refineSlides?: { level: number; parts?: SlideRefineParts }
+   * may change; absent = all of them. `allowSplit` lets the pass break a slide
+   * into several where one genuinely cannot hold it; absent/false never does. */
+  refineSlides?: {
+    level: number
+    parts?: SlideRefineParts
+    allowSplit?: boolean
+  }
   /** Rewrite each slide's spoken narration to describe concepts more eloquently. */
   refineTranscript?: { level: number }
 }
@@ -356,6 +363,9 @@ export interface RefineJobSummary {
   reframed: number
   /** Slides whose content was refined. */
   slidesRefined: number
+  /** Slides that were broken into several because one could not hold them
+   * (only ever non-zero when the run allowed splitting). */
+  slidesSplit: number
   /** Slides whose spoken narration was updated (refinement + keeping TTS in-line). */
   transcriptsUpdated: number
 }
@@ -364,9 +374,35 @@ export interface DeckRefineStatusInput {
   jobId: string
 }
 
+/** Which pass of a refine job is running. Ordered as they run. */
+export type RefineJobPhase = 'speakers' | 'slides' | 'narration'
+
+/**
+ * Where a running refine job has got to, so the client can name the slide
+ * being worked on rather than saying only "working in the background".
+ *
+ * Written before each slide and read by polling, so it is a snapshot: by the
+ * time it is displayed the job may already be on the next slide. That is fine
+ * for a progress line and is why nothing is decided from it.
+ */
+export interface RefineJobProgress {
+  phase: RefineJobPhase
+  /** Slides this pass has finished. */
+  done: number
+  /** Slides this pass will visit in total. */
+  total: number
+  /** 1-based position in the lecture of the slide being worked on now. */
+  index?: number
+  /** That slide's title, or its opening words when it has no title. Absent
+   * when the slide is blank. */
+  title?: string
+}
+
 export interface DeckRefineStatusResult {
   status: RefineJobStatus
   summary?: RefineJobSummary
+  /** Present while running, once the first slide has been reached. */
+  progress?: RefineJobProgress
   error?: string
 }
 
@@ -380,6 +416,9 @@ export interface SlideRefineOptions {
   identifySpeakers?: boolean
   /** Which aspects of the slide the content pass may change; absent = all. */
   parts?: SlideRefineParts
+  /** Let the refine break this slide into several when one slide genuinely
+   * cannot hold what it carries. Absent = the lecture's saved setting. */
+  allowSplit?: boolean
   /** Rewrite the slide's spoken narration too. */
   refineTranscript?: boolean
   /** 1 (light) – 5 (substantial), applied to BOTH the content and narration
@@ -407,14 +446,26 @@ export interface DeckRefineSlideResult {
    * for); true only when the slide was actually reframed as student speech. */
   reframed?: boolean
   /**
-   * The model's case for showing this slide as several (GEN-4).
+   * The slide was broken into several (GEN-4), and this is what that did.
    *
-   * Nothing has been done about it: the slide comes back refined as one
-   * slide, and this is the offer. The viewer shows the parts and applies them
-   * with `deck.splitSlide` only if the instructor accepts. Absent whenever
-   * one slide is the right answer.
+   * Only ever present when the run allowed splitting AND one slide genuinely
+   * could not hold the content. `slide` above is the first part, keeping the
+   * original's id and place; these are the slides inserted after it, and the
+   * deck's order once they were.
    */
-  splitProposal?: SlideSplitProposal
+  split?: SlideSplitOutcome
+}
+
+/** The result of breaking one slide into several, for a viewer patching the
+ * deck in place rather than reloading it. */
+export interface SlideSplitOutcome {
+  /** The model's one-phrase reason, so the instructor can be told WHY their
+   * slide became several — "three separate stages". */
+  reason: string
+  /** The slides created after the original, in order. */
+  added: Slide[]
+  /** The deck's slide order after the insert, so the viewer can re-key. */
+  slideOrder: string[]
 }
 
 /**

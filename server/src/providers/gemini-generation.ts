@@ -50,6 +50,7 @@ import { freedomPolicy, renderGenerationPrompt } from './prompt-templates'
 import { tightenSearchPhrases } from '../enrichment/keywords'
 import {
   renderRefinePrompt,
+  renderRefineSplitPrompt,
   renderNarratePrompt,
   renderReformatPrompt,
   renderRefitPrompt,
@@ -1055,16 +1056,27 @@ const slideLoadFragment = (req: SlideRefineRequest): string => {
   const full =
     (limits.maxBullets ? bullets >= limits.maxBullets : false) ||
     (limits.maxBodyChars ? body >= limits.maxBodyChars * 0.9 : false)
+  // The "so split it" half of the sentence is only true when the instructor
+  // has allowed a split; without that permission the measurement still helps
+  // the model tighten the wording, but there is nothing to propose.
   return `\n\nHow full this slide is, against its own layout's limits: ${parts.join(
     '; ',
   )}.${
     full
-      ? ' This slide is AT its limit — it is carrying as much as the layout can show. That is the case a split exists for, so propose one unless the content is genuinely a single indivisible idea.'
+      ? req.allowSplit
+        ? ' This slide is AT its limit — it is carrying as much as the layout can show. That is the case a split exists for, so propose one unless the content is genuinely a single indivisible idea.'
+        : ' This slide is AT its limit — it is carrying as much as the layout can show, so tighten rather than add.'
       : ''
   }`
 }
 
-/** Slide-refine prompt: improve the slide at a 1–5 strength. */
+/**
+ * Slide-refine prompt: improve the slide at a 1–5 strength.
+ *
+ * The split instructions are spliced in only when the instructor allowed one.
+ * Left out, the model is never told the shape exists, so it cannot spend
+ * tokens writing parts that would be thrown away.
+ */
 const refinePrompt = (req: SlideRefineRequest): string =>
   renderRefinePrompt({
     level: String(req.level),
@@ -1076,8 +1088,10 @@ const refinePrompt = (req: SlideRefineRequest): string =>
     context: contextFragment(req.seedContext),
     language: languageFragment(req.language),
     layouts: layoutMenu(req.layoutDescriptors),
-    maxSplitParts: String(MAX_SPLIT_PARTS),
     load: slideLoadFragment(req),
+    split: req.allowSplit
+      ? `\n${renderRefineSplitPrompt({ maxSplitParts: String(MAX_SPLIT_PARTS) })}`
+      : '',
   })
 
 const refitResultSchema = z.object({
@@ -1522,7 +1536,9 @@ export class GeminiGenerationProvider implements GenerationProvider {
      * Empty parts are removed before the cap, so a model that padded its list
      * to three does not spend the allowance on blanks.
      */
-    const proposed = parsed.data.splitProposal
+    // Not asked for, so not honored: a model that volunteers a split when the
+    // prompt never offered one must not restructure a lecture on its own.
+    const proposed = req.allowSplit ? parsed.data.splitProposal : undefined
     const parts = (proposed?.parts ?? [])
       .filter(partHasContent)
       .slice(0, MAX_SPLIT_PARTS)
