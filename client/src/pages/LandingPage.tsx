@@ -17,6 +17,7 @@
 import { Link, Navigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import {
+  Bot,
   ClipboardCheck,
   FileDown,
   FileUp,
@@ -36,10 +37,11 @@ import { getBadgeUrl } from '../components/layout/badge'
 const FEATURES = [
   { name: 'Live', Icon: Mic },
   { name: 'Seed', Icon: FileUp },
-  { name: 'Board', Icon: PenLine },
   { name: 'Quiz', Icon: ClipboardCheck },
+  { name: 'Board', Icon: PenLine },
   { name: 'Speak', Icon: Languages },
   { name: 'After', Icon: FileDown },
+  { name: 'Mcp', Icon: Bot },
 ] as const
 
 /** The data disclosures, as key stems under `landing.data`. */

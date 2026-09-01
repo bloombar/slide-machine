@@ -74,7 +74,9 @@
     "featureQuizTitle": "Cuestionarios de salida",
     "featureQuizBody": "Genera un cuestionario a partir de la presentación terminada y publícalo como formulario de Google, para que la clase lo responda al salir y Google lo califique por ti.",
     "featureSpeakTitle": "Traducido y leído en voz alta",
-    "featureSpeakBody": "Lee una clase terminada en el idioma que elijas y escucha su texto leído en voz alta en ese idioma: para repasar, y para quienes no la oyeron en su lengua materna."
+    "featureSpeakBody": "Lee una clase terminada en el idioma que elijas y escucha su texto leído en voz alta en ese idioma: para repasar, y para quienes no la oyeron en su lengua materna.",
+    "featureMcpTitle": "Desde tu asistente de IA",
+    "featureMcpBody": "Conecta The Slide Machine con el asistente que ya usas —Claude o ChatGPT— y pídele que cree una clase o que retoque una existente. Se conecta mediante un estándar abierto llamado MCP, y las diapositivas aparecen en tu cuenta, listas para abrir y editar."
   },
   "auth": {
     "signIn": "Iniciar sesión",

@@ -81,17 +81,34 @@ describe('LandingPage', () => {
     expect(
       screen.getByRole('heading', { name: 'What it does' }),
     ).toBeInTheDocument()
-    // Every feature card, so one lost to a key typo fails here
-    for (const heading of [
+    // Every feature card, in reading order: one lost to a key typo fails
+    // here, and so does one that quietly moves.
+    const headings = screen
+      .getByRole('heading', { name: 'What it does' })
+      .parentElement!.querySelectorAll('h3')
+    expect([...headings].map(h => h.textContent)).toEqual([
       'Slides written as you speak',
       'Seeded from your own material',
-      'A whiteboard over any slide',
       'Exit-ticket quizzes',
+      'A whiteboard over any slide',
       'Translated, and read aloud',
       'Editable and exportable afterwards',
-    ]) {
-      expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument()
-    }
+      'Made from your AI assistant',
+    ])
+  })
+
+  // The assistant card is the one feature a visitor cannot discover by
+  // using the app, so the homepage has to name the standard it runs on.
+  it('names MCP on the assistant card', async () => {
+    renderLanding(401)
+    await screen.findByRole('heading', { name: 'The Slide Machine' })
+
+    const card = screen
+      .getByRole('heading', { name: 'Made from your AI assistant' })
+      .closest('div')!.parentElement!
+    expect(card.textContent).toContain('MCP')
+    expect(card.textContent).toContain('Claude')
+    expect(card.textContent).toContain('ChatGPT')
   })
 
   it('gives every feature card an icon, decorative rather than announced', async () => {
@@ -103,7 +120,7 @@ describe('LandingPage', () => {
     const cards = screen
       .getByRole('heading', { name: 'What it does' })
       .parentElement!.querySelectorAll('svg[aria-hidden]')
-    expect(cards).toHaveLength(6)
+    expect(cards).toHaveLength(7)
   })
 
   it('states every kind of user data it asks for and why', async () => {

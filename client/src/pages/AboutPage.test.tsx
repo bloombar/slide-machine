@@ -26,4 +26,21 @@ describe('AboutPage', () => {
       '/feedback',
     )
   })
+
+  it('points at the assistant how-to', () => {
+    render(
+      <MemoryRouter>
+        <AboutPage />
+      </MemoryRouter>,
+    )
+    expect(
+      screen.getByRole('heading', {
+        level: 2,
+        name: 'Made from your AI assistant',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'How to connect an assistant' }),
+    ).toHaveAttribute('href', '/assistants')
+  })
 })

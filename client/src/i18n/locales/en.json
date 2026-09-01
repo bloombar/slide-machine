@@ -74,7 +74,9 @@
     "featureQuizTitle": "Exit-ticket quizzes",
     "featureQuizBody": "Generate a quiz from the finished deck and publish it as a Google Form, so the class can answer it on the way out and Google can grade it for you.",
     "featureSpeakTitle": "Translated, and read aloud",
-    "featureSpeakBody": "Read a finished lecture in the language you pick, and have its text spoken aloud in that language — for revision, and for students who did not hear it in their first language."
+    "featureSpeakBody": "Read a finished lecture in the language you pick, and have its text spoken aloud in that language — for revision, and for students who did not hear it in their first language.",
+    "featureMcpTitle": "Made from your AI assistant",
+    "featureMcpBody": "Connect The Slide Machine to the assistant you already talk to — Claude or ChatGPT — and ask it to build a lecture or revise one. It joins through an open standard called MCP, and the slides appear in your account, ready to open and edit."
   },
   "auth": {
     "signIn": "Sign in",
