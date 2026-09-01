@@ -131,13 +131,13 @@ interface SplitProps {
 }
 
 /**
- * "Break a slide up when it needs it" (GEN-4).
+ * "Break up crowded slides" (GEN-4).
  *
  * Permission granted before the run, not a question afterwards: a refine that
- * has this ticked writes the split itself. So the explanation has to carry the
- * reassurance that ticking it is not a promise to divide anything — most
- * slides come back as one, and the model is told to keep them that way unless
- * splitting is genuinely necessary.
+ * has this ticked writes the split itself. So the one line of explanation has
+ * to carry the condition as well as the offer — ticking it is not a promise to
+ * divide anything, and the model is told to keep a slide whole unless one
+ * slide genuinely cannot hold it.
  */
 export function RefineSplitOption({
   checked,

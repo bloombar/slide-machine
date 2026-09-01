@@ -90,7 +90,7 @@ describe('DeckSettingsModal — Refine tab', () => {
     // Breaking slides up starts off for the same reason: it changes how many
     // slides the lecture has.
     expect(
-      screen.getByRole('checkbox', { name: /Break slides up/ }),
+      screen.getByRole('checkbox', { name: /Break up crowded slides/ }),
     ).not.toBeChecked()
   })
 
@@ -448,7 +448,9 @@ describe('DeckSettingsModal — Refine tab', () => {
     })
     renderModal()
     fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
-    fireEvent.click(screen.getByRole('checkbox', { name: /Break slides up/ }))
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /Break up crowded slides/ }),
+    )
     expect(saved.splitEnabled).toBe(true)
 
     fireEvent.click(screen.getByRole('button', { name: 'Refine' }))
@@ -466,7 +468,7 @@ describe('DeckSettingsModal — Refine tab', () => {
     renderModal({ refineSplitEnabled: true })
     fireEvent.click(screen.getByRole('tab', { name: 'Refine with AI' }))
     expect(
-      screen.getByRole('checkbox', { name: /Break slides up/ }),
+      screen.getByRole('checkbox', { name: /Break up crowded slides/ }),
     ).toBeChecked()
   })
 

@@ -41,7 +41,7 @@ describe('SlideRefineModal', () => {
     expect(checkbox(/Refine the spoken transcript/)).not.toBeChecked()
     // Breaking the slide up changes how many slides the lecture has, so it is
     // opted into as well.
-    expect(checkbox(/Break this slide up/)).not.toBeChecked()
+    expect(checkbox(/Break up this slide/)).not.toBeChecked()
     // Speaker ID is opted into, not out of: it re-reads the whole recording at
     // the same per-minute rate as capturing it, so refining a slide's wording
     // must not quietly spend a diarization allowance too.
@@ -108,7 +108,7 @@ describe('SlideRefineModal', () => {
 
   it('asks for one once it is ticked', () => {
     const { onRefine } = setup()
-    fireEvent.click(checkbox(/Break this slide up/))
+    fireEvent.click(checkbox(/Break up this slide/))
     fireEvent.click(refineButton())
     expect(onRefine).toHaveBeenCalledWith(
       expect.objectContaining({ allowSplit: true }),
@@ -117,7 +117,7 @@ describe('SlideRefineModal', () => {
 
   it('starts from the lecture’s saved answer', () => {
     setup({ defaultAllowSplit: true })
-    expect(checkbox(/Break this slide up/)).toBeChecked()
+    expect(checkbox(/Break up this slide/)).toBeChecked()
   })
 
   it('promises that a slide that does not need it is left whole', () => {
@@ -125,7 +125,7 @@ describe('SlideRefineModal', () => {
     // "divide my slide" gets left off by people who would have wanted it.
     setup()
     expect(
-      screen.getByText(/only happen if it is genuinely necessary/i),
+      screen.getByText(/only if one slide genuinely cannot hold it/i),
     ).toBeInTheDocument()
   })
 
@@ -133,10 +133,10 @@ describe('SlideRefineModal', () => {
     // Splitting is a claim about the slide's WORDS. A refine not reading them
     // cannot make it, so the box must not quietly ask for one.
     const { onRefine } = setup()
-    fireEvent.click(checkbox(/Break this slide up/))
+    fireEvent.click(checkbox(/Break up this slide/))
     fireEvent.click(checkbox(/Refine slide text/))
-    expect(checkbox(/Break this slide up/)).toBeDisabled()
-    expect(checkbox(/Break this slide up/)).not.toBeChecked()
+    expect(checkbox(/Break up this slide/)).toBeDisabled()
+    expect(checkbox(/Break up this slide/)).not.toBeChecked()
 
     fireEvent.click(refineButton())
     expect(onRefine).toHaveBeenCalledWith(

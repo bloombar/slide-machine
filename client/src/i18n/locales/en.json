@@ -918,10 +918,10 @@
       }
     },
     "split": {
-      "label": "Break slides up when they need it",
-      "labelSlide": "Break this slide up if it needs it",
-      "description": "When a slide is carrying more than one slide can hold, let the refine turn it into several. Nothing is broken up unless it is genuinely necessary — a slide that only needs better wording is reworded, not divided, and most slides come back as one.",
-      "descriptionSlide": "If this slide is carrying more than one slide can hold, let the refine turn it into several. It will only happen if it is genuinely necessary — a slide that only needs better wording is reworded, not divided.",
+      "label": "Break up crowded slides",
+      "labelSlide": "Break up this slide",
+      "description": "Turn a slide into several, but only when one slide genuinely cannot hold it.",
+      "descriptionSlide": "Turn this slide into several, but only if one slide genuinely cannot hold it.",
       "needsText": "(Available only while slide text is being refined.)",
       "done": "{count, plural, one {Slide {number} is now # slide} other {Slide {number} is now # slides}} — {reason}.",
       "doneNoReason": "{count, plural, one {Slide {number} is now # slide.} other {Slide {number} is now # slides.}}"

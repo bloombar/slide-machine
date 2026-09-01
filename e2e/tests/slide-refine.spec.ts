@@ -163,11 +163,13 @@ test('a refine leaves the lecture whole unless the box is ticked', async ({
   // Off by default: the deck's shape is not something a refine changes on
   // its own, however full the slide is.
   const box = dialog.getByRole('checkbox', {
-    name: /Break this slide up if it needs it/,
+    name: /Break up this slide/,
   })
   await expect(box).not.toBeChecked()
   // And the copy promises what the default implies.
-  await expect(dialog).toContainText(/only happen if it is genuinely necessary/)
+  await expect(dialog).toContainText(
+    /only if one slide genuinely cannot hold it/,
+  )
 
   const refined = page.waitForResponse(
     r => r.url().includes('/actions/deck.refineSlide') && r.status() === 200,
@@ -190,9 +192,7 @@ test('ticking the box turns one crowded slide into several', async ({
 }) => {
   await buildWideDeck(page, 'divided')
   const dialog = await openRefineDialog(page)
-  await dialog
-    .getByRole('checkbox', { name: /Break this slide up if it needs it/ })
-    .check()
+  await dialog.getByRole('checkbox', { name: /Break up this slide/ }).check()
 
   const refined = page.waitForResponse(
     r => r.url().includes('/actions/deck.refineSlide') && r.status() === 200,

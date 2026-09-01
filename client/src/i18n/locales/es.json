@@ -918,10 +918,10 @@
       }
     },
     "split": {
-      "label": "Dividir las diapositivas cuando haga falta",
-      "labelSlide": "Dividir esta diapositiva si hace falta",
-      "description": "Cuando una diapositiva contiene más de lo que cabe en una sola, permite que el refinamiento la convierta en varias. No se divide nada salvo que sea realmente necesario: una diapositiva que solo necesita mejor redacción se reescribe, no se divide, y la mayoría vuelve como una sola.",
-      "descriptionSlide": "Si esta diapositiva contiene más de lo que cabe en una sola, permite que el refinamiento la convierta en varias. Solo ocurrirá si es realmente necesario: una diapositiva que solo necesita mejor redacción se reescribe, no se divide.",
+      "label": "Dividir diapositivas sobrecargadas",
+      "labelSlide": "Dividir esta diapositiva",
+      "description": "Convertir una diapositiva en varias, pero solo cuando una sola no pueda con todo.",
+      "descriptionSlide": "Convertir esta diapositiva en varias, pero solo si una sola no puede con todo.",
       "needsText": "(Disponible solo mientras se refina el texto de la diapositiva.)",
       "done": "{count, plural, one {La diapositiva {number} ahora es # diapositiva} other {La diapositiva {number} ahora son # diapositivas}} — {reason}.",
       "doneNoReason": "{count, plural, one {La diapositiva {number} ahora es # diapositiva.} other {La diapositiva {number} ahora son # diapositivas.}}"

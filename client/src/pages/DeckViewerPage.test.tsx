@@ -511,7 +511,7 @@ describe('DeckViewerPage applied split (GEN-4)', () => {
     if (tick)
       fireEvent.click(
         screen.getByRole('checkbox', {
-          name: /Break this slide up if it needs it/i,
+          name: /Break up this slide/i,
         }),
       )
     fireEvent.click(screen.getByRole('button', { name: 'Refine' }))
