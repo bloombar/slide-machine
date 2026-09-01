@@ -64,38 +64,47 @@ export default function LandingPage() {
     <div className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6">
       <NavLocaleSwitcher />
 
-      {/* Hero: who this is and what it is for, above the fold — drawn as a
-          slide, since a slide is what the app makes. The frame borrows
-          SlideView's idiom (a 16:9 white surface, rounded, with a dropped
-          shadow) and sits on a tinted band, without which a white slide on
-          a white page has no edge to read. Inside it is the oldest slide
-          arrangement there is: a picture holding one side, the words the
-          other.
+      {/* Hero: who this is and what it is for, above the fold.
 
-          The ratio is a MINIMUM height, not a fixed one: `56.25cqw` is 16:9
-          of the band's own width (hence the `@container`), so a wide page
-          gets a slide-shaped box, and a phone — where the columns stack and
-          this much text is taller than a box that narrow — gets a taller
-          box instead of clipped words. */}
-      <section className="@container rounded-2xl bg-slate-100 p-3 sm:p-5">
-        <div className="grid min-h-[56.25cqw] items-center gap-8 rounded-xl border border-slate-200 bg-white px-6 py-10 shadow-2xl sm:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] sm:gap-10 sm:px-12">
+          From `md` up it is drawn as a slide, since a slide is what the app
+          makes: the frame borrows SlideView's idiom (a 16:9 white surface,
+          rounded, with a dropped shadow) and sits on a tinted band, without
+          which a white slide on a white page has no edge to read. Inside it
+          is the oldest slide arrangement there is — a picture holding one
+          side, the words the other.
+
+          A phone gets none of that. A slide is a wide shape, and the frame
+          on a narrow screen costs two nested inset borders and a stacked
+          image for a box that no longer reads as a slide anyway; so below
+          `md` the hero is the plain centred column it always was, and the
+          slide styling is layered on top of it by the `md:` classes.
+
+          Hence the ratio is a MINIMUM height rather than `aspect-video`:
+          `56.25cqw` is 16:9 of the band's own width (hence the
+          `@container`), so a wide page is slide-shaped, and a narrow one is
+          free to grow instead of clipping words. */}
+      <section className="@container md:rounded-2xl md:bg-slate-100 md:p-5">
+        <div className="flex flex-col items-center gap-5 text-center md:grid md:min-h-[56.25cqw] md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] md:gap-10 md:rounded-xl md:border md:border-slate-200 md:bg-white md:px-12 md:py-10 md:text-left md:shadow-2xl">
           <div className="flex justify-center">
-            {/* The picture is the slide's whole left column: it fills the
+            {/* On a slide the picture is the whole left column: it fills the
                 column's width, and only stops growing if the slide is too
-                short to hold it. */}
+                short to hold it. On a phone it is back to a badge over the
+                title. */}
             <img
               src={getBadgeUrl()}
               alt=""
               aria-hidden
-              className="h-36 w-auto sm:h-auto sm:max-h-80 sm:w-full"
+              className="h-20 w-auto md:h-auto md:max-h-80 md:w-full"
             />
           </div>
-          <div className="flex flex-col items-center gap-5 text-center sm:items-start sm:text-left">
+          <div className="flex flex-col items-center gap-5 md:items-start">
             <h1 className="text-4xl font-bold tracking-tight">
               {t('landing.title')}
             </h1>
             <p className="text-lg text-slate-600">{t('landing.tagline')}</p>
-            <p className="leading-7 text-slate-700">{t('landing.intro')}</p>
+            <p className="max-w-2xl text-left leading-7 text-slate-700">
+              {t('landing.intro')}
+            </p>
             <Link
               to="/login"
               className="flex items-center gap-2 rounded-md bg-indigo-600 px-5 py-3 font-medium text-white"
