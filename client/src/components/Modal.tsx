@@ -67,6 +67,24 @@ export default function Modal({
   escapeIgnoreTyping = false,
 }: Props) {
   const panelRef = useRef<HTMLDivElement>(null)
+  const returnFocusTo = useRef<Element | null>(null)
+
+  // Focus goes into the dialog on open, so it has to come back out on close:
+  // otherwise it lands on <body> and a keyboard user has to tab the whole
+  // page again to reach the control they just pressed — which, for the
+  // sign-in gate (AUTH-8), is exactly the control they are meant to press
+  // again. Declared BEFORE the effect below so it records the trigger before
+  // that one moves focus off it, and kept in its own effect with no deps so
+  // a re-render (a new onClose identity, say) never restores mid-dialog.
+  useEffect(() => {
+    returnFocusTo.current = document.activeElement
+    return () => {
+      const back = returnFocusTo.current
+      // Skip a trigger that closing removed from the page; focusing a
+      // detached node silently does nothing anyway.
+      if (back instanceof HTMLElement && back.isConnected) back.focus()
+    }
+  }, [])
 
   useEffect(() => {
     ;(initialFocusRef?.current ?? panelRef.current)?.focus()

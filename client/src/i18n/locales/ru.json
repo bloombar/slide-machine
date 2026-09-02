@@ -136,7 +136,12 @@
       "confirmed": "Подтверждён"
     },
     "legalRegister": "Создавая аккаунт, вы принимаете наши <termsLink>Условия использования</termsLink> и <privacyLink>Политику конфиденциальности</privacyLink>.",
-    "legalSignIn": "Выполняя вход, вы принимаете наши <termsLink>Условия использования</termsLink> и <privacyLink>Политику конфиденциальности</privacyLink>."
+    "legalSignIn": "Выполняя вход, вы принимаете наши <termsLink>Условия использования</termsLink> и <privacyLink>Политику конфиденциальности</privacyLink>.",
+    "gate": {
+      "playback": "Для воспроизведения нужен аккаунт",
+      "narration": "Для озвучивания нужен аккаунт",
+      "translation": "Для просмотра перевода нужен аккаунт"
+    }
   },
   "health": {
     "summary": "API {status}",

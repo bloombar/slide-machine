@@ -3,8 +3,9 @@
  * sign-in is configured.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import GoogleSignInButton from './GoogleSignInButton'
+import { takeReturnPath } from '../auth/returnPath'
 import { config } from '../config'
 
 // config is a frozen object built from import.meta.env; spy on the flag
@@ -28,6 +29,17 @@ describe('GoogleSignInButton', () => {
     expect(
       screen.getByRole('link', { name: /sign up with google/i }),
     ).toBeInTheDocument()
+  })
+
+  // The OAuth callback always lands on /app and this link takes the whole
+  // tab, so the page being left has to be parked before it goes — otherwise
+  // choosing Google from the sign-in dialog loses the lecture (AUTH-8).
+  it('parks the page it is leaving, for the /app landing to pick up', () => {
+    sessionStorage.clear()
+    window.history.replaceState({}, '', '/d/shared-abc123?slide=s2')
+    render(<GoogleSignInButton action="Sign in" />)
+    fireEvent.click(screen.getByRole('link', { name: /sign in with google/i }))
+    expect(takeReturnPath()).toBe('/d/shared-abc123?slide=s2')
   })
 
   it('renders nothing until Google sign-in is configured', () => {

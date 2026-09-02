@@ -4011,3 +4011,371 @@ describe('DeckViewerPage, opened from a link', () => {
     ).not.toBeInTheDocument()
   })
 })
+
+/**
+ * The sign-in gate (AUTH-8): a signed-out visitor reaching for playback,
+ * per-slide narration, or translated viewing gets the sign-in dialog instead
+ * of the action, named for what they reached for; a signed-in visitor never
+ * sees it; and a successful sign-in closes the dialog without firing the
+ * action itself, leaving the visitor on the slide they were reading.
+ */
+describe('DeckViewerPage sign-in gate (AUTH-8)', () => {
+  /** Renders the deck signed out, with a `/api/auth/login` route so a gate
+   * dialog can be signed into from inside the test. */
+  const openGated = (entry: string, loginBody?: Record<string, unknown>) => {
+    const routes = mockFetchRoutes({
+      '/api/auth/refresh': () => ({ status: 401 }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: false },
+      }),
+      ...(loginBody
+        ? { '/api/auth/login': () => ({ status: 200, body: loginBody }) }
+        : {}),
+    })
+    render(
+      <MemoryRouter initialEntries={[entry]}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    return routes
+  }
+
+  it('gates the play button, naming playback, and never plays', async () => {
+    vi.spyOn(runtimeConfig, 'getTtsEnabled').mockReturnValue(true)
+    const { calls } = openGated('/d/shared-abc123')
+    fireEvent.click(await screen.findByRole('button', { name: 'Play deck' }))
+
+    expect(
+      await screen.findByRole('dialog', {
+        name: 'Playback needs an account',
+      }),
+    ).toBeInTheDocument()
+    expect(calls.some(u => u.includes('/tts'))).toBe(false)
+  })
+
+  it('gates "Speak this slide", naming narration, and never speaks', async () => {
+    vi.spyOn(runtimeConfig, 'getTtsEnabled').mockReturnValue(true)
+    const { calls } = openGated('/d/shared-abc123')
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Speak this slide' }))
+
+    expect(
+      await screen.findByRole('dialog', {
+        name: 'Narration needs an account',
+      }),
+    ).toBeInTheDocument()
+    expect(calls.some(u => u.includes('/tts'))).toBe(false)
+  })
+
+  it('gates the language switcher, naming translated viewing, and never fetches a translation', async () => {
+    vi.spyOn(runtimeConfig, 'getTranslationEnabled').mockReturnValue(true)
+    const { calls } = openGated('/d/shared-abc123')
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Slide language/ }),
+    )
+
+    expect(
+      await screen.findByRole('dialog', {
+        name: 'Translated viewing needs an account',
+      }),
+    ).toBeInTheDocument()
+    // The language menu itself never opened
+    expect(screen.queryByRole('menuitemradio')).not.toBeInTheDocument()
+    expect(calls.some(u => u.includes('/translation'))).toBe(false)
+  })
+
+  /**
+   * The gate's fourth entry point, which no click reaches: the remembered
+   * slide language. `useSlideTranslation` restores it from localStorage on
+   * mount and fetches it unprompted, and the translation endpoint is
+   * deliberately `optionalAuth` (SHARE-2), so a lapsed session re-opening
+   * the permalink would render the lecture fully translated with no gate
+   * ever raised. The routes below MAKE the translation available — the
+   * assertion is that it is never asked for, not that asking would fail.
+   */
+  it('ignores a remembered language for a signed-out visitor', async () => {
+    vi.spyOn(runtimeConfig, 'getTranslationEnabled').mockReturnValue(true)
+    localStorage.setItem('sm:slide-language:shared-abc123', 'fr')
+    const { calls } = mockFetchRoutes({
+      // Ahead of the deck route: the mock matches by substring, and the
+      // deck's own path is a prefix of the translation path.
+      '/api/decks/shared-abc123/translation': () => ({
+        status: 200,
+        body: {
+          locale: 'fr',
+          source: 'en',
+          perSlide: {
+            s1: { slots: { title: { kind: 'text', value: 'Bonjour' } } },
+          },
+        },
+      }),
+      '/api/auth/refresh': () => ({ status: 401 }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: false },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    // The authored text, not the remembered French
+    expect(await screen.findByText('Hello')).toBeInTheDocument()
+    expect(screen.queryByText('Bonjour')).not.toBeInTheDocument()
+    expect(calls.some(u => u.includes('/translation'))).toBe(false)
+  })
+
+  // The signed-in half of the restore contract (SHARE-2), stated directly
+  // rather than left as a side effect of the microphone and narration specs
+  // that also happen to rely on it. Auth settles asynchronously, so a gate
+  // that read the `restoring` window as "signed out" would drop this
+  // silently — which is exactly what a first attempt at AUTH-8 did.
+  it('restores a remembered language for a signed-in reader', async () => {
+    vi.spyOn(runtimeConfig, 'getTranslationEnabled').mockReturnValue(true)
+    localStorage.setItem('sm:slide-language:shared-abc123', 'fr')
+    const { calls } = mockFetchRoutes({
+      '/api/decks/shared-abc123/translation': () => ({
+        status: 200,
+        body: {
+          locale: 'fr',
+          source: 'en',
+          perSlide: {
+            s1: { slots: { title: { kind: 'text', value: 'Bonjour' } } },
+          },
+        },
+      }),
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Bonjour')).toBeInTheDocument()
+    expect(calls.some(u => u.includes('/translation'))).toBe(true)
+  })
+
+  // The other half of the same rule: signing in must not silently apply the
+  // remembered language either. `readStored` runs in the state initialiser
+  // and on a slug change only, so flipping the hook on mid-session leaves
+  // the locale null — the same "no auto-fire" contract playback follows.
+  it('does not auto-restore the remembered language on signing in', async () => {
+    vi.spyOn(runtimeConfig, 'getTranslationEnabled').mockReturnValue(true)
+    localStorage.setItem('sm:slide-language:shared-abc123', 'fr')
+    const { calls } = mockFetchRoutes({
+      '/api/decks/shared-abc123/translation': () => ({
+        status: 200,
+        body: {
+          locale: 'fr',
+          source: 'en',
+          perSlide: {
+            s1: { slots: { title: { kind: 'text', value: 'Bonjour' } } },
+          },
+        },
+      }),
+      '/api/auth/refresh': () => ({ status: 401 }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: false },
+      }),
+      '/api/auth/login': () => ({
+        status: 200,
+        body: { user: { id: 'u2', displayName: 'Reader' }, accessToken: 't' },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText('Hello')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Slide language/ }))
+    await screen.findByRole('dialog', {
+      name: 'Translated viewing needs an account',
+    })
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: 'reader@example.com' },
+    })
+    fireEvent.change(screen.getByLabelText(/password/i), {
+      target: { value: 'longenough1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    )
+
+    // Signed in, still reading the authored text, nothing fetched
+    expect(screen.getByText('Hello')).toBeInTheDocument()
+    expect(calls.some(u => u.includes('/translation'))).toBe(false)
+
+    // The switcher is live now, and choosing French is what applies it
+    fireEvent.click(screen.getByRole('button', { name: /Slide language/ }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /Français/ }))
+    expect(await screen.findByText('Bonjour')).toBeInTheDocument()
+  })
+
+  // The space bar runs the same playback the toolbar button does, so it is
+  // the same ask and needs the same gate — an ungated shortcut is a silent
+  // way past it.
+  it('gates the space-bar playback shortcut, and never plays', async () => {
+    vi.spyOn(runtimeConfig, 'getTtsEnabled').mockReturnValue(true)
+    const { calls } = openGated('/d/shared-abc123')
+    await screen.findByText('Shared Lecture')
+    fireEvent.keyDown(window, { key: ' ', code: 'Space' })
+
+    expect(
+      await screen.findByRole('dialog', {
+        name: 'Playback needs an account',
+      }),
+    ).toBeInTheDocument()
+    expect(calls.some(u => u.includes('/tts'))).toBe(false)
+  })
+
+  // Re-pressing the control is the visitor's job under this requirement, so
+  // focus has to come back to it — landing on <body> means tabbing the whole
+  // page to reach the button they just pressed.
+  it('returns focus to the control that raised the gate', async () => {
+    vi.spyOn(runtimeConfig, 'getTtsEnabled').mockReturnValue(true)
+    openGated('/d/shared-abc123')
+    const play = await screen.findByRole('button', { name: 'Play deck' })
+    // A real click focuses the button and a keyboard press always has it
+    // focused already; jsdom's synthetic click moves no focus, so say so
+    // explicitly rather than assert against a state no user is ever in.
+    play.focus()
+    fireEvent.click(play)
+    await screen.findByRole('dialog', { name: 'Playback needs an account' })
+    expect(screen.getByLabelText(/email/i)).toHaveFocus()
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    )
+    expect(play).toHaveFocus()
+  })
+
+  it('never raises the gate for a signed-in visitor', async () => {
+    vi.spyOn(runtimeConfig, 'getTtsEnabled').mockReturnValue(true)
+    vi.spyOn(runtimeConfig, 'getTranslationEnabled').mockReturnValue(true)
+    renderViewer(200)
+    await screen.findByText('Shared Lecture')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Play deck' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Speak this slide' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Slide language/ }))
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('signs in from the gate, closes it, and neither plays nor loses the slide', async () => {
+    vi.spyOn(runtimeConfig, 'getTtsEnabled').mockReturnValue(true)
+    const { calls } = openGated('/d/shared-abc123?slide=s2', {
+      user: { id: 'u2', displayName: 'Reader' },
+      accessToken: 't',
+    })
+    expect(await screen.findByText('Second')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play deck' }))
+    await screen.findByRole('dialog', { name: 'Playback needs an account' })
+
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: 'reader@example.com' },
+    })
+    fireEvent.change(screen.getByLabelText(/password/i), {
+      target: { value: 'longenough1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    // Closed, still reading the same slide, and playback never auto-fired
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    )
+    expect(screen.getByText('Second')).toBeInTheDocument()
+    expect(calls.some(u => u.includes('/tts'))).toBe(false)
+
+    // The button is live now — a second press is what starts it
+    fireEvent.click(screen.getByRole('button', { name: 'Play deck' }))
+    await waitFor(() =>
+      expect(calls.some(u => u.includes('/api/slides/s2/tts'))).toBe(true),
+    )
+  })
+
+  it('keeps the gate open and shows the error on a failed sign-in', async () => {
+    vi.spyOn(runtimeConfig, 'getTtsEnabled').mockReturnValue(true)
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({ status: 401 }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: false },
+      }),
+      '/api/auth/login': () => ({
+        status: 401,
+        body: {
+          error: {
+            code: 'invalid_credentials',
+            message: 'Incorrect email or password',
+          },
+        },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Play deck' }))
+    await screen.findByRole('dialog', { name: 'Playback needs an account' })
+
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: 'reader@example.com' },
+    })
+    fireEvent.change(screen.getByLabelText(/password/i), {
+      target: { value: 'wrong-password' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Incorrect email or password',
+    )
+    expect(
+      screen.getByRole('dialog', { name: 'Playback needs an account' }),
+    ).toBeInTheDocument()
+  })
+})

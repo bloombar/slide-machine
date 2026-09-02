@@ -173,4 +173,40 @@ describe('SlideLanguageSwitcher', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
+
+  // Translated viewing needs an account (AUTH-8): a signed-out visitor's
+  // click raises the sign-in gate instead of opening the language menu.
+  it('raises the gate instead of opening the menu while locked', () => {
+    const onChange = vi.fn()
+    const onLockedClick = vi.fn()
+    render(
+      <SlideLanguageSwitcher
+        source="en"
+        value={null}
+        onChange={onChange}
+        locked
+        onLockedClick={onLockedClick}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', TRIGGER))
+    expect(onLockedClick).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('opens the menu as usual once unlocked', () => {
+    const onLockedClick = vi.fn()
+    render(
+      <SlideLanguageSwitcher
+        source="en"
+        value={null}
+        onChange={() => {}}
+        locked={false}
+        onLockedClick={onLockedClick}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', TRIGGER))
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+    expect(onLockedClick).not.toHaveBeenCalled()
+  })
 })

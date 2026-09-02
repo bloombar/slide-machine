@@ -36,6 +36,12 @@ interface Props {
   onChange: (locale: Locale | null) => void
   /** True while a translation is being fetched. */
   busy?: boolean
+  /** True for a signed-out visitor: translated viewing needs an account
+   * (AUTH-8), so the trigger raises the sign-in gate instead of opening the
+   * language menu. */
+  locked?: boolean
+  /** Called instead of opening the menu while `locked`. */
+  onLockedClick?: () => void
 }
 
 export default function SlideLanguageSwitcher({
@@ -43,6 +49,8 @@ export default function SlideLanguageSwitcher({
   value,
   onChange,
   busy = false,
+  locked = false,
+  onLockedClick,
 }: Props) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -87,7 +95,7 @@ export default function SlideLanguageSwitcher({
           aria-label={`${t('viewer.slideLanguage')}: ${current}`}
           aria-haspopup="menu"
           aria-expanded={open}
-          onClick={() => setOpen(o => !o)}
+          onClick={() => (locked ? onLockedClick?.() : setOpen(o => !o))}
           className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
         >
           <Languages className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />

@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, Routes, Route } from 'react-router'
 import { AuthProvider } from '../auth/AuthContext'
 import { setAccessToken } from '../auth/token'
 import HomePage from './HomePage'
@@ -80,6 +80,50 @@ const renderHome = () =>
       </AuthProvider>
     </MemoryRouter>,
   )
+
+/**
+ * Google sign-in takes the whole tab and its callback always lands on /app,
+ * so a visitor who chose it from the sign-in dialog on a lecture (AUTH-8)
+ * is handed back to that lecture by the path it parked before leaving.
+ */
+describe('HomePage OAuth return path (AUTH-8)', () => {
+  const mountApp = () =>
+    render(
+      <MemoryRouter initialEntries={['/app']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/app" element={<HomePage />} />
+            <Route path="/d/:slug" element={<p>THE LECTURE</p>} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+  it('returns to the lecture the visitor left', async () => {
+    sessionStorage.clear()
+    sessionStorage.setItem('sm:auth-return', '/d/shared-abc123?slide=s2')
+    mountApp()
+    expect(await screen.findByText('THE LECTURE')).toBeInTheDocument()
+  })
+
+  it('stays on /app when nothing was parked', async () => {
+    sessionStorage.clear()
+    mountApp()
+    expect(
+      await screen.findByRole('heading', { name: 'Biology' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('THE LECTURE')).not.toBeInTheDocument()
+  })
+
+  it('ignores an off-origin path planted in storage', async () => {
+    sessionStorage.clear()
+    sessionStorage.setItem('sm:auth-return', '//evil.test/pwn')
+    mountApp()
+    expect(
+      await screen.findByRole('heading', { name: 'Biology' }),
+    ).toBeInTheDocument()
+  })
+})
 
 describe('HomePage', () => {
   it('renders each project as a sub-heading with lectures beneath', async () => {

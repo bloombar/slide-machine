@@ -136,7 +136,12 @@
       "confirmed": "已确认"
     },
     "legalRegister": "创建账号即表示你同意我们的<termsLink>条款与条件</termsLink>和<privacyLink>隐私政策</privacyLink>。",
-    "legalSignIn": "登录即表示你同意我们的<termsLink>条款与条件</termsLink>和<privacyLink>隐私政策</privacyLink>。"
+    "legalSignIn": "登录即表示你同意我们的<termsLink>条款与条件</termsLink>和<privacyLink>隐私政策</privacyLink>。",
+    "gate": {
+      "playback": "播放需要账户",
+      "narration": "朗读需要账户",
+      "translation": "查看译文需要账户"
+    }
   },
   "health": {
     "summary": "API {status}",

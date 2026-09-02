@@ -31,11 +31,8 @@ const STORAGE_PREFIX = 'sm:slide-language:'
 const storageKey = (slug: string): string => `${STORAGE_PREFIX}${slug}`
 
 /** The remembered language for this deck, or null to read the original. */
-const readStored = (
-  slug: string | undefined,
-  enabled: boolean,
-): Locale | null => {
-  if (!slug || !enabled) return null
+const readStored = (slug: string | undefined): Locale | null => {
+  if (!slug) return null
   try {
     const raw = localStorage.getItem(storageKey(slug))
     return isLocale(raw) ? raw : null
@@ -88,13 +85,28 @@ export interface SlideTranslationState {
 export function useSlideTranslation(
   slug: string | undefined,
   enabled: boolean,
+  /**
+   * Whether this deck's remembered language may be restored — `null` while
+   * the answer is not known yet (AUTH-8).
+   *
+   * Three-valued because the caller cannot answer immediately: a signed-in
+   * reader's session is restored asynchronously, so auth reports neither
+   * signed in nor signed out for the first render or two. Reading `null` as
+   * "signed out" would silently drop every signed-in reader's remembered
+   * language, so the hook waits for a settled answer instead.
+   *
+   * The first settled answer for a deck is the one that counts (see the
+   * latch below), which is what keeps a mid-session sign-in from
+   * retroactively applying a language nobody chose this visit.
+   */
+  mayRestore: boolean | null,
 ): SlideTranslationState {
-  const [locale, setLocaleState] = useState<Locale | null>(() =>
-    readStored(slug, enabled),
-  )
+  const [locale, setLocaleState] = useState<Locale | null>(null)
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [failedLocale, setFailedLocale] = useState<Locale | null>(null)
   const [limitMessage, setLimitMessage] = useState<string | null>(null)
+  // Whether the restore question has been answered for the deck now open.
+  const [restoreSettled, setRestoreSettled] = useState(false)
 
   // Opening a different deck restores that deck's own remembered language.
   // Adjusted during render (React's documented pattern for state that
@@ -103,10 +115,18 @@ export function useSlideTranslation(
   const [lastSlug, setLastSlug] = useState(slug)
   if (slug !== lastSlug) {
     setLastSlug(slug)
-    setLocaleState(readStored(slug, enabled))
+    setLocaleState(null)
     setLoaded(null)
     setFailedLocale(null)
     setLimitMessage(null)
+    // A new deck asks the restore question again, from scratch.
+    setRestoreSettled(false)
+  } else if (!restoreSettled && mayRestore !== null) {
+    // The first settled answer for this deck, and the only one that counts:
+    // latching here is what stops a sign-in later in the visit from turning
+    // the restore back on for a deck already open and already being read.
+    setRestoreSettled(true)
+    if (mayRestore) setLocaleState(readStored(slug))
   }
 
   const loadedLocale = loaded?.locale
