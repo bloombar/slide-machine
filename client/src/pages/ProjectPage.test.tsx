@@ -599,3 +599,222 @@ describe('ProjectPage read-only visitor (SOC-2)', () => {
     expect(screen.queryByRole('button', { name: /new lecture/i })).toBeNull()
   })
 })
+
+/**
+ * Dragging lectures into a chosen order (PROJ-4). The keyboard path
+ * (Alt+ArrowUp/Down) exercises the same handler a pointer drag calls;
+ * DeckViewerPage's slide-reorder spec covers the pointer gesture itself,
+ * which DraggableListRow already shares with this page.
+ */
+describe('ProjectPage lecture reordering (PROJ-4)', () => {
+  const twoLectures = {
+    ...baseRoutes,
+    '/api/actions/deck.list': () => ({
+      status: 200,
+      body: [
+        {
+          id: 'd1',
+          projectId: 'p1',
+          title: 'Waves',
+          permalinkSlug: 'waves-abc123',
+          slideOrder: ['s1'],
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'd2',
+          projectId: 'p1',
+          title: 'Echoes',
+          permalinkSlug: 'echoes-def456',
+          slideOrder: ['s1'],
+          updatedAt: new Date().toISOString(),
+        },
+      ],
+    }),
+  }
+
+  it('lets the owner reorder lectures via Alt+arrows, persisting the new order', async () => {
+    let sent: unknown
+    mockFetchRoutes({
+      ...twoLectures,
+      '/api/actions/project.reorderLectures': init => {
+        sent = JSON.parse(String(init?.body))
+        return { status: 200, body: project }
+      },
+    })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Lectures' })
+
+    // "Waves" (row 1) moves down past "Echoes" (row 2)
+    fireEvent.keyDown(screen.getByRole('listitem', { name: 'Waves' }), {
+      key: 'ArrowDown',
+      altKey: true,
+    })
+
+    await vi.waitFor(() =>
+      expect(sent).toEqual({
+        projectId: 'p1',
+        lectureOrder: ['d2', 'd1'],
+      }),
+    )
+    const rows = screen
+      .getAllByRole('listitem')
+      .filter(r => r.hasAttribute('aria-label'))
+    expect(rows.map(r => r.getAttribute('aria-label'))).toEqual([
+      'Echoes',
+      'Waves',
+    ])
+  })
+
+  it('tells the visitor and refetches — not just a silent snap-back — when the server rejects it', async () => {
+    // deck.list is called twice: the page's initial load, then applyOrder's
+    // refetch after the rejection. The refetch returns something a plain
+    // revert to the pre-drag snapshot never could — a THIRD lecture, as if
+    // one had arrived mid-drag — so this can only pass if the UI is really
+    // showing what the server just said, not the optimistic order undone.
+    let calls = 0
+    mockFetchRoutes({
+      ...twoLectures,
+      '/api/actions/deck.list': () => {
+        calls += 1
+        if (calls === 1) return twoLectures['/api/actions/deck.list']()
+        return {
+          status: 200,
+          body: [
+            {
+              id: 'd3',
+              projectId: 'p1',
+              title: 'Fresh',
+              permalinkSlug: 'fresh-ghi789',
+              slideOrder: [],
+              updatedAt: new Date().toISOString(),
+            },
+            ...twoLectures['/api/actions/deck.list']().body,
+          ],
+        }
+      },
+      '/api/actions/project.reorderLectures': () => ({
+        status: 403,
+        body: { error: { code: 'forbidden', message: 'Forbidden' } },
+      }),
+    })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Lectures' })
+
+    fireEvent.keyDown(screen.getByRole('listitem', { name: 'Waves' }), {
+      key: 'ArrowDown',
+      altKey: true,
+    })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not reorder these lectures',
+    )
+    await vi.waitFor(() => {
+      const rows = screen
+        .getAllByRole('listitem')
+        .filter(r => r.hasAttribute('aria-label'))
+      expect(rows.map(r => r.getAttribute('aria-label'))).toEqual([
+        'Fresh',
+        'Waves',
+        'Echoes',
+      ])
+    })
+  })
+
+  it('falls back to the pre-drag order if even the refetch fails', async () => {
+    // The page's own initial deck.list load succeeds; a SECOND call — the
+    // rejection's refetch — fails, so this exercises applyOrder's own
+    // fallback rather than the page never having loaded at all.
+    let calls = 0
+    mockFetchRoutes({
+      ...twoLectures,
+      '/api/actions/project.reorderLectures': () => ({
+        status: 403,
+        body: { error: { code: 'forbidden', message: 'Forbidden' } },
+      }),
+      '/api/actions/deck.list': () => {
+        calls += 1
+        if (calls === 1) return twoLectures['/api/actions/deck.list']()
+        return { status: 500, body: { error: { code: 'server_error' } } }
+      },
+    })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Lectures' })
+
+    fireEvent.keyDown(screen.getByRole('listitem', { name: 'Waves' }), {
+      key: 'ArrowDown',
+      altKey: true,
+    })
+
+    await vi.waitFor(() => {
+      const rows = screen
+        .getAllByRole('listitem')
+        .filter(r => r.hasAttribute('aria-label'))
+      expect(rows.map(r => r.getAttribute('aria-label'))).toEqual([
+        'Waves',
+        'Echoes',
+      ])
+    })
+  })
+
+  it('gives a read-only visitor plain, non-draggable rows with no handle', async () => {
+    mockFetchRoutes({
+      ...twoLectures,
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u9', displayName: 'Byron' }, accessToken: 't' },
+      }),
+      '/api/admin/status': () => ({ status: 403 }),
+    })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Lectures' })
+    // The lectures still render (this is not the row being absent entirely,
+    // which would also satisfy the assertions below for the wrong reason);
+    // they just render plain.
+    expect(screen.getByRole('link', { name: /Waves/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Echoes/ })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('listitem', { name: 'Waves' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Drag to reorder/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('gives an editor plain rows too — reordering stays the owner’s alone', async () => {
+    mockFetchRoutes({
+      ...twoLectures,
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u9', displayName: 'Editor' }, accessToken: 't' },
+      }),
+      '/api/actions/project.get': () => ({
+        status: 200,
+        body: { ...project, editors: ['u9'] },
+      }),
+      '/api/admin/status': () => ({ status: 403 }),
+    })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Lectures' })
+    // Same reasoning as the read-only visitor above: present, just plain.
+    expect(screen.getByRole('link', { name: /Waves/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Echoes/ })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('listitem', { name: 'Waves' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Drag to reorder/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('gives the owner a grip handle on every row, named after its lecture', async () => {
+    mockFetchRoutes(twoLectures)
+    renderPage()
+    await screen.findByRole('heading', { name: 'Lectures' })
+    expect(
+      screen.getByRole('button', { name: 'Drag to reorder Waves' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Drag to reorder Echoes' }),
+    ).toBeInTheDocument()
+  })
+})

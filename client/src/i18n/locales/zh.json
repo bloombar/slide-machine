@@ -540,6 +540,7 @@
   "lecture": {
     "untitled": "未命名课程",
     "options": "“{name}”的操作",
+    "dragHandle": "拖动以重新排序“{name}”",
     "new": {
       "action": "新建课程",
       "label": "开始一节新课程",
@@ -620,6 +621,7 @@
     },
     "errors": {
       "load": "无法加载该项目",
+      "reorder": "无法重新排序这些讲座——请重试",
       "create": "无法创建项目"
     }
   },

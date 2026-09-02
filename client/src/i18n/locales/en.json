@@ -540,6 +540,7 @@
   "lecture": {
     "untitled": "Untitled lecture",
     "options": "Options for {name}",
+    "dragHandle": "Drag to reorder {name}",
     "new": {
       "action": "New lecture",
       "label": "Start a new lecture",
@@ -620,6 +621,7 @@
     },
     "errors": {
       "load": "Could not load this project",
+      "reorder": "Could not reorder these lectures — try again",
       "create": "Could not create the project"
     }
   },

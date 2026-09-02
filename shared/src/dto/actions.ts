@@ -124,6 +124,13 @@ export interface ProjectSwitchTemplateInput {
   templateId: string
 }
 
+/** Full new lecture ordering (PROJ-4); must contain exactly the project's
+ * current (live) lecture ids — mirrors DeckReorderInput's slideOrder. */
+export interface ProjectReorderLecturesInput {
+  projectId: string
+  lectureOrder: string[]
+}
+
 /** Drops a lecture's privacy override so it follows its project again. */
 export interface DeckResetAccessInput {
   deckId: string

@@ -897,9 +897,9 @@
     lacks the full picture. Delivered as a "Refine" action with three
     independently-toggleable passes (identify speakers / refine slide content /
     refine spoken narration), run together as one background job the client
-    polls; it can also be run per slide on demand. (Design: DECISIONS.md
-    "Refine: three opt-in passes".) Identifies speakers (diarization) —
-    post-hoc, the retained lecture audio (P-6) is grouped into…'
+    polls; it can also be run per slide on demand. While it runs it says which
+    slide it is working on, rather than only that something is happening.
+    (Design: DECISIONS.md "Refine: three opt-in…'
   section: §9 Slide Generation & Enrichment
   family: GEN
   phase: 2
@@ -1076,6 +1076,23 @@
   status: Done
   review: false
   note: delivered early
+- id: PROJ-4
+  title: Order the lectures in a project
+  full: "Lectures are listed newest-first, which is the order a course is recorded
+    in but rarely the order it is taught in — a session recorded out of
+    sequence, a revision lecture made late, a guest slot that belongs mid-term.
+    A project's owner can drag its lectures into the order they choose, on the
+    project's own page. The chosen order is the project's, not the page's: it is
+    what the project page and the home page both show, so the list a student is
+    pointed at and the list the instructor arranges are the same list. A lecture
+    added, imported or moved in afterwards appears first, where a newly recorded
+    lecture has always appeared, rather than at the end of an order it was never
+    part of. A project…"
+  section: §6 Slide Projects & Seeding
+  family: PROJ
+  phase: 2
+  status: Backlog
+  review: false
 - id: QUIZ-1
   title: Quiz YAML generation (in the monolith)
   full: On session Stop (or on demand), the monolith's QuizGenerationProvider
@@ -2266,3 +2283,21 @@
   phase: P2
   status: Backlog
   review: false
+- id: TMPL-24
+  title: An account's default design
+  full: "An account has a default design, chosen in Account settings → Design and
+    offering the same library, the same authoring actions and the same exports
+    as a project's or a lecture's Design tab — one design is chosen the same way
+    wherever it is chosen. Until an account chooses, its default is the
+    deployment's default template (TMPL-3) rather than nothing, so the tab shows
+    what new work will actually get. This deployment configures NYU Elegant; a
+    deployment that ships its own set names its own, and an id its template set
+    does not hold is ignored in favour of one it does. The default cascades at
+    creation, not by reference: a new project copies the account's default, a
+    new lecture copies its…"
+  section: §7 Style Template Library
+  family: TMPL
+  phase: null
+  status: Backlog
+  review: true
+  note: no phase found in roadmap

@@ -31,7 +31,7 @@ function ViewerStub() {
   return <div>VIEWER tab={state?.settingsTab ?? 'none'}</div>
 }
 
-const renderRow = (onDeleted?: (id: string) => void) =>
+const renderRow = (onDeleted?: (id: string) => void, reorderable = false) =>
   render(
     <MemoryRouter>
       <Routes>
@@ -39,7 +39,11 @@ const renderRow = (onDeleted?: (id: string) => void) =>
           path="/"
           element={
             <ul>
-              <LectureRow deck={deck} onDeleted={onDeleted} />
+              <LectureRow
+                deck={deck}
+                onDeleted={onDeleted}
+                reorderable={reorderable}
+              />
             </ul>
           }
         />
@@ -106,5 +110,55 @@ describe('LectureRow kebab menu', () => {
     expect(screen.getByRole('menu')).toBeInTheDocument()
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * The drag handle (PROJ-4): a lecture row is a link end to end, so
+ * DraggableListRow's handleOnly mode needs a non-link, non-navigating
+ * pickup spot. Off by default — only the project page's owner view asks
+ * for it.
+ */
+describe('LectureRow drag handle', () => {
+  it('is absent unless reorderable', () => {
+    renderRow(vi.fn())
+    expect(
+      screen.queryByRole('button', { name: /Drag to reorder/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('renders, named after the lecture, when reorderable', () => {
+    renderRow(vi.fn(), true)
+    expect(
+      screen.getByRole('button', { name: 'Drag to reorder Waves' }),
+    ).toBeInTheDocument()
+  })
+
+  it('does not navigate the lecture when clicked', () => {
+    renderRow(vi.fn(), true)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Drag to reorder Waves' }),
+    )
+    expect(screen.queryByText(/^VIEWER/)).not.toBeInTheDocument()
+    // Still on the row, not the viewer route
+    expect(screen.getByRole('link', { name: /Waves/ })).toBeInTheDocument()
+  })
+
+  it('carries data-drag-handle, which DraggableListRow keys its handleOnly mode on', () => {
+    renderRow(vi.fn(), true)
+    expect(
+      screen.getByRole('button', { name: 'Drag to reorder Waves' }),
+    ).toHaveAttribute('data-drag-handle')
+  })
+
+  // The row itself is the keyboard affordance (focusable, Alt+ArrowUp/Down,
+  // announced via aria-keyshortcuts on DraggableListRow's <li>). A grip
+  // that could also take focus would add a tab stop per row whose Enter and
+  // Space do nothing.
+  it('is not a tab stop of its own — the row carries the keyboard path', () => {
+    renderRow(vi.fn(), true)
+    expect(
+      screen.getByRole('button', { name: 'Drag to reorder Waves' }),
+    ).toHaveAttribute('tabIndex', '-1')
   })
 })

@@ -21,6 +21,14 @@ export interface ProjectDb extends Omit<
   // Last-used quiz generation options, remembered so a new quiz in this
   // project pre-fills them (QUIZ-2). Server-only; not in the Project DTO.
   quizDefaults?: QuizGenerationOptions
+  // The owner's chosen lecture order (PROJ-4), mirroring deck.slideOrder —
+  // absent means "never arranged", which keeps the newest-first default.
+  // A hint, not the source of truth: deck.list resolves it against the
+  // project's actual (live) decks rather than trusting it outright, so a
+  // lecture never in it and a stale id for one since deleted are both
+  // handled there. Server-only; not in the Project DTO — deck.list already
+  // returns lectures in this order, so nothing else needs to read it.
+  lectureOrder?: string[]
   createdAt: Date
   updatedAt: Date
   /** Soft-delete tombstone (P-10); null/absent = live. */
@@ -65,6 +73,11 @@ const projectSchema = new Schema<ProjectDb>(
     },
     // Remembered quiz options (QUIZ-2); free-form, mirrors QuizGenerationOptions.
     quizDefaults: { type: Schema.Types.Mixed, default: undefined },
+    // Absent = never arranged (PROJ-4); unlike deck.slideOrder this has no
+    // `[]` default, so "no array" and "arranged, now empty" stay distinct —
+    // though the latter cannot happen, since reordering requires at least
+    // one lecture (see project.reorderLectures's input schema).
+    lectureOrder: { type: [String], default: undefined },
   },
   // updatedAt is bumped by any save to the project's settings; project.list
   // combines it with the newest deck edit to rank projects by modification.
