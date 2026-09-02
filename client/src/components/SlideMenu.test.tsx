@@ -32,6 +32,7 @@ describe('SlideMenu', () => {
         number={2}
         onSpeak={vi.fn()}
         onChangeLayout={vi.fn()}
+        onDuplicate={vi.fn()}
         onEditTranscript={vi.fn()}
         onRefine={vi.fn()}
         onPlayOriginalAudio={vi.fn()}
@@ -44,6 +45,9 @@ describe('SlideMenu', () => {
     ).toBeInTheDocument()
     expect(
       screen.getByRole('menuitem', { name: 'Change layout' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('menuitem', { name: 'Duplicate slide' }),
     ).toBeInTheDocument()
     expect(
       screen.getByRole('menuitem', { name: 'Edit spoken transcript' }),
@@ -65,8 +69,17 @@ describe('SlideMenu', () => {
       'Refine this slide with AI',
       'Edit spoken transcript',
       'Change layout',
+      'Duplicate slide',
       'Delete slide',
     ])
+  })
+
+  it('fires onDuplicate from the "Duplicate slide" item', () => {
+    const onDuplicate = vi.fn()
+    render(<SlideMenu number={1} onDuplicate={onDuplicate} />)
+    openMenu(1)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplicate slide' }))
+    expect(onDuplicate).toHaveBeenCalledOnce()
   })
 
   it('fires onRefine from the "Refine this slide" item', () => {
@@ -116,6 +129,9 @@ describe('SlideMenu', () => {
     ).toBeInTheDocument()
     expect(
       screen.queryByRole('menuitem', { name: 'Change layout' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('menuitem', { name: 'Duplicate slide' }),
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('menuitem', { name: 'Edit spoken transcript' }),

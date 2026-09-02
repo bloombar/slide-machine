@@ -9,6 +9,8 @@ import { z } from 'zod'
 import type {
   Slide,
   SlideDeleteInput,
+  SlideDuplicateInput,
+  SlideDuplicateResult,
   SlideEditDrawingsInput,
   SlideEditInput,
   SlideEditTranscriptInput,
@@ -658,6 +660,83 @@ export const slideDelete = defineAction<
   },
 })
 
+/**
+ * slide.duplicate — inserts a copy of a slide immediately after the source
+ * in the deck's slideOrder, then reindexes so every slide's `index` still
+ * matches its position (the same reindex `slide.delete` does above, run
+ * after an insert instead of a removal).
+ *
+ * What's copied, and why:
+ *   - `slots` — the authoritative content store (TMPL-9). Deep-cloned so the
+ *     two slide documents never alias the same nested object; `slotsOf` can
+ *     hand back the source's own stored map verbatim when one already
+ *     exists. The five legacy fields (title/body/bullets/caption/image*)
+ *     fold back out of it via the model's own pre-save hook (models/slide.ts),
+ *     the same as any other new slide built from a slot map — including a
+ *     shared `imageRef`, which is fine: re-running enrichment for the copy
+ *     is a separate concern this action doesn't touch.
+ *   - `layoutType` — the box layout the content above is written for.
+ *   - `sourceTranscript` — narration falls back to it when a slide has no
+ *     separate narration (routes/tts.ts), so leaving it off would make the
+ *     copy read differently aloud despite looking identical. Its whiteboard
+ *     marks (`drawings`) are anchored to this same text (EDIT-4), so copying
+ *     both keeps every anchor valid. Neither implies the copy has retained
+ *     audio of its own — no transcript segment links to its (new) id, so
+ *     "Play original audio" simply isn't offered for it, same as any slide
+ *     that was never spoken.
+ *   - `manuallyEdited` — a property of the CONTENT (whether it should be
+ *     protected from an automated reformat pass), not of the act of
+ *     copying, so it carries over with the content it was set for.
+ *
+ * Deliberately NOT copied: cached translations (SHARE-2). That cache is
+ * disposable and keyed by slide id; it rebuilds itself the first time the
+ * copy is viewed in a given locale; the same as it did for the source, so
+ * copying it here would take on a second collection's writes for no
+ * correctness gain.
+ *
+ * No capacity/billing check, matching `slide.add` (deck.ts) — creating a
+ * slide carries no metered cost today, so duplicating one doesn't either.
+ */
+export const slideDuplicate = defineAction<
+  SlideDuplicateInput,
+  SlideDuplicateResult,
+  SlideAccess
+>({
+  name: 'slide.duplicate',
+  access: bySlideId,
+  input: z.object({ slideId: z.string().min(1) }),
+  execute: async (ctx, input, { slide, deck }) => {
+    const copy = await SlideModel.create({
+      deckId: deck._id,
+      // Corrected below once the copy's place in slideOrder is known.
+      index: deck.slideOrder.length,
+      layoutType: slide.layoutType,
+      slots: JSON.parse(JSON.stringify(slotsOf(slide))) as Record<
+        string,
+        SlotValue
+      >,
+      sourceTranscript: slide.sourceTranscript,
+      drawings: slide.drawings,
+      manuallyEdited: slide.manuallyEdited,
+    })
+    const at = deck.slideOrder.indexOf(input.slideId)
+    deck.slideOrder.splice(
+      at < 0 ? deck.slideOrder.length : at + 1,
+      0,
+      copy._id.toString(),
+    )
+    await deck.save()
+    // Keep index consistent with slideOrder position
+    await Promise.all(
+      deck.slideOrder.map((id, i) =>
+        SlideModel.updateOne({ _id: id }, { index: i }),
+      ),
+    )
+    const fresh = await SlideModel.findById(copy._id)
+    return { slide: toSlideDto(fresh ?? copy), slideOrder: deck.slideOrder }
+  },
+})
+
 registerAction(slideGet)
 registerAction(slideEditContent)
 registerAction(slideEditDrawings)
@@ -666,3 +745,4 @@ registerAction(slideRegenerateTranscript)
 registerAction(slideSetLayout)
 registerAction(slideRefitLayout)
 registerAction(slideDelete)
+registerAction(slideDuplicate)

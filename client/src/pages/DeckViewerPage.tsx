@@ -33,6 +33,7 @@ import type {
   ImageSearchCandidate,
   Locale,
   Slide,
+  SlideDuplicateResult,
   SlideEvent,
   SlideRefineOptions,
   SlideRefitLayoutResult,
@@ -1827,6 +1828,39 @@ export default function DeckViewerPage() {
     }
   }
 
+  /** Inserts a copy of a slide via slide.duplicate, right after the source
+   * (the server computes where — the copy's place in the returned
+   * slideOrder), then makes it the active slide: the same "always transition
+   * to the slide that changed" the generation path (`applyEvent`) follows,
+   * not a second mechanism. */
+  const duplicateSlide = async (slideId: string) => {
+    try {
+      const result = await dispatchAction<SlideDuplicateResult>(
+        'slide.duplicate',
+        { slideId },
+      )
+      const byId = new Map(view.slides.map(s => [s.id, s]))
+      byId.set(result.slide.id, result.slide)
+      const slides = result.slideOrder.map((id, i) => ({
+        ...byId.get(id)!,
+        index: i,
+      }))
+      setView(v =>
+        v
+          ? { ...v, deck: { ...v.deck, slideOrder: result.slideOrder }, slides }
+          : v,
+      )
+      touchDeckLocally()
+      const target = Math.max(0, result.slideOrder.indexOf(result.slide.id))
+      nav.setCurrent(target)
+      // List view: center the copy after it commits — scrollTo is a no-op
+      // in carousel mode, which flips to it via setCurrent alone.
+      requestAnimationFrame(() => nav.scrollTo(target))
+    } catch {
+      // Quiet failure: the source slide simply stays as it was
+    }
+  }
+
   /** Raises the "this slide became several" notice and takes it down again
    * after a while, replacing any notice still showing. */
   const showSplitNotice = (notice: {
@@ -2326,6 +2360,9 @@ export default function DeckViewerPage() {
                 onChangeLayout={
                   canEdit ? () => setLayoutPickerFor(slide!.id) : undefined
                 }
+                onDuplicate={
+                  canEdit ? () => void duplicateSlide(slide!.id) : undefined
+                }
                 onEditTranscript={
                   canEdit ? () => setTranscriptEditorFor(slide!.id) : undefined
                 }
@@ -2383,6 +2420,7 @@ export default function DeckViewerPage() {
                       ttsEnabled ? () => requestSpeakSlide(s) : undefined
                     }
                     onChangeLayout={() => setLayoutPickerFor(s.id)}
+                    onDuplicate={() => void duplicateSlide(s.id)}
                     onEditTranscript={() => setTranscriptEditorFor(s.id)}
                     onRefine={
                       slideRefineEnabled

@@ -669,6 +669,86 @@ describe('slide.delete', () => {
   })
 })
 
+describe('slide.duplicate', () => {
+  it('inserts the copy right after the source and reindexes (first slide)', async () => {
+    const res = await act(ada, 'slide.duplicate', { slideId: slideIds[0] })
+    expect(res.status).toBe(200)
+    const copyId = res.body.slide.id
+    expect(copyId).not.toBe(slideIds[0])
+    expect(res.body.slideOrder).toEqual([
+      slideIds[0],
+      copyId,
+      slideIds[1],
+      slideIds[2],
+    ])
+
+    const view = await act(ada, 'deck.get', { deckId })
+    expect(
+      view.body.slides.map((s: { id: string; index: number }) => [
+        s.id,
+        s.index,
+      ]),
+    ).toEqual([
+      [slideIds[0], 0],
+      [copyId, 1],
+      [slideIds[1], 2],
+      [slideIds[2], 3],
+    ])
+  })
+
+  it('inserts right after a middle slide', async () => {
+    const res = await act(ada, 'slide.duplicate', { slideId: slideIds[1] })
+    expect(res.status).toBe(200)
+    const copyId = res.body.slide.id
+    expect(res.body.slideOrder).toEqual([
+      slideIds[0],
+      slideIds[1],
+      copyId,
+      slideIds[2],
+    ])
+  })
+
+  it('appends the copy when duplicating the last slide', async () => {
+    const res = await act(ada, 'slide.duplicate', { slideId: slideIds[2] })
+    expect(res.status).toBe(200)
+    const copyId = res.body.slide.id
+    expect(res.body.slideOrder).toEqual([
+      slideIds[0],
+      slideIds[1],
+      slideIds[2],
+      copyId,
+    ])
+  })
+
+  it('copies content — slots, layout and spoken narration', async () => {
+    const edited = await act(ada, 'slide.editContent', {
+      slideId: slideIds[0],
+      title: 'Intro to Photosynthesis',
+      bullets: ['light', 'water'],
+    })
+    expect(edited.body.manuallyEdited).toBe(true)
+
+    const res = await act(ada, 'slide.duplicate', { slideId: slideIds[0] })
+    expect(res.status).toBe(200)
+    expect(res.body.slide.title).toBe('Intro to Photosynthesis')
+    expect(res.body.slide.bullets).toEqual(['light', 'water'])
+    expect(res.body.slide.layoutType).toBe(edited.body.layoutType)
+    // Narrated from the same words as the source (routes/tts.ts falls back
+    // to sourceTranscript when a slide has no separate narration).
+    expect(res.body.slide.sourceTranscript).toBe('Photosynthesis basics')
+    // A hand-edit's protection from the reformat pass is a property of the
+    // content, so it carries over with it.
+    expect(res.body.slide.manuallyEdited).toBe(true)
+  })
+
+  it("403s duplicating another user's slide", async () => {
+    const bob = await registerUser('bob@example.com')
+    expect(
+      (await act(bob, 'slide.duplicate', { slideId: slideIds[0] })).status,
+    ).toBe(403)
+  })
+})
+
 describe('session.phrase suppressNewSlide (WB-3)', () => {
   it('appends to the current slide instead of creating one while drawing', async () => {
     const before = (await act(ada, 'deck.get', { deckId })).body.slides.length
