@@ -184,8 +184,29 @@ export const fetchSlideOriginalAudioUrl = async (
 
 interface PollOptions {
   attempts?: number
-  intervalMs?: number
+  /**
+   * Flattens every attempt's delay to this one value instead of the ramp
+   * schedule below (used by tests to run the whole poll on a fast, even
+   * grid). Note that `attempts` no longer scales against a fixed 1500ms
+   * step on its own — pair it with `fixedDelayMs` if you want the old
+   * `attempts * intervalMs` window back; against the default ramp,
+   * `attempts` alone re-scales the *ramp's* window, not 1500ms per step.
+   */
+  fixedDelayMs?: number
 }
+
+// IMG-1: the delay before each attempt, keyed by attempt index. Starts at
+// 250ms so the common case — the image already landed by the time the
+// slide finished rendering — shows up almost immediately instead of behind
+// a fixed 1.5s wait, then ramps up to a 1500ms ceiling: enrichment includes
+// an AI re-rank (and, when enabled, a vision pass), so a slow image can
+// genuinely take that long, and it still needs the same long window to
+// land as before. Indices past the array reuse the ceiling. `fixedDelayMs`
+// (below, on PollOptions) still lets a caller pin every attempt to one flat
+// delay — tests use it to run the whole poll on a 1ms grid — in which case
+// this ramp is bypassed entirely.
+const DELAY_SCHEDULE_MS = [250, 500, 1000]
+const CEILING_MS = 1500
 
 /**
  * Polls slide.get until an image appears or attempts are exhausted, then
@@ -197,16 +218,21 @@ export const pollSlideImage = (
   onResolved: (slide: Slide | null) => void,
   options: PollOptions = {},
 ): (() => void) => {
-  // ~18s window: enrichment now includes an AI re-rank (and, when enabled, a
-  // vision pass), so the image + matched caption can take longer to land than
-  // a bare source search.
-  const attempts = options.attempts ?? 12
-  const intervalMs = options.intervalMs ?? 1500
+  // ~18s window at the default schedule (250+500+1000 ramp, then eleven
+  // more attempts at the 1500ms ceiling = 18.25s total): enrichment now
+  // includes an AI re-rank (and, when enabled, a vision pass), so the
+  // image + matched caption can take longer to land than a bare source
+  // search. `attempts` is 14 rather than the old flat schedule's 12
+  // because the faster ramp-up attempts cost less wall-clock time than
+  // the 1500ms they replace, and the window must not shrink.
+  const attempts = options.attempts ?? 14
+  const fixedDelayMs = options.fixedDelayMs
   let cancelled = false
 
   const run = async () => {
     for (let i = 0; i < attempts && !cancelled; i++) {
-      await new Promise(resolve => setTimeout(resolve, intervalMs))
+      const delay = fixedDelayMs ?? DELAY_SCHEDULE_MS[i] ?? CEILING_MS
+      await new Promise(resolve => setTimeout(resolve, delay))
       if (cancelled) return
       try {
         const slide = await dispatchAction<Slide>('slide.get', { slideId })
