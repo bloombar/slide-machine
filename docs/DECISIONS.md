@@ -494,3 +494,19 @@ Consent up front raises the bar for proposing rather than lowering it, and that 
 **Choice.** `RefineJob` gains a `progress` subdocument — phase (`speakers` / `slides` / `narration`), how many slides that pass has finished, its total, and the position and title of the slide in hand — written *before* each slide, so it always describes work in flight. `deck.refineStatus` returns it and the Refine tab's poll renders it ("Refining slide 3 of 9: Carbon fixation"), falling back to the generic line before the first poll lands and between passes. Progress is cleared when the job finishes, so a done job describes itself by its summary alone. The per-slide pill names its slide by number and title from the deck already on screen — no extra request.
 
 **Limits.** Progress is a snapshot read by polling, so the displayed slide may already be finished; nothing is decided from it, and a failed progress write is swallowed rather than failing the refine. The narration pass counts within itself ("3 of 8" is the eighth slide *being narrated*, not the eighth slide in the lecture, since only changed slides are visited) — the title says which slide it actually is. Diarization is one long batch call with no per-slide steps, so its phase is all it can report.
+
+## The whiteboard overlay is viewport-sized, not list-sized (2026-09-01)
+
+**Problem.** In list view the drawing overlay ([DrawingLayer.tsx](../client/src/components/whiteboard/DrawingLayer.tsx)) was one canvas stretched over the whole column — `absolute inset-0 h-full`. A hundred-slide lecture is a column some 57,000 CSS pixels tall, so on a 2× display the canvas asked for a backing store 114,000 device pixels high. Chromium refuses anything over 65,535 pixels on a side (WebKit, over 268 megapixels of area) and reports the refusal nowhere: `getContext` still returns a context, draw calls still succeed, and the element is painted as an **opaque broken-image box** over every slide beneath it. Nine imported lectures of 63–185 slides showed a blank rectangle where their content should be, in list view only; the same lectures read fine in carousel view, where the canvas is one slide tall.
+
+**Choice.** The canvas is a `sticky top-0 h-screen max-h-full` child of a wrapper that spans the slides, so it is never taller than the viewport (nor than the slides it covers, which keeps carousel view exactly as it was). Painting needed no change — strokes were always mapped through the canvas's own client rect — but three things follow from a canvas that moves:
+
+- It is repainted on scroll, coalesced to one repaint per animation frame.
+- Slides outside the canvas are skipped, since a hundred-slide lecture has a great many of them.
+- With no strokes at all, `redraw` returns before measuring anything. Measuring is the cost — `getBoundingClientRect` on every slide forces layout on the ones list view defers with `content-visibility` — and most lectures carry no marks.
+
+`backingScale` additionally steps the device-pixel ratio down rather than letting either edge past 16,384, so a display tall enough to reach the limit loses sharpness instead of the picture.
+
+**Why not just clamp the size.** Clamping the buffer without scaling distorts the geometry; clamping the ratio alone still allocates a 1.6 GB backing store for a 185-slide lecture. Bounding the canvas to the viewport is what makes the memory constant in deck length, and the clamp is then only a backstop.
+
+**Limits.** A stroke is still attributed by hit-testing live slide boxes, so drawing depends on the slides under the pointer being laid out — which they are, since a gesture happens on screen. The cull and the empty-strokes early return are both keyed to the canvas rect, so a repaint that is somehow missed leaves stale ink until the next scroll frame rather than clearing it.

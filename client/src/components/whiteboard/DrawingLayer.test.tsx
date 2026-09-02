@@ -11,6 +11,25 @@ import type { Stroke, StrokeAnchor } from '@slide-machine/shared'
 import DrawingLayer from './DrawingLayer'
 
 const BOX = { left: 0, top: 0, width: 200, height: 200 }
+
+/** The cap the component keeps its backing store under — the smaller of the
+ * two browser limits (WebKit's 16,384-pixel edge; Chromium's is 65,535). */
+const MAX_BACKING_EDGE = 16384
+
+/** Makes every element measure as the given box. jsdom does no layout, so the
+ * component's own rect — the one that decides the backing-store size — has to
+ * be stated. */
+const stubRect = (box: { width: number; height: number }) =>
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+    left: 0,
+    top: 0,
+    ...box,
+    right: box.width,
+    bottom: box.height,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  } as DOMRect)
 const anchor: StrokeAnchor = { charAnchor: 5, source: 'appended' }
 const buildAnchor = vi.fn((): StrokeAnchor => anchor)
 
@@ -89,14 +108,7 @@ beforeEach(() => {
       disconnect() {}
     },
   )
-  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
-    ...BOX,
-    right: BOX.width,
-    bottom: BOX.height,
-    x: BOX.left,
-    y: BOX.top,
-    toJSON: () => ({}),
-  } as DOMRect)
+  stubRect(BOX)
 })
 
 afterEach(() => vi.restoreAllMocks())
@@ -192,5 +204,41 @@ describe('DrawingLayer', () => {
     })
     fireEvent.pointerUp(canvas, { pointerId: 1 })
     expect(onEraseStroke).not.toHaveBeenCalled()
+  })
+
+  // A canvas past what the browser will allocate is not a blank one: it is
+  // drawn as an opaque broken-image box over everything it covers. A hundred
+  // slides stacked in list view is tall enough to ask for one.
+  it('keeps the backing store inside what a browser will allocate', () => {
+    // A list of a hundred slides, on a display with two device pixels per
+    // CSS pixel — 106,000 CSS pixels tall, 212,000 device pixels.
+    stubRect({ width: 976, height: 105_981 })
+    vi.stubGlobal('devicePixelRatio', 2)
+
+    const { canvas } = setup()
+
+    expect(canvas.width).toBeLessThanOrEqual(MAX_BACKING_EDGE)
+    expect(canvas.height).toBeLessThanOrEqual(MAX_BACKING_EDGE)
+    // Stepped down, not cropped: the whole overlay is still represented, so
+    // a mark near the bottom of the list is not silently outside the buffer.
+    expect(canvas.width / canvas.height).toBeCloseTo(976 / 105_981, 4)
+  })
+
+  it('renders at the display resolution when that fits', () => {
+    stubRect({ width: 976, height: 800 })
+    vi.stubGlobal('devicePixelRatio', 2)
+
+    const { canvas } = setup()
+
+    expect(canvas.width).toBe(1952)
+    expect(canvas.height).toBe(1600)
+  })
+
+  // The canvas is pinned to the viewport rather than stretched over the
+  // list; the wrapper is what spans the slides.
+  it('sizes the canvas to the viewport, not to the slides it covers', () => {
+    const { canvas } = setup()
+    expect(canvas).toHaveClass('sticky', 'top-0', 'h-screen', 'max-h-full')
+    expect(canvas.parentElement).toHaveClass('absolute', 'inset-0')
   })
 })

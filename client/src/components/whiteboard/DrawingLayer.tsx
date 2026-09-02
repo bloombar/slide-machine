@@ -6,6 +6,15 @@
  * active it takes pointer events; otherwise it is transparent to clicks so
  * normal editing/nav keep working.
  *
+ * The canvas is never taller than the viewport: it is a sticky child of a
+ * full-height wrapper, so it slides down the list as the page scrolls rather
+ * than spanning it. A canvas spanning the whole list would ask for a backing
+ * store past what a browser will allocate — a hundred-slide lecture is some
+ * 57,000 CSS pixels tall, twice that in device pixels — and a canvas over that
+ * limit is not merely blank: the browser draws it as an opaque broken-image
+ * box covering every slide beneath it. Painting is unaffected by the change,
+ * since strokes are mapped through the canvas's own client rect either way.
+ *
  * Playback (WB-2): when `isPlaying`, a requestAnimationFrame loop repaints each
  * frame and `reveal` decides per-stroke visibility (drawn-yet / erased-yet)
  * from the live audio position — kept off React state to avoid re-render churn.
@@ -65,6 +74,28 @@ const rectToBox = (r: DOMRect): Box => ({
   height: r.height,
 })
 
+/**
+ * The largest backing-store edge to ask a browser for. Chromium refuses a
+ * canvas over 65,535 device pixels on a side and WebKit over 16,384, and
+ * neither reports the refusal: the canvas is simply drawn as an opaque
+ * broken-image box on top of whatever it covers. The sticky canvas below is
+ * viewport-sized, so nothing normal comes near this; it is here so that a
+ * display tall enough to reach it loses resolution rather than the picture.
+ */
+const MAX_BACKING_EDGE = 16384
+
+/**
+ * Device pixels per CSS pixel to render at — the display's own ratio, stepped
+ * down if that would take either edge past what the browser will allocate.
+ * Scaling the ratio rather than clipping the buffer keeps the drawing
+ * geometry right; only its sharpness gives way.
+ */
+const backingScale = (rect: { width: number; height: number }): number => {
+  const dpr = window.devicePixelRatio || 1
+  const edge = Math.max(rect.width, rect.height, 1)
+  return Math.min(dpr, MAX_BACKING_EDGE / edge)
+}
+
 const uuid = (): string =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
@@ -83,12 +114,15 @@ export default function DrawingLayer({
   onActivity,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
   const draftRef = useRef<Draft | null>(null)
   const erasingRef = useRef(false)
 
-  /** Current slide boxes inside the container, in client coordinates. */
+  /** Current slide boxes inside the container, in client coordinates. The
+   * container is the wrapper's parent — the wrapper itself spans the slides
+   * but holds only the canvas. */
   const getSlideBoxes = (): SlideBox[] => {
-    const container = canvasRef.current?.parentElement
+    const container = wrapRef.current?.parentElement
     if (!container) return []
     return Array.from(container.querySelectorAll('[data-slide-id]')).map(
       el => ({
@@ -104,7 +138,7 @@ export default function DrawingLayer({
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     const rect = canvas.getBoundingClientRect()
-    const dpr = window.devicePixelRatio || 1
+    const dpr = backingScale(rect)
     const w = Math.max(1, Math.round(rect.width * dpr))
     const h = Math.max(1, Math.round(rect.height * dpr))
     if (canvas.width !== w) canvas.width = w
@@ -115,7 +149,18 @@ export default function DrawingLayer({
     const visible = (slideId: string, stroke: Stroke): boolean =>
       isPlaying && reveal ? reveal(slideId, stroke) : !stroke.erasedAnchor
 
+    // Nothing to paint: leave without measuring the slides. Measuring them
+    // is what costs — a `getBoundingClientRect` on every slide forces layout
+    // on the ones list view has deferred (`content-visibility`), and this
+    // runs on every scroll frame. Most lectures carry no marks at all, so
+    // for most of them scrolling costs nothing here.
+    const anyStrokes = Object.values(strokesById).some(list => list.length > 0)
+    if (!anyStrokes && !draftRef.current) return
+
     for (const { slideId, box } of getSlideBoxes()) {
+      // Slides scrolled past the canvas cannot show a mark, and a long
+      // lecture has a great many of them.
+      if (box.top + box.height < rect.top || box.top > rect.bottom) continue
       for (const stroke of strokesById[slideId] ?? []) {
         if (!visible(slideId, stroke)) continue
         drawStroke(ctx, stroke, box, rect)
@@ -134,9 +179,29 @@ export default function DrawingLayer({
     const canvas = canvasRef.current
     if (!canvas) return
     const observer = new ResizeObserver(() => redraw())
-    if (canvas.parentElement) observer.observe(canvas.parentElement)
+    if (wrapRef.current) observer.observe(wrapRef.current)
     observer.observe(canvas)
     return () => observer.disconnect()
+  }, [redraw])
+
+  // The canvas is pinned to the viewport, so scrolling moves it over the
+  // slides and every saved mark has to be repainted in its new place. One
+  // repaint per frame at most: each one measures every slide box, which a
+  // raw scroll handler would do many times over in a single frame.
+  useEffect(() => {
+    let raf = 0
+    const onScroll = () => {
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        redraw()
+      })
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      if (raf) cancelAnimationFrame(raf)
+    }
   }, [redraw])
 
   // Reveal loop: while narration plays, repaint every frame so strokes appear
@@ -253,36 +318,43 @@ export default function DrawingLayer({
   }
 
   return (
-    <canvas
-      ref={canvasRef}
-      data-testid="drawing-layer"
-      /*
-       * How many saved strokes this layer can currently act on.
-       *
-       * Erasing hit-tests against the SAVED strokes, which arrive back as
-       * props after the save round-trip — so there is a window where a stroke
-       * has been drawn and stored but the layer cannot yet erase it. Nothing
-       * about the canvas shows that: it is painted, not marked up, so a test
-       * that erases as soon as the save responds is guessing at state it
-       * cannot see, and under load it guesses wrong.
-       *
-       * Stated here so it can be waited for instead.
-       */
-      data-erasable={Object.values(strokesById).reduce(
-        (n, strokes) => n + strokes.filter(s => !s.erasedAnchor).length,
-        0,
-      )}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={finishStroke}
-      onPointerCancel={finishStroke}
-      // Above in-slide controls (z-10), below the page chrome / toolbars (z-30).
-      className={`absolute inset-0 z-20 h-full w-full ${
-        tool
-          ? 'pointer-events-auto cursor-crosshair touch-none'
-          : 'pointer-events-none'
-      }`}
-    />
+    // The wrapper spans the slides so the canvas has somewhere to slide
+    // within; it never takes pointer events itself, only the canvas does.
+    // Above in-slide controls (z-10), below the page chrome / toolbars (z-30).
+    <div ref={wrapRef} className="pointer-events-none absolute inset-0 z-20">
+      <canvas
+        ref={canvasRef}
+        data-testid="drawing-layer"
+        /*
+         * How many saved strokes this layer can currently act on.
+         *
+         * Erasing hit-tests against the SAVED strokes, which arrive back as
+         * props after the save round-trip — so there is a window where a stroke
+         * has been drawn and stored but the layer cannot yet erase it. Nothing
+         * about the canvas shows that: it is painted, not marked up, so a test
+         * that erases as soon as the save responds is guessing at state it
+         * cannot see, and under load it guesses wrong.
+         *
+         * Stated here so it can be waited for instead.
+         */
+        data-erasable={Object.values(strokesById).reduce(
+          (n, strokes) => n + strokes.filter(s => !s.erasedAnchor).length,
+          0,
+        )}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={finishStroke}
+        onPointerCancel={finishStroke}
+        // One viewport tall, pinned to the top of it, and never taller than
+        // the slides it covers — so a single slide (carousel) gets a canvas
+        // its own size and a hundred slides get one the reader can see.
+        className={`sticky top-0 h-screen max-h-full w-full ${
+          tool
+            ? 'pointer-events-auto cursor-crosshair touch-none'
+            : 'pointer-events-none'
+        }`}
+      />
+    </div>
   )
 }
 
