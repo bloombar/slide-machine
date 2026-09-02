@@ -90,6 +90,19 @@ describe('ProjectPage', () => {
     )
   })
 
+  // The lectures live in a named landmark, so a screen reader can jump to
+  // them — and so a test can ask about THIS project's lectures rather than
+  // about every lecture named anywhere on the page. Two e2e specs scope to
+  // this name; losing it turns them into page-wide assertions again.
+  it('puts the lectures in a region named after their heading', async () => {
+    mockFetchRoutes(baseRoutes)
+    renderPage()
+    const lectures = await screen.findByRole('region', { name: 'Lectures' })
+    expect(lectures).toContainElement(
+      screen.getByRole('link', { name: /Waves/ }),
+    )
+  })
+
   it('names the owner under the title, linking to their profile', async () => {
     mockFetchRoutes({
       ...baseRoutes,
