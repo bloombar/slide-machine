@@ -25,6 +25,7 @@ import { parseDeck } from './parse-remark.mjs'
 import { deckToSlides } from './to-slides.mjs'
 import { makeUrlResolver } from './assets.mjs'
 import { materialsFor } from './materials.mjs'
+import { readCourseDescription } from './syllabus.mjs'
 import { createClient, ApiError } from './client.mjs'
 
 const USAGE = `
@@ -37,10 +38,16 @@ Target app
   --base-url <url>        App origin (default $SLIDE_MACHINE_URL or http://localhost:3000)
   --email <address>       Sign-in email (default $SLIDE_MACHINE_EMAIL)
   --password <secret>     Sign-in password (default $SLIDE_MACHINE_PASSWORD, else prompted)
+  --token <jwt>           Access token to use instead of a password (default
+                          $SLIDE_MACHINE_TOKEN); for an account signed in with
+                          Google, which has no password to send
 
 Project
   --project <title>       Project title (default: derived from the directory)
   --course <name>         Course name stored on the project
+  --description <text>    Project description (default: the course syllabus's)
+  --syllabus <path>       Syllabus to read the description from
+                          (default: syllabus.md beside the lecture directory)
   --template <id>         Style template for the project (e.g. classic, midnight, seminar)
   --study-label <text>    Research-study tag set on every lecture (admin only)
 
@@ -382,6 +389,14 @@ const main = async () => {
     opts.continuation === undefined ? ' (cont.)' : String(opts.continuation)
   const seedMaterial = !opts.noSeedMaterial
   const materialTimeoutMs = Number(opts.materialTimeout ?? 30) * 1000
+  // The syllabus says what the course is; fall back to naming the source, so
+  // a course without one still gets a description that means something.
+  const description =
+    (typeof opts.description === 'string' ? opts.description.trim() : '') ||
+    readCourseDescription(dir, {
+      syllabusPath: typeof opts.syllabus === 'string' ? opts.syllabus : null,
+    }) ||
+    `Lecture notes imported from ${path.basename(dir)}.`
 
   let files = listLectures(dir, { only: opts.only, order: opts.order })
   if (opts.limit) files = files.slice(0, Number(opts.limit))
@@ -393,7 +408,8 @@ const main = async () => {
   console.log(`Source:  ${dir}`)
   console.log(`Assets:  ${siteBase}/${coursePath}/slides/<lecture>/`)
   console.log(`Project: ${projectTitle}`)
-  console.log(`Files:   ${files.length}\n`)
+  console.log(`Files:   ${files.length}`)
+  console.log(`About:   ${description.split('\n')[0].slice(0, 96)}\n`)
 
   // --- Dry run: convert and report, touching nothing -----------------------
   if (opts.dryRun) {
@@ -445,20 +461,27 @@ const main = async () => {
   const baseUrl =
     opts.baseUrl ?? process.env.SLIDE_MACHINE_URL ?? 'http://localhost:3000'
   const email = opts.email ?? process.env.SLIDE_MACHINE_EMAIL
-  if (!email) {
+  const token = opts.token ?? process.env.SLIDE_MACHINE_TOKEN
+  if (!email && !token) {
     console.error(
-      'An account is required: pass --email or set SLIDE_MACHINE_EMAIL',
+      'An account is required: pass --email or --token, or set ' +
+        'SLIDE_MACHINE_EMAIL or SLIDE_MACHINE_TOKEN',
     )
     process.exit(1)
   }
-  const password =
-    opts.password ??
-    process.env.SLIDE_MACHINE_PASSWORD ??
-    (await promptPassword())
+  // A token identifies the account by itself, so it is not accompanied by a
+  // password prompt the holder could not answer anyway.
+  const password = token
+    ? undefined
+    : (opts.password ??
+      process.env.SLIDE_MACHINE_PASSWORD ??
+      (await promptPassword()))
 
-  const client = await createClient({ baseUrl, email, password })
+  const client = await createClient({ baseUrl, email, password, token })
   console.log(
-    `Signed in to ${baseUrl} as ${client.user.displayName ?? email}\n`,
+    `Signed in to ${baseUrl} as ${
+      client.user.displayName ?? client.user.email ?? email
+    }\n`,
   )
 
   // --- Project -------------------------------------------------------------
@@ -466,11 +489,20 @@ const main = async () => {
   let project = projects.find(p => p.title === projectTitle)
   if (project) {
     console.log(`Reusing existing project "${projectTitle}" (${project.id})`)
+    // Only fill a blank one: a description edited in the app is the owner's,
+    // and a re-run is not a reason to overwrite it.
+    if (!project.description?.trim()) {
+      project = await client.act('project.update', {
+        projectId: project.id,
+        description,
+      })
+      console.log('Set the project description from the syllabus')
+    }
   } else {
     project = await client.act('project.create', {
       title: projectTitle,
       course: opts.course ?? projectTitle,
-      description: `Lecture notes imported from ${path.basename(dir)}.`,
+      description,
       // The lecture list is the project's seed context, so live generation
       // during a lecture knows what the course covers (SEED-1/PREP-3).
       seedContext: files.map(f => outlineOf(dir, f)).join('\n'),

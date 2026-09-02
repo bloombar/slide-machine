@@ -28,6 +28,81 @@ describe('createClient', () => {
     expect(JSON.parse(init.body)).toEqual({ email: 'a@b.c', password: 'pw' })
   })
 
+  /**
+   * An account signed in with Google has no password, so the password grant
+   * cannot be used for it at all: the token is the whole credential.
+   */
+  it('uses a supplied token instead of signing in', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(json(200, { displayName: 'Ada', email: 'a@b.c' }))
+    const client = await createClient({
+      baseUrl: 'http://app.test/',
+      token: 'preset-tok',
+      fetchImpl,
+    })
+    expect(client.user.displayName).toBe('Ada')
+    const [url, init] = fetchImpl.mock.calls[0]
+    expect(url).toBe('http://app.test/api/auth/me')
+    expect(init.headers.Authorization).toBe('Bearer preset-tok')
+    // Nothing was posted to the password grant.
+    for (const [called] of fetchImpl.mock.calls) {
+      expect(called).not.toMatch(/auth\/login/)
+    }
+  })
+
+  it('sends the supplied token on an action', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(json(200, { displayName: 'Ada' }))
+      .mockResolvedValueOnce(json(200, { ok: true }))
+    const client = await createClient({
+      baseUrl: 'http://app.test',
+      token: 'preset-tok',
+      fetchImpl,
+    })
+    await client.act('project.list', {})
+    const [, init] = fetchImpl.mock.calls[1]
+    expect(init.headers.Authorization).toBe('Bearer preset-tok')
+  })
+
+  it('rejects a token the server will not take, without a sign-in', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        json(401, { error: { code: 'invalid_token', message: 'Expired.' } }),
+      )
+    await expect(
+      createClient({ baseUrl: 'http://app.test', token: 'bad', fetchImpl }),
+    ).rejects.toThrow(ApiError)
+    // The check has to be the token's own, not a password grant that would
+    // fail for an account that has no password anyway.
+    expect(fetchImpl.mock.calls[0][0]).toBe('http://app.test/api/auth/me')
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  /**
+   * There is no password to retry with, so a 401 mid-run has to surface as
+   * an error rather than becoming a silent, failing sign-in attempt.
+   */
+  it('does not try to sign in again when the token expires mid-run', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(json(200, { displayName: 'Ada' }))
+      .mockResolvedValue(
+        json(401, { error: { code: 'invalid_token', message: 'Expired.' } }),
+      )
+    const client = await createClient({
+      baseUrl: 'http://app.test',
+      token: 'preset-tok',
+      fetchImpl,
+    })
+    await expect(client.act('project.list', {})).rejects.toThrow(ApiError)
+    for (const [called] of fetchImpl.mock.calls) {
+      expect(called).not.toMatch(/auth\/login/)
+    }
+  })
+
   it('reports a failed sign-in as an ApiError', async () => {
     const fetchImpl = vi
       .fn()
