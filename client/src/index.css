@@ -31,6 +31,31 @@
   [role='radio']:not(:disabled) {
     cursor: pointer;
   }
+
+  /*
+   * AUTH-8: iOS Safari (and some Android browsers) zooms the whole page in
+   * when a focused text field's *computed* font-size is under 16px. Tailwind's
+   * preflight sets `font-size: 100%` on form controls, so any field left to
+   * inherit a `text-sm` (14px) ancestor — the sign-in dialog's email and
+   * password fields, but really any field in the app that does not set its
+   * own size — triggers it. A visitor has to pinch back out afterwards.
+   *
+   * Fixed once here rather than per-form: a floor of 16px for every
+   * `input`/`select`/`textarea`, but only below the `sm` breakpoint, where
+   * the bug actually bites. A dense desktop surface (the template editor's
+   * inspector panels, for one) already sets its own smaller size directly on
+   * the control; that utility class lives in Tailwind's `utilities` layer,
+   * which is ordered after this `base` layer and wins regardless of media
+   * query, so this rule only changes fields that were relying on inherited
+   * text size.
+   */
+  @media (max-width: 640px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
 }
 
 /*
