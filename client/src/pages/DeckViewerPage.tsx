@@ -872,8 +872,13 @@ export default function DeckViewerPage() {
   /**
    * Steps the active slide through the template's layouts (EDIT-3) via
    * the "[" / "]" keys. The active slide is the displayed one in carousel
-   * view; in list view it's whichever slide is actually on screen — never
-   * a stale off-screen `current` after the user has scrolled away. Wraps
+   * view; in list view it's whichever slide is actually on screen, so a
+   * scroll away from a stale `current` still targets what's in front of the
+   * reader. `visibleIndex()` only measures items the list has registered
+   * against the window, so it reports nothing once every row has scrolled
+   * past (the reader is down in the footer, say) — `nav.current` is the
+   * last slide an explicit move landed on, and is what activePlayIndex and
+   * activeWhiteboardSlideId already fall back to in the same spot. Wraps
    * around and is a no-op unless the viewer can edit.
    */
   const cycleLayout = (direction: 1 | -1) => {
@@ -881,8 +886,8 @@ export default function DeckViewerPage() {
     if (!v?.canEdit) return
     const layouts = v.template.layouts
     if (layouts.length < 2) return
-    const index = mode === 'carousel' ? nav.current : nav.visibleIndex()
-    if (index == null) return
+    const index =
+      mode === 'carousel' ? nav.current : (nav.visibleIndex() ?? nav.current)
     const target = v.slides[index]
     if (!target) return
     const at = layouts.findIndex(l => l.type === target.layoutType)
