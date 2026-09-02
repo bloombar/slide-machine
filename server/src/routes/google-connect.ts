@@ -24,20 +24,31 @@ import { UserModel } from '../models/user'
 
 export const googleConnectRouter = Router()
 
-/** Only redirect back to a localhost origin (dev) or the app's own origin —
- * never an attacker-supplied external URL. Exported for the sign-in callback,
- * which shares the connect completion. */
+/** Only redirect back to a localhost origin (dev only) or the app's own
+ * origin — never an attacker-supplied external URL. Exported for the
+ * sign-in callback, which shares the connect completion.
+ *
+ * Compares whole origins, not string prefixes: `startsWith` would have let
+ * `https://slides.example.edu.attacker.test/` through when
+ * `PUBLIC_BASE_URL=https://slides.example.edu`, handing the freshly
+ * signed-in visitor to an attacker's page. */
 export const safeReturnTo = (returnTo: string): string => {
   const fallback = env.PUBLIC_BASE_URL ?? '/'
+  // A bare same-origin path (one `/`, not `//` or `/\`, both of which a
+  // browser resolves as a different origin) can never leave our origin, so
+  // it is always safe and needs no URL parsing.
+  if (/^\/(?!\/|\\)/.test(returnTo)) return returnTo
   try {
-    const url = new URL(returnTo)
-    const allowed =
-      url.hostname === 'localhost' ||
-      url.hostname === '127.0.0.1' ||
-      (env.PUBLIC_BASE_URL !== undefined &&
-        returnTo.startsWith(env.PUBLIC_BASE_URL))
-    return allowed ? returnTo : fallback
+    const target = new URL(returnTo)
+    const allowedLocalhost =
+      env.NODE_ENV !== 'production' &&
+      (target.hostname === 'localhost' || target.hostname === '127.0.0.1')
+    const allowedOwnOrigin =
+      env.PUBLIC_BASE_URL !== undefined &&
+      target.origin === new URL(env.PUBLIC_BASE_URL).origin
+    return allowedLocalhost || allowedOwnOrigin ? returnTo : fallback
   } catch {
+    // Not a parseable URL (or PUBLIC_BASE_URL isn't) — reject, don't throw.
     return fallback
   }
 }
