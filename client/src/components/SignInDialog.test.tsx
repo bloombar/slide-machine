@@ -14,6 +14,16 @@ import { mockFetchRoutes } from '../test/fetch-mock'
 // Records that the shared component was the thing rendered, while still
 // rendering the real form so every other test here exercises it for real.
 // LoginPage.test.tsx makes the matching assertion for /login.
+// Google sign-in renders only when a client id is configured
+// (`config.googleAuthEnabled`), which is an ambient build-time env var: set
+// on a developer's machine, absent in CI. Pinned here so this file asserts
+// the dialog's own contents rather than whichever environment ran it — the
+// unpinned version passed locally and failed on CI for exactly that reason.
+// Mirrors what GoogleSignInButton.test.tsx already does.
+vi.mock('../config', () => ({
+  config: { apiBaseUrl: '', googleAuthEnabled: true },
+}))
+
 const signInFormSpy = vi.hoisted(() => vi.fn())
 vi.mock('./SignInForm', async importOriginal => {
   const actual = await importOriginal<typeof import('./SignInForm')>()
