@@ -14,6 +14,27 @@ const goHome = async (page: import('@playwright/test').Page) => {
   await page.getByRole('menuitem', { name: 'Home' }).click()
 }
 
+/**
+ * Opens a project from the home page and hands back ITS lectures.
+ *
+ * Both halves matter. The home page names lectures in two places — the
+ * user's own projects and the Discover feed beside them — so an assertion
+ * made against the whole page can be answered by a stranger's lecture that
+ * happens to share a title, and "Untitled lecture" is the title every new
+ * lecture shares. And it can be answered *before the click has landed*,
+ * since home already holds matches: waiting for this project's own section
+ * is what makes the assertion about the page it means.
+ */
+const openProjectLectures = async (
+  page: import('@playwright/test').Page,
+  title: string,
+) => {
+  await page.getByRole('link', { name: title, exact: true }).click()
+  const lectures = page.getByRole('region', { name: 'Lectures' })
+  await expect(lectures).toBeVisible()
+  return lectures
+}
+
 test('a lecture moves from one project to another', async ({ page }) => {
   await page.goto('/register')
   await page.getByLabel('Display name').fill('Mover')
@@ -66,11 +87,13 @@ test('a lecture moves from one project to another', async ({ page }) => {
 
   // And both project pages agree
   await goHome(page)
-  await page.getByRole('link', { name: 'MoveTo', exact: true }).click()
-  await expect(page.getByText('Untitled lecture')).toBeVisible()
+  await expect(
+    (await openProjectLectures(page, 'MoveTo')).getByText('Untitled lecture'),
+  ).toBeVisible()
   await goHome(page)
-  await page.getByRole('link', { name: 'MoveFrom', exact: true }).click()
-  await expect(page.getByText('Untitled lecture')).toHaveCount(0)
+  await expect(
+    (await openProjectLectures(page, 'MoveFrom')).getByText('Untitled lecture'),
+  ).toHaveCount(0)
   await expect(
     page.getByRole('button', { name: 'Start a new lecture in MoveFrom' }),
   ).toBeVisible()

@@ -35,6 +35,9 @@ import ProjectSettingsModal, {
   type ProjectSettingsTabId,
 } from '../components/ProjectSettingsModal'
 
+/** Ties the lectures section to its own heading, naming it. */
+const LECTURES_HEADING_ID = 'project-lectures-heading'
+
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
@@ -188,9 +191,16 @@ export default function ProjectPage() {
         )}
       </header>
 
-      <section className="max-w-2xl">
+      {/* Named after its own heading, which makes it a landmark rather than
+          an anonymous box — a screen reader can jump to the lectures, and a
+          test can ask about THIS project's lectures rather than about every
+          lecture named anywhere on screen. */}
+      <section className="max-w-2xl" aria-labelledby={LECTURES_HEADING_ID}>
         <div className="mb-4 flex items-center justify-between gap-4">
-          <h2 className="min-w-0 truncate text-lg font-semibold text-slate-700">
+          <h2
+            id={LECTURES_HEADING_ID}
+            className="min-w-0 truncate text-lg font-semibold text-slate-700"
+          >
             {t('project.lectures')}
           </h2>
           {/* New project is left out: this page is already inside one.

@@ -62,6 +62,12 @@ test('kebab menu shares and deletes lectures from lists', async ({ page }) => {
   await page.getByRole('button', { name: 'Menu', exact: true }).click()
   await page.getByRole('menuitem', { name: 'Home' }).click()
   await page.getByRole('link', { name: 'MenuProj', exact: true }).click()
+  // This project's own lectures. Home names lectures in two places — the
+  // user's projects and the Discover feed beside them — so a page-wide
+  // assertion can be answered by a stranger's lecture of the same title, or
+  // by home itself before the click has landed.
+  const lectures = page.getByRole('region', { name: 'Lectures' })
+  await expect(lectures).toBeVisible()
   await page
     .getByRole('button', { name: 'Options for Untitled lecture' })
     .click()
@@ -69,7 +75,7 @@ test('kebab menu shares and deletes lectures from lists', async ({ page }) => {
   const dialog = page.getByRole('alertdialog', { name: 'Delete lecture?' })
   await expect(dialog).toBeVisible()
   await dialog.getByRole('button', { name: 'Cancel' }).click()
-  await expect(page.getByText(/Untitled lecture/)).toBeVisible()
+  await expect(lectures.getByText(/Untitled lecture/)).toBeVisible()
 
   await page
     .getByRole('button', { name: 'Options for Untitled lecture' })
@@ -80,7 +86,7 @@ test('kebab menu shares and deletes lectures from lists', async ({ page }) => {
     .getByRole('button', { name: 'Delete', exact: true })
     .click()
   // The lecture is gone; only the dashed New lecture zone remains
-  await expect(page.getByText(/Untitled lecture/)).toHaveCount(0)
+  await expect(lectures.getByText(/Untitled lecture/)).toHaveCount(0)
   await expect(
     page.getByRole('button', { name: 'Start a new lecture in MenuProj' }),
   ).toBeVisible()
