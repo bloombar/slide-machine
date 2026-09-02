@@ -125,7 +125,7 @@ const LEGACY_FIELDS = [
   'attribution',
 ] as const
 
-slideSchema.pre('save', function () {
+slideSchema.pre('save', async function () {
   /*
    * Only when this save has something to fold.
    *
@@ -137,14 +137,39 @@ slideSchema.pre('save', function () {
    * that folds into it; the rest have no opinion about what the boxes hold
    * and should not be overwriting them.
    */
-  const folds =
-    this.isNew ||
-    this.isModified('slots') ||
-    LEGACY_FIELDS.some(field => this.isModified(field))
+  const changedLegacyField = LEGACY_FIELDS.some(field => this.isModified(field))
+  const folds = this.isNew || this.isModified('slots') || changedLegacyField
   if (!folds) return
-  const folded = foldLegacy(slotsOf(this), this, field =>
-    this.isModified(field),
-  )
+
+  /*
+   * A save that touched a legacy field (say, `title`) but never assigned
+   * `slots` itself has no opinion of its own about what the rest of the map
+   * holds — its in-memory copy is simply whatever the map looked like when
+   * this document was loaded. If something else (an enrichment result, most
+   * often) wrote a slot since then, that slot is not this save's to lose.
+   *
+   * Folding onto the in-memory copy anyway was the bug (docs/DECISIONS.md,
+   * "The image poll checks promptly, then backs off"): a save built from a
+   * document loaded before the picture landed republished the WHOLE map
+   * without it, while the mirrored `imageRef` field — unchanged in memory,
+   * so never marked modified — went untouched, leaving the two
+   * representations disagreeing with no way to converge on their own.
+   * Re-reading the persisted map right before folding narrows that window
+   * to one query instead of however long the request took. Skipped when
+   * this save assigned `slots` itself (its in-memory copy IS the intended
+   * write, not a staleness artifact) or is brand new (nothing else could
+   * have written it yet).
+   */
+  let base = slotsOf(this)
+  if (!this.isNew && !this.isModified('slots') && changedLegacyField) {
+    const projection = Object.fromEntries(
+      [...LEGACY_FIELDS, 'slots'].map(field => [field, 1]),
+    )
+    const fresh = await SlideModel.findById(this._id, projection).lean()
+    if (fresh) base = slotsOf(fresh)
+  }
+
+  const folded = foldLegacy(base, this, field => this.isModified(field))
   this.slots = folded
   this.markModified('slots')
   const derived = legacyFrom(folded)

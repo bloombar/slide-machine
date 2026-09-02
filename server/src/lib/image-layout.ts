@@ -43,6 +43,33 @@ export const slotHasImage = (
   return name === 'image' && Boolean(slide.imageRef)
 }
 
+/**
+ * The Mongo condition that protects a legacy `imageRef` from being
+ * clobbered by enrichment writing the conventional `image` slot (IMG-3),
+ * for use alongside a query that has already checked the slot itself is
+ * empty.
+ *
+ * `imageRef` only needs protecting on its own when the slide predates the
+ * slot map entirely — that is the one case where the slot LOOKS empty
+ * (there is no map to check) despite a real picture sitting in the old
+ * field. A slide that already has a map is on the newer schema, so the
+ * slot's own emptiness is authoritative; a leftover `imageRef` next to a
+ * missing `slots.image` on such a slide is not a picture to protect, it is
+ * the stale-save fold disagreement (docs/DECISIONS.md, "The image poll
+ * checks promptly, then backs off") that enrichment must be able to heal,
+ * not perpetuate.
+ */
+export const legacyImageRefGuard = (): Record<string, unknown> => ({
+  $or: [
+    { imageRef: { $in: [null, ''] } },
+    {
+      $expr: {
+        $gt: [{ $size: { $objectToArray: { $ifNull: ['$slots', {}] } } }, 0],
+      },
+    },
+  ],
+})
+
 /** The image slots of one layout type, in declaration order (IMG-6). */
 export const imageSlotNames = (
   type: string,

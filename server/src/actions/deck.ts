@@ -107,6 +107,7 @@ import {
 import {
   imageSlotNames,
   layoutHasImageSlot,
+  legacyImageRefGuard,
   reconcileImageLayout,
 } from '../lib/image-layout'
 import { UserModel } from '../models/user'
@@ -202,7 +203,7 @@ const maybeEnrich = (
           },
           // A slide written before the map keeps its picture in the old
           // field alone, and that picture is still the user's (IMG-3).
-          ...(slot === 'image' ? [{ imageRef: { $in: [null, ''] } }] : []),
+          ...(slot === 'image' ? [legacyImageRefGuard()] : []),
         ],
       },
       {

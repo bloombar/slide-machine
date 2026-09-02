@@ -7,6 +7,7 @@
  */
 import { SlideModel } from '../models/slide'
 import { slotsOf } from '../lib/slide-slots'
+import { legacyImageRefGuard } from '../lib/image-layout'
 import { env } from '../config/env'
 import { currentUsageUser } from '../billing/usage-context'
 import { userHasCapacity } from '../billing/meter-hooks'
@@ -178,7 +179,7 @@ export const enrichSlideImage = async (
           },
           // A slide written before the map holds its picture in the old
           // field alone, and that picture is still the user's (IMG-3).
-          ...(slot === 'image' ? [{ imageRef: { $in: [null, ''] } }] : []),
+          ...(slot === 'image' ? [legacyImageRefGuard()] : []),
         ],
       },
       {
