@@ -88,6 +88,25 @@ export const editSlideTranscript = (
   dispatchAction<Slide>('slide.editTranscript', { slideId, transcript })
 
 /**
+ * Reconciles a slide's stored transcript with the finalized wording of a
+ * phrase flushed mid-utterance (GEN-12): the interim-flush hypothesis
+ * (`find`) that was submitted mid-speech is swapped for what the recognizer
+ * settled on (`replace`) once the utterance finalized. A no-op — the returned
+ * slide is unchanged — when `find` is no longer present, or the user has
+ * since hand-edited this slide's transcript themselves (that edit always
+ * wins). Re-anchors whiteboard marks the same way `editSlideTranscript` does.
+ */
+export const reconcileSlideTranscript = (
+  slideId: string,
+  find: string,
+  replace: string,
+): Promise<Slide> =>
+  dispatchAction<Slide>('slide.editTranscript', {
+    slideId,
+    correction: { find, replace },
+  })
+
+/**
  * Re-transcribes a slide from its retained lecture audio (GEN-4) and returns
  * what the speech engine heard. By default nothing is written — the transcript
  * editor shows the text for the user to accept or discard. Pass `save` to write

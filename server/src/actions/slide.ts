@@ -573,6 +573,19 @@ const MAX_TRANSCRIPT_CHARS = 20000
  * so overwriting it blind would strand every mark. The write therefore goes
  * through the shared `applySlideTranscript`, which re-anchors each mark onto the
  * new wording (see lib/slide-transcript).
+ *
+ * Two shapes of input, never both and never neither (see
+ * SlideEditTranscriptInput): `transcript` is the transcript editor's full
+ * hand-edited replacement — it always wins, and marks the slide so no later
+ * `correction` can undo it. `correction` is the automatic mid-utterance
+ * reconciliation (GEN-12): the interim flush submits a phrase from the
+ * recognizer's still-revisable hypothesis, and once the utterance finalizes
+ * the client asks to swap that submitted text for the finalized wording. It
+ * touches only the flushed substring — everything else on the slide (and
+ * everything the reformat/refine passes protect via `manuallyEdited`) is left
+ * alone — and is silently skipped when the text it expects to find is no
+ * longer there, or the user has since hand-edited this slide's transcript
+ * themselves.
  */
 export const slideEditTranscript = defineAction<
   SlideEditTranscriptInput,
@@ -581,14 +594,47 @@ export const slideEditTranscript = defineAction<
 >({
   name: 'slide.editTranscript',
   access: bySlideId,
-  input: z.object({
-    slideId: z.string().min(1),
-    // Empty is allowed: it clears the stored narration, so playback falls back
-    // to narrating the slide's own content (PLAY-2).
-    transcript: z.string().max(MAX_TRANSCRIPT_CHARS),
-  }),
+  input: z
+    .object({
+      slideId: z.string().min(1),
+      // Empty is allowed: it clears the stored narration, so playback falls
+      // back to narrating the slide's own content (PLAY-2).
+      transcript: z.string().max(MAX_TRANSCRIPT_CHARS).optional(),
+      correction: z
+        .object({
+          find: z.string().min(1).max(MAX_TRANSCRIPT_CHARS),
+          replace: z.string().max(MAX_TRANSCRIPT_CHARS),
+        })
+        .optional(),
+    })
+    // One or the other, never both and never neither — matching the
+    // deck-import "presentationId xor pptxBase64" pattern above.
+    .refine(
+      v => (v.transcript !== undefined) !== (v.correction !== undefined),
+      {
+        message: 'exactly one of transcript or correction is required',
+      },
+    ),
   execute: async (ctx, input, { slide }) => {
-    await applySlideTranscript(slide, input.transcript)
+    if (input.correction) {
+      // The user's own edit always wins — never let an automatic
+      // reconciliation land on top of it.
+      if (slide.transcriptManuallyEdited) return toSlideDto(slide)
+      const current = slide.sourceTranscript ?? ''
+      // The flush is the most recent thing appended, so anchor on its last
+      // occurrence; if it's gone (something else already rewrote the
+      // transcript) don't guess at where the correction belongs.
+      const at = current.lastIndexOf(input.correction.find)
+      if (at === -1) return toSlideDto(slide)
+      const next =
+        current.slice(0, at) +
+        input.correction.replace +
+        current.slice(at + input.correction.find.length)
+      await applySlideTranscript(slide, next)
+      return toSlideDto(slide)
+    }
+    slide.transcriptManuallyEdited = true
+    await applySlideTranscript(slide, input.transcript ?? '')
     return toSlideDto(slide)
   },
 })

@@ -1188,6 +1188,186 @@ describe('DeckViewerPage microphone capture', () => {
     )
   })
 
+  // GEN-12 reconciliation: a flushed phrase is only the recognizer's
+  // hypothesis at the moment it was submitted, and that hypothesis can still
+  // be revised before the utterance finalizes. The slide it landed on needs
+  // correcting to match — but only the flush that actually changed.
+  it('reconciles a mid-utterance flush with the finalized wording, but only the flush the recognizer revised', async () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    vi.spyOn(runtimeConfig, 'getInterimFlushEnabled').mockReturnValue(true)
+    vi.spyOn(runtimeConfig, 'getInterimFlushWords').mockReturnValue(3)
+    const phrases: string[] = []
+    const corrections: unknown[] = []
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/session.phrase': init => {
+        const { phrase } = JSON.parse(String(init?.body)) as { phrase: string }
+        phrases.push(phrase)
+        // Every phrase — flushed or final — lands on the same existing slide.
+        return {
+          status: 200,
+          body: { kind: 'slide.update', slide: { ...deckView.slides[0] } },
+        }
+      },
+      '/api/actions/slide.editTranscript': init => {
+        const body = JSON.parse(String(init?.body))
+        corrections.push(body)
+        // The real action would swap `find` for `replace` inside the current
+        // transcript; the mock does the same so the UI assertion below
+        // proves the corrected wording actually reaches the slide, not just
+        // that a request was sent.
+        return {
+          status: 200,
+          body: {
+            ...deckView.slides[0],
+            sourceTranscript: 'a b c d e f g h I-FIXED',
+          },
+        }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+    const recognition = FakeRecognition.last!
+    const hear = (transcript: string, isFinal = false) =>
+      act(() => {
+        recognition.onresult?.({
+          resultIndex: 0,
+          results: [{ isFinal, 0: { transcript } }],
+        })
+      })
+
+    // First flush: "a b c d e f" — the finalized text below repeats it
+    // unchanged, so it must never be corrected.
+    hear('a b c d e f')
+    hear('a b c d e f')
+    await vi.waitFor(() => expect(phrases).toEqual(['a b c d e f']))
+
+    // Second flush: "g h i" — "d" through "i" were already stable going into
+    // this update, so one repeat clears the threshold again.
+    hear('a b c d e f g h i')
+    hear('a b c d e f g h i')
+    await vi.waitFor(() => expect(phrases).toEqual(['a b c d e f', 'g h i']))
+
+    // Finalizes with "i" revised to "I-FIXED" and nothing left over — every
+    // word was already flushed, so no third session.phrase call happens and
+    // the correction response is the only thing left to settle.
+    hear('a b c d e f g h I-FIXED', true)
+    // Only the revised flush is corrected — the unrevised first flush never
+    // reaches slide.editTranscript at all, and the phrase list stops growing.
+    await vi.waitFor(() => expect(corrections).toHaveLength(1))
+    expect(phrases).toEqual(['a b c d e f', 'g h i'])
+    expect(corrections[0]).toEqual({
+      slideId: deckView.slides[0]!.id,
+      correction: { find: 'g h i', replace: 'g h I-FIXED' },
+    })
+    // The corrected wording actually reaches the slide the flush landed on —
+    // not just a request sent and forgotten. The transcript editor seeds its
+    // field from the slide only once, at mount, so wait for the correction's
+    // response to be applied to view state before opening it.
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0))
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Edit spoken transcript' }),
+    )
+    expect(
+      await screen.findByRole('textbox', { name: 'Spoken transcript' }),
+    ).toHaveValue('a b c d e f g h I-FIXED')
+  })
+
+  // The guard against overwriting a hand-edited transcript is enforced
+  // server-side (slide.editTranscript's `correction` branch, tested in
+  // server/test/integration/editing.test.ts) — nothing here decides whether
+  // the guard fires. What this proves is that the client never assumes a
+  // reconciliation succeeded: it renders exactly whatever slide the server
+  // hands back, so a guarded (unchanged) response surfaces as the user's own
+  // wording rather than the client's own idea of "the fix went through".
+  it('shows whatever the server returns for a reconciliation, never assuming the correction applied', async () => {
+    FakeRecognition.reset()
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)
+    vi.spyOn(runtimeConfig, 'getInterimFlushEnabled').mockReturnValue(true)
+    vi.spyOn(runtimeConfig, 'getInterimFlushWords').mockReturnValue(2)
+    const handEdited = {
+      ...deckView.slides[0],
+      sourceTranscript: 'A hand-edited narration the user wrote themselves.',
+    }
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: {
+          ...deckView,
+          slides: [handEdited, deckView.slides[1]],
+          canEdit: true,
+        },
+      }),
+      '/api/actions/session.phrase': () => ({
+        status: 200,
+        body: { kind: 'slide.update', slide: handEdited },
+      }),
+      // A guarding server leaves a hand-edited slide untouched and simply
+      // returns it as-is — the correction never lands.
+      '/api/actions/slide.editTranscript': () => ({
+        status: 200,
+        body: handEdited,
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+    const recognition = FakeRecognition.last!
+    const hear = (transcript: string, isFinal = false) =>
+      act(() => {
+        recognition.onresult?.({
+          resultIndex: 0,
+          results: [{ isFinal, 0: { transcript } }],
+        })
+      })
+
+    hear('x y')
+    hear('x y z')
+    // Finalizes with "x" revised — a correction is attempted, but the
+    // (guarding) server hands back the slide unchanged.
+    hear('X-FIXED y z', true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Edit spoken transcript' }),
+    )
+    expect(
+      await screen.findByRole('textbox', { name: 'Spoken transcript' }),
+    ).toHaveValue('A hand-edited narration the user wrote themselves.')
+  })
+
   it('creates a new slide when "next" is spoken at the end of the deck', async () => {
     FakeRecognition.reset()
     vi.stubGlobal('webkitSpeechRecognition', FakeRecognition)

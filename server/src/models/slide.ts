@@ -24,6 +24,15 @@ export interface SlideDb extends Omit<Slide, 'id' | 'deckId' | 'slots'> {
    * changed, so repeated Refines are idempotent. Server-internal — not in the
    * Slide DTO. */
   narrateInputHash?: string
+  /** Set when the user has hand-edited this slide's spoken transcript
+   * (slide.editTranscript's `transcript` branch, EDIT-6) — as opposed to text
+   * the server wrote from speech. Guards the mid-utterance interim-flush
+   * reconciliation (GEN-12): once set, a `correction` can never overwrite it,
+   * so the user's wording always wins. Mirrors `manuallyEdited`, which guards
+   * a slide's content the same way; kept separate because editing the
+   * transcript should not also freeze the title/body against reformat, and
+   * vice versa. Server-internal — not in the Slide DTO. */
+  transcriptManuallyEdited?: boolean
   /** Soft-delete tombstone (P-10); null/absent = live. */
   deletedAt?: Date | null
 }
@@ -97,6 +106,7 @@ const slideSchema = new Schema<SlideDb>({
   narrateInputHash: String,
   attribution: { type: Schema.Types.Mixed, default: undefined },
   manuallyEdited: { type: Boolean, default: undefined },
+  transcriptManuallyEdited: { type: Boolean, default: undefined },
   drawings: { type: [strokeSchema], default: undefined },
   // The slide's content, keyed by the slot names its layout declares. Loose
   // on purpose: the slot set is data a template author writes, not a shape
