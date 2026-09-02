@@ -100,6 +100,7 @@ import { useWhiteboard } from '../components/whiteboard/useWhiteboard'
 import { themeColors } from '../components/slide/theme'
 import Tooltip from '../components/Tooltip'
 import NotificationPill from '../components/NotificationPill'
+import TranscriptSubtitle from '../components/TranscriptSubtitle'
 import SlideRefineModal from '../components/SlideRefineModal'
 import SeedDialog from '../components/SeedDialog'
 import DeckSettingsModal, {
@@ -2656,14 +2657,11 @@ export default function DeckViewerPage() {
               </button>
             </form>
           )}
-          {interim && (
-            <p
-              aria-live="polite"
-              className="mt-2 w-full text-sm text-slate-400 italic"
-            >
-              {interim}
-            </p>
-          )}
+          {/* CAP-3: interim text displayed as a live caption — a reusable
+              one-line subtitle that reserves its height whether or not
+              there is text, so the page does not jump as speech starts,
+              grows, or clears. */}
+          <TranscriptSubtitle text={interim} testId="live-transcript" />
           {speakError && (
             <p role="alert" className="mt-2 w-full text-sm text-red-600">
               {speakError}
