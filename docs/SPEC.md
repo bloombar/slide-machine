@@ -814,6 +814,17 @@ The user can drive the slide generator hands-free by **speaking commands** — a
 - Recognized commands are confirmed visually (and optionally audibly) so the user can tell a command registered. Low-confidence matches are ignored rather than acted on, to avoid disrupting a live lecture.
 - **AI command intent (experimental, flagged)** — in addition to the deterministic wake-word matcher, the generation model ([GEN-1](#gen-1-speech-to-slide-generation)) is offered the same command set and may classify a plain phrase ("let's go to the next slide") as a command instead of lecture content; the client executes it through the same path, and nothing persists. Off by default (`GENERATION_VOICE_COMMANDS`) because a misread phrase becomes a surprise navigation.
 
+#### CAP-5 Live caption line
+
+The words currently being recognized are echoed back to the speaker as a **single line beneath the current slide**, so an instructor can see that the microphone is hearing them, and roughly what it heard, without the caption becoming a second thing to read.
+
+- **The line reserves its space whether or not it has text** — one line-height, always present. A caption that appeared and vanished with each phrase would shift the slide beneath it throughout a lecture; reserving the box means nothing on screen moves as speech starts, grows, or clears.
+- **A long phrase is clipped from the front, never wrapped** — the most recently spoken words are the useful ones, so the line shows the **end** of what is being said and lets older words fall off the leading edge. It never grows to a second line and never truncates the newest words.
+- **It shows the recognizer's live hypothesis and nothing else decides on it.** The echo follows interim text ([CAP-3](#cap-3-speech-to-text-transcription)) and is display-only: what appears here never determines what reaches generation ([GEN-1](#gen-1-speech-to-slide-generation)), what is stored as the slide's transcript ([GEN-12](#gen-12-mid-speech-interim-generation)), or whether a command fires ([CAP-4](#cap-4-voice-commands)).
+- **Announced as a change, not as an arrival** — it is a polite live region for assistive technology, and because the element is always mounted, an empty caption never announces itself; only a real change to non-empty text is spoken.
+
+The same one-line readout is reused to subtitle narration playback ([PLAY-4](#play-4-narration-subtitles)).
+
 ### 9. Slide Generation & Enrichment
 
 #### GEN-1 Speech-to-slide generation
@@ -980,8 +991,10 @@ Speech recognizers only finalize a phrase after a trailing pause ([CAP-3](#cap-3
 
 - **Stable-prefix flush** — the client watches the interim transcript; once the words that are stable (unchanged across consecutive interim updates) and not yet submitted pass a **word threshold**, they are submitted to generation ([GEN-1](#gen-1-speech-to-slide-generation)) immediately, without waiting for the recognizer to finalize. Word-based rather than time-based: a count of stable words is deterministic and independent of speaking rate.
 - **No double generation** — when the recognizer finalizes the utterance, only the words not already flushed are submitted. The new-vs-update decision ([GEN-8](#gen-8-new-slide-vs-update-current)) absorbs mid-thought boundaries: a flushed fragment can update the slide it started.
+- **The stored words are the finalized words.** A flushed prefix is the recognizer's *hypothesis* at that moment, and the recognizer may revise it before the utterance finalizes. So each flush is remembered with its place in the utterance, and when the final arrives the finalized wording for that same word range is reconciled onto whatever slide the flush produced — the slide's stored transcript ([EDIT-6](#edit-6-spoken-transcript-editing), [PLAY-2](#play-2-narration-playback)) ends up saying what was actually said, not the guess that was live at flush time. A flush whose wording the recognizer did not revise writes nothing.
+
 - **Commands stay final-only** — wake-worded voice commands ([CAP-4](#cap-4-voice-commands)) are matched only against finalized text, so a half-heard interim can never fire a command.
-- **Opt-in and configurable** ([TECH-4](#tech-4-server-configuration)) — `GENERATION_INTERIM_FLUSH` (default **off**) switches the behavior on; `GENERATION_INTERIM_FLUSH_WORDS` (default 140, about a minute of uninterrupted lecture speech) sets the threshold. Off by default because flushed text is the recognizer's hypothesis rather than its finalized pass — the transcript trades some fidelity (and, on Cloud STT, per-word timings for flushed stretches) for liveness. Both settings reach the client via runtime config and apply to every capture engine ([CAP-3](#cap-3-speech-to-text-transcription)) alike.
+- **Opt-in and configurable** ([TECH-4](#tech-4-server-configuration)) — `GENERATION_INTERIM_FLUSH` (default **off**) switches the behavior on; `GENERATION_INTERIM_FLUSH_WORDS` (default 140, about a minute of uninterrupted lecture speech) sets the threshold. Off by default because a flush acts on the recognizer's hypothesis rather than its finalized pass — generation may see a phrase the recognizer later revises, and on Cloud STT per-word timings are lost for flushed stretches. The stored transcript itself is reconciled back to the finalized wording (above), so what is traded for liveness is which words the *generator* saw, not which words the deck keeps. Both settings reach the client via runtime config and apply to every capture engine ([CAP-3](#cap-3-speech-to-text-transcription)) alike.
 
 **Metering note.** Gemini, Speech-to-Text, and image-API usage in §8–§9 all count against the user's plan caps (BILL-3) and are subject to enforcement (BILL-4).
 
@@ -1005,6 +1018,14 @@ A student reading a deck in a translated language ([SHARE-2](#share-2-post-lectu
 - **Metered like the work it is** ([BILL-3](#bill-3-usage-caps--metering)) — translating the narration text counts as translation, synthesizing it counts as TTS, and both are charged to the **deck's owner**: to the separate **audience** allowance when a viewer triggers the work, to the authoring allowance when the owner or an editor does. Cache hits are recorded at zero cost and never debit a cap, so a class listening to a lecture that has already been spoken once costs nothing and still shows up in the counts.
 - **Whiteboard marks are not replayed** — marks are timed by position within the **original** transcript ([EDIT-4](#edit-4-whiteboard-annotation)), and those anchors do not survive translation. A translated playback shows a slide's untimed marks and skips the timed ones, consistent with a translated view being read-only ([SHARE-2](#share-2-post-lecture-translated-viewing)).
 - **Off with translation** — where translated viewing is unavailable ([TECH-4](#tech-4-server-configuration), `TRANSLATION_PROVIDER=none`), there is no translated view to narrate and playback is unchanged.
+
+#### PLAY-4 Narration subtitles
+
+While a deck is being spoken aloud ([PLAY-2](#play-2-narration-playback)), the words currently being narrated are shown as a **subtitle line beneath the slide**, in the same fixed-height, front-clipped, never-wrapping line the live capture echo uses ([CAP-5](#cap-5-live-caption-line)) — one component, so a lecture looks the same whether it is being spoken by the instructor or read back to a student.
+
+- **Follows the language being spoken** — a deck narrated in a translated language ([PLAY-3](#play-3-narration-in-the-translated-language)) is subtitled in that language, because the subtitle is the text that was handed to TTS, not a separate lookup.
+- **Off is a real state** — a deck with narration playback stopped shows the reserved, empty line rather than removing it, so pausing and resuming never reflows the slide.
+- **Not a transcript view** — it shows the passing phrase only; reading or editing the whole narration is [EDIT-6](#edit-6-spoken-transcript-editing).
 
 #### EDIT-1 Full content editing
 
@@ -1055,6 +1076,16 @@ Every content kind ([TMPL-9](#tmpl-9-open-slot--layout-model)) is editable in pl
 A slot's authoring instructions and limits ([TMPL-10](#tmpl-10-slot-metadata--authoring-instructions)) are visible to the editor as guidance, so an instructor filling a slot by hand sees what the template intended it for. As with all hand edits, editing a slot marks it as manually edited so the post-lecture reformat does not overwrite it ([GEN-4](#gen-4-post-lecture-ai-reformat-holistic-regeneration)).
 
 Specialized content is **read aloud sensibly or not at all** — narration ([PLAY-2](#play-2-narration-playback)) does not recite LaTeX source or punctuation-heavy program listings.
+
+#### EDIT-8 Duplicate a slide
+
+A slide's menu can **duplicate** it. The copy is inserted **immediately after** the source, the deck's slide order is reindexed so every slide's position still matches its index, and the copy becomes the active slide — so the common case, "this slide again but changed", starts from the thing being changed rather than from a blank slide.
+
+- **The copy is the content, not the history.** Its declared slots ([TMPL-9](#tmpl-9-open-slot--layout-model)) are deep-copied so the two slides never share nested state, along with the layout the content was written for and the slide's spoken transcript — narration falls back to that transcript ([PLAY-2](#play-2-narration-playback)), so a copy without it would look identical and read differently aloud.
+- **Whiteboard marks and their anchors travel together** — marks are timed by position within the transcript ([EDIT-4](#edit-4-whiteboard-annotation)), so copying both keeps every anchor valid rather than orphaning it.
+- **A manual-edit flag is a property of the content**, so it carries over: a copy of a hand-edited slide is equally protected from the post-lecture reformat ([GEN-4](#gen-4-post-lecture-ai-reformat-holistic-regeneration)).
+- **Retained audio does not copy.** No transcript segment points at the copy's new id, so "play original audio" ([P-6](#16-privacy-security--compliance)) is simply not offered for it, exactly as for any slide that was never spoken.
+- Duplication runs through the action layer ([TECH-13](#tech-13-application-actioncommand-layer)) with the same editor-level authorization as any other slide edit ([TECH-14](#tech-14-declarative-action-authorization)).
 
 #### SHARE-1 Saved deck viewer & permalink
 
@@ -1422,6 +1453,14 @@ Every action in the action/command layer ([TECH-13](#tech-13-application-actionc
 - **What the index shows today** — of 86 registered actions, 82 declare a resource and level from the vocabulary; 4 declare an explicit exception with its reason recorded (two public feeds whose query filter is their authorization, one listing whose admission differs by whether a project is named, one read whose admission and response fidelity are the same decision). That ratio is the point: the exceptions are few, named, and explained, rather than unknown.
 - **Scope boundary** — the guarantee covers actions dispatched through the action layer. Routes that read or write deck data outside it (media streaming, TTS, the audio socket) keep their own checks and are not covered by the index; narrowing that gap is separate work.
 
+#### TECH-15 Mobile form controls do not zoom the page
+
+Focusing a text field on a phone must not zoom the page. iOS Safari (and some Android browsers) zoom in whenever a focused field's **computed** font size is under 16px, leaving the visitor to pinch back out — and a sign-in field that does this is met before anything else in the app ([AUTH-8](#auth-8-signing-in-without-leaving-the-page)).
+
+- **Fixed once, globally, not per form** — a 16px floor for every `input`, `select`, and `textarea` below the small breakpoint, where the behavior actually occurs. Any field that inherits its size from an ancestor is covered by construction, so a new form cannot reintroduce the bug by forgetting.
+- **A control that sets its own smaller size still wins** — dense desktop surfaces (the template inspector, for one) set size directly on the control, and that ordering is deliberate, so the floor only reaches fields that were relying on inherited text size.
+- **Never by disabling zoom.** The fix does not use `user-scalable=no` or a locked `maximum-scale`: pinch-zoom is an accessibility affordance, and suppressing it would trade one group's papercut for another group's barrier.
+
 ### 15. Data Models
 
 Indicative MongoDB collections, expressed as shared TypeScript types ([TECH-6](#tech-6-shared-types--data-models)):
@@ -1463,7 +1502,7 @@ The same definitions back API request/response DTOs and validation on both tiers
 | **P-1** | All student data (rosters, quiz responses, scores) stays within NYU-approved, FERPA-compliant systems (NYU Google Workspace, NYU-provided models).                                                                                                                                                                      |
 | **P-2** | No student PII is sent to external AI models. Only de-identified lecture/slide/seed text drives slide and quiz generation.                                                                                                                                                                                              |
 | **P-3** | All secrets live in server-side `.env` (Gemini/OpenAI, Google Cloud, OAuth, JWT, SMTP, Stripe) — never committed and never exposed to the client. (V1's committed `openai.key` and `localStorage` key storage are removed in V2.)                                                                 |
-| **P-4** | Passwords hashed; JWTs signed with server-held secrets (periodic secret rotation is recommended, not required); reset/verification links time-limited and single-use; ownership/role checks on every mutating route.                                                                                                                                                               |
+| **P-4** | Passwords hashed; JWTs signed with server-held secrets (periodic secret rotation is recommended, not required); reset/verification links time-limited and single-use; ownership/role checks on every mutating route. Any **return-to target** carried through an authentication or account-connect round trip is admitted by comparing **whole origins** — never a string prefix, which would admit an attacker's `own-origin.attacker.test` — and a bare same-origin path is admitted as itself; anything else falls back to the app's own base URL. Localhost targets are a development affordance and are refused in production.                                                                                                                                                               |
 | **P-5** | Google Drive/Docs/Slides access uses per-user OAuth consent and least-privilege scopes; imported content is the user's own. Reads of a user's existing presentations ([TMPL-8](#tmpl-8-template-import-from-google-slides)/[EXP-5](#exp-5-lecture-import-from-google-slides)) are **read-only** and never modify the source file; adding a scope requires already-connected users to reconnect, which the app detects and prompts for (EXP-4). |
 | **P-6** | Microphone audio drives transcription; capture is bounded by explicit start/stop with clear UI state. Audio is **not retained by default**. When retention is explicitly enabled (for diarization — GEN-4 — and per-slide original-audio playback — PLAY-2), it applies only to the server-proxied engine, is **gated on deck edit access**, is **server-only** (never exposed in a DTO or shared surface), and is **auto-deleted** after a bounded window (deleting eagerly as soon as diarization has consumed it is recommended, not required). Retained student voices remain subject to P-1/P-2. (Design: [DECISIONS.md](DECISIONS.md) "Audio retention".) |
 | **P-7** | Evaluation data is anonymized before analysis and submitted for IRB/program review; findings (positive or negative) shared with the NYU community.                                                                                                                                                                      |

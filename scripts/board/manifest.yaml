@@ -1782,6 +1782,40 @@
   phase: 3
   status: Backlog
   review: false
+- id: CAP-5
+  title: Live caption line
+  full: The words currently being recognized are echoed back to the speaker as a
+    single line beneath the current slide, so an instructor can see that the
+    microphone is hearing them, and roughly what it heard, without the caption
+    becoming a second thing to read. The line reserves its space whether or not
+    it has text — one line-height, always present. A caption that appeared and
+    vanished with each phrase would shift the slide beneath it throughout a
+    lecture; reserving the box means nothing on screen moves as speech starts,
+    grows, or clears. A long phrase is clipped from the front, never wrapped —
+    the most recently spoken words are the useful ones, so the line shows the
+    end of what is being said and…
+  section: §8 Live Lecture Capture
+  family: CAP
+  phase: 3
+  status: Backlog
+  review: false
+- id: EDIT-8
+  title: Duplicate a slide
+  full: A slide's menu can duplicate it. The copy is inserted immediately after
+    the source, the deck's slide order is reindexed so every slide's position
+    still matches its index, and the copy becomes the active slide — so the
+    common case, "this slide again but changed", starts from the thing being
+    changed rather than from a blank slide. The copy is the content, not the
+    history. Its declared slots (TMPL-9) are deep-copied so the two slides never
+    share nested state, along with the layout the content was written for and
+    the slide's spoken transcript — narration falls back to that transcript
+    (PLAY-2), so a copy without it would look identical and read differently
+    aloud. Whiteboard marks and their…
+  section: §10 Playback, Editing & Sharing
+  family: EDIT
+  phase: 3
+  status: Backlog
+  review: false
 - id: EVAL-1
   title: Live-session telemetry
   full: 'Every live session writes an append-only record of what the machine
@@ -1901,6 +1935,12 @@
   full: Passwords hashed; JWTs signed with server-held secrets (periodic secret
     rotation is recommended, not required); reset/verification links
     time-limited and single-use; ownership/role checks on every mutating route.
+    Any return-to target carried through an authentication or account-connect
+    round trip is admitted by comparing whole origins — never a string prefix,
+    which would admit an attacker's own-origin.attacker.test — and a bare
+    same-origin path is admitted as itself; anything else falls back to the
+    app's own base URL. Localhost targets are a development affordance and are
+    refused in production.
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
@@ -2052,6 +2092,23 @@
   phase: 3
   status: Backlog
   review: false
+- id: PLAY-4
+  title: Narration subtitles
+  full: While a deck is being spoken aloud (PLAY-2), the words currently being
+    narrated are shown as a subtitle line beneath the slide, in the same
+    fixed-height, front-clipped, never-wrapping line the live capture echo uses
+    (CAP-5) — one component, so a lecture looks the same whether it is being
+    spoken by the instructor or read back to a student. Follows the language
+    being spoken — a deck narrated in a translated language (PLAY-3) is
+    subtitled in that language, because the subtitle is the text that was handed
+    to TTS, not a separate lookup. Off is a real state — a deck with narration
+    playback stopped shows the reserved, empty line rather than removing it, so
+    pausing and resuming never reflows the…
+  section: §10 Playback, Editing & Sharing
+  family: PLAY
+  phase: 3
+  status: Backlog
+  review: false
 - id: PREP-1
   title: Preflight concept extraction
   full: 'When a project has been seeded (SEED-1/SEED-2), the system can run an
@@ -2131,6 +2188,23 @@
     twice for the same lookup, and a caller with no rights to a lecture is
     refused before they can be told anything about their plan — authorization
     precedes plan-cap enforcement (BILL-3)…
+  section: §14 Technical Stack & Conventions
+  family: TECH
+  phase: 3
+  status: Backlog
+  review: false
+- id: TECH-15
+  title: Mobile form controls do not zoom the page
+  full: Focusing a text field on a phone must not zoom the page. iOS Safari (and
+    some Android browsers) zoom in whenever a focused field's computed font size
+    is under 16px, leaving the visitor to pinch back out — and a sign-in field
+    that does this is met before anything else in the app (AUTH-8). Fixed once,
+    globally, not per form — a 16px floor for every input, select, and textarea
+    below the small breakpoint, where the behavior actually occurs. Any field
+    that inherits its size from an ancestor is covered by construction, so a new
+    form cannot reintroduce the bug by forgetting. A control that sets its own
+    smaller size still wins — dense desktop surfaces (the template inspector,
+    for one) set size…
   section: §14 Technical Stack & Conventions
   family: TECH
   phase: 3

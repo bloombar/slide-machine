@@ -1775,8 +1775,16 @@ describe('DeckViewerPage microphone capture', () => {
     expect(toggle.className).toContain('bg-red-600')
     expect(toggle.className).toContain('text-white')
 
+    // The live-transcript subtitle (TranscriptSubtitle) is mounted from the
+    // moment the session opens, with no text yet — it reserves its line
+    // height up front so the page does not jump once speech starts.
+    const subtitle = screen.getByTestId('live-transcript')
+    expect(subtitle).toHaveTextContent('')
+    const reservedHeight = subtitle.style.height
+    expect(reservedHeight).not.toBe('')
+
     const recognition = FakeRecognition.last!
-    // Interim text shows without dispatching
+    // Interim text shows without dispatching, in the same reserved box
     act(() => {
       recognition.onresult?.({
         resultIndex: 0,
@@ -1784,6 +1792,8 @@ describe('DeckViewerPage microphone capture', () => {
       })
     })
     expect(screen.getByText('photosynthesis ba')).toBeInTheDocument()
+    expect(screen.getByTestId('live-transcript')).toBe(subtitle)
+    expect(subtitle.style.height).toBe(reservedHeight)
     expect(sent).toBeUndefined()
 
     // A final phrase dispatches through the same pipeline as typing
