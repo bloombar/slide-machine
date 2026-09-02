@@ -57,6 +57,7 @@ import {
   editSlideDrawings,
   fetchSlideOriginalAudioUrl,
   pollSlideImage,
+  reconcileSlideTranscript,
   uploadSlideImage,
 } from '../api/slides'
 import { useAuth } from '../auth/AuthContext'
@@ -68,7 +69,10 @@ import { useBracketKeys } from '../hooks/useBracketKeys'
 import { useSpaceKey } from '../hooks/useSpaceKey'
 import { useUndoRedoKeys } from '../hooks/useUndoRedoKeys'
 import { createSpeechCapture, type PhraseMeta } from '../stt/capture'
-import { createInterimFlusher } from '../stt/interim-flush'
+import {
+  createInterimFlusher,
+  type InterimFlushCorrection,
+} from '../stt/interim-flush'
 import {
   COMMAND_LABELS,
   matchVoiceCommand,
@@ -564,6 +568,11 @@ export default function DeckViewerPage() {
   const lastPhraseBySlideRef = useRef<
     Record<string, { phrase: string; words?: WordTiming[]; sessionId?: string }>
   >({})
+  // Which slide each mid-utterance flush (GEN-12) landed on, keyed by the
+  // flusher's per-flush seq — filled in once that flush's submitPhrase call
+  // resolves, read back when the utterance finalizes to reconcile the slide
+  // with the recognizer's settled wording.
+  const flushSlideRef = useRef<Record<number, string>>({})
   // Debounce timers for persisting each slide's drawings after edits.
   const drawingsSaveTimers = useRef<Record<string, number>>({})
   // Per-slide whiteboard undo/redo history (Cmd/Ctrl-Z). Each entry keeps
@@ -960,10 +969,16 @@ export default function DeckViewerPage() {
     watchImage(next)
   }
 
-  const submitPhrase = async (text: string, meta?: PhraseMeta) => {
+  /** Submits one phrase to generation. Returns the id of the slide it landed
+   * on (or undefined on failure/no deck), so a mid-utterance flush (GEN-12)
+   * can later be reconciled against the right slide. */
+  const submitPhrase = async (
+    text: string,
+    meta?: PhraseMeta,
+  ): Promise<string | undefined> => {
     // Via the ref: mic phrases can arrive from long-lived callbacks
     const deckId = viewRef.current?.deck.id
-    if (!deckId) return
+    if (!deckId) return undefined
     setBusy(true)
     setSpeakError(null)
     try {
@@ -997,6 +1012,7 @@ export default function DeckViewerPage() {
           sessionId: meta?.sessionId,
         }
       }
+      return event.slide?.id
     } catch (err) {
       // Show the server's message when generation is unavailable (quota/
       // credits exhausted or the provider is overloaded); otherwise a
@@ -1006,6 +1022,7 @@ export default function DeckViewerPage() {
           ? err.message
           : 'Generation failed — try again',
       )
+      return undefined
     } finally {
       setBusy(false)
     }
@@ -1154,6 +1171,33 @@ export default function DeckViewerPage() {
     return v?.deck.language ?? v?.projectLanguage ?? user?.language
   }
 
+  /** Rewrites a mid-utterance flush's slide with the recognizer's finalized
+   * wording (GEN-12): the interim hypothesis that was flushed can still be
+   * revised by the time the utterance completes, so the slide it produced
+   * needs correcting to match. A no-op if the flush never resolved to a slide
+   * (submitPhrase failed), or the user has since hand-edited that slide's
+   * transcript — that edit always wins, and the server enforces it too. */
+  const reconcileFlush = async (correction: InterimFlushCorrection) => {
+    const slideId = flushSlideRef.current[correction.seq]
+    delete flushSlideRef.current[correction.seq]
+    if (!slideId) return
+    try {
+      const slide = await reconcileSlideTranscript(
+        slideId,
+        correction.submitted,
+        correction.final,
+      )
+      setView(v =>
+        v
+          ? { ...v, slides: v.slides.map(s => (s.id === slide.id ? slide : s)) }
+          : v,
+      )
+    } catch {
+      // Best-effort: leave the flushed (interim) wording in place rather than
+      // surfacing an error mid-lecture over a text correction.
+    }
+  }
+
   /** Attaches recognition; recognized phrases queue through the same
    * pipeline as typed ones — unless the phrase is a wake-worded
    * command, which acts immediately and never reaches generation.
@@ -1174,6 +1218,18 @@ export default function DeckViewerPage() {
           setInterim('')
           const remainder = flusher ? flusher.final(text) : null
           const phrase = remainder ? remainder.text : text
+          // Reconcile every mid-utterance flush with the recognizer's settled
+          // wording (GEN-12): queued onto the same phrase queue as the flushes
+          // themselves, so each correction only runs once its flush's
+          // submitPhrase call has resolved and recorded which slide it landed
+          // on. Independent of whether the remaining tail turns out to be a
+          // command — the flushed text already reached generation regardless.
+          for (const correction of remainder?.corrections ?? []) {
+            if (correction.final === correction.submitted) continue
+            phraseQueueRef.current = phraseQueueRef.current.then(() =>
+              reconcileFlush(correction),
+            )
+          }
           const command = matchVoiceCommand(phrase)
           if (command) {
             runVoiceCommand(command)
@@ -1189,16 +1245,20 @@ export default function DeckViewerPage() {
                   words: meta.words.slice(-phrase.split(/\s+/).length),
                 }
               : meta
-          phraseQueueRef.current = phraseQueueRef.current.then(() =>
-            submitPhrase(phrase, phraseMeta),
-          )
+          phraseQueueRef.current = phraseQueueRef.current.then(async () => {
+            await submitPhrase(phrase, phraseMeta)
+          })
         },
         onInterim: (text, meta) => {
           const flush = flusher?.interim(text)
-          if (flush)
-            phraseQueueRef.current = phraseQueueRef.current.then(() =>
-              submitPhrase(flush, meta),
-            )
+          if (flush) {
+            const seq = flush.seq
+            phraseQueueRef.current = phraseQueueRef.current
+              .then(() => submitPhrase(flush.text, meta))
+              .then(slideId => {
+                if (slideId) flushSlideRef.current[seq] = slideId
+              })
+          }
           setInterim(text)
         },
         onError: message => {

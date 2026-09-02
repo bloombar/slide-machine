@@ -486,6 +486,82 @@ describe('slide.editTranscript', () => {
     })
     expect(res.status).toBe(403)
   })
+
+  it('rejects a request with both transcript and correction, or neither', async () => {
+    const both = await act(ada, 'slide.editTranscript', {
+      slideId: slideIds[0],
+      transcript: 'x',
+      correction: { find: 'a', replace: 'b' },
+    })
+    expect(both.status).toBe(400)
+
+    const neither = await act(ada, 'slide.editTranscript', {
+      slideId: slideIds[0],
+    })
+    expect(neither.status).toBe(400)
+  })
+
+  // GEN-12: the mid-utterance interim flush can submit a phrase the
+  // recognizer later revises; `correction` swaps that submission for the
+  // finalized wording once the utterance completes.
+  describe('correction (GEN-12 interim-flush reconciliation)', () => {
+    it('swaps the flushed substring for the finalized wording, leaving the rest alone', async () => {
+      // Simulates what two flushes of the same utterance would have appended
+      // — session.phrase's own append path, not the (guarding) transcript
+      // editor — so the slide starts with more than just the flushed text.
+      await SlideModel.findByIdAndUpdate(slideIds[0], {
+        sourceTranscript: 'Photosynthesis basics happens in chloroplasts.',
+      })
+      const res = await act(ada, 'slide.editTranscript', {
+        slideId: slideIds[0],
+        correction: {
+          find: 'Photosynthesis basics',
+          replace: 'Photosynthesis fundamentals',
+        },
+      })
+      expect(res.status).toBe(200)
+      expect(res.body.sourceTranscript).toBe(
+        'Photosynthesis fundamentals happens in chloroplasts.',
+      )
+    })
+
+    it('is a no-op when the flushed text is no longer present', async () => {
+      // sourceTranscript is 'Photosynthesis basics' from the beforeEach seed.
+      const res = await act(ada, 'slide.editTranscript', {
+        slideId: slideIds[0],
+        correction: { find: 'not in the transcript', replace: 'anything' },
+      })
+      expect(res.status).toBe(200)
+      expect(res.body.sourceTranscript).toBe('Photosynthesis basics')
+    })
+
+    it('never overwrites a slide the user has hand-edited — their wording always wins', async () => {
+      await act(ada, 'slide.editTranscript', {
+        slideId: slideIds[0],
+        transcript: 'Photosynthesis basics, hand-corrected by the user.',
+      })
+      const res = await act(ada, 'slide.editTranscript', {
+        slideId: slideIds[0],
+        correction: {
+          find: 'hand-corrected by the user.',
+          replace: 'FLUSHED PRE-REVISION TEXT',
+        },
+      })
+      expect(res.status).toBe(200)
+      expect(res.body.sourceTranscript).toBe(
+        'Photosynthesis basics, hand-corrected by the user.',
+      )
+    })
+
+    it("403s reconciling another user's transcript", async () => {
+      const bob = await registerUser('bob-reconcile@example.com')
+      const res = await act(bob, 'slide.editTranscript', {
+        slideId: slideIds[0],
+        correction: { find: 'Photosynthesis basics', replace: 'Hijack' },
+      })
+      expect(res.status).toBe(403)
+    })
+  })
 })
 
 describe('slide.setLayout', () => {

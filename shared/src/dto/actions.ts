@@ -555,10 +555,22 @@ export interface SlideEditInput {
 
 /** Replaces a slide's spoken narration (EDIT-6). The transcript drives TTS
  * playback and is the timeline whiteboard marks are anchored to, so the server
- * re-anchors those marks onto the new text rather than stranding them. */
+ * re-anchors those marks onto the new text rather than stranding them.
+ *
+ * Exactly one of `transcript`/`correction` is given, never both and never
+ * neither. `transcript` is the transcript editor's full hand-edited
+ * replacement, and always wins — it also marks the slide so no later
+ * `correction` can overwrite it. `correction` is the automatic mid-utterance
+ * reconciliation (GEN-12): the interim flush can submit a hypothesis the
+ * recognizer later revises, so once the utterance finalizes, `find` (what was
+ * actually submitted) is swapped for `replace` (the finalized wording) inside
+ * the slide's stored transcript, leaving the rest untouched. Silently a no-op
+ * when `find` is no longer present (something else already changed the
+ * transcript) or the slide has a hand-edit to protect. */
 export interface SlideEditTranscriptInput {
   slideId: string
-  transcript: string
+  transcript?: string
+  correction?: { find: string; replace: string }
 }
 
 /** Re-transcribes one slide from its retained lecture audio (GEN-4/EDIT-6).
