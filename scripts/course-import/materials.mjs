@@ -123,20 +123,34 @@ export const collectMaterialLinks = parsed => {
  * `dir` is the lecture directory, `deckName` the lecture's slug — together
  * the page the source is published at. A site-absolute path is matched by
  * its tail, because the course's own path prefix is already on disk.
+ *
+ * A tail is tried against the courses directory as well as this course, so a
+ * lecture that borrows a picture from a sibling course still finds the file:
+ * courses sit side by side on disk, and a path naming another one —
+ * `/content/courses/software-engineering/assets/x.png` read from the agile
+ * course — resolves under that shared parent.
  */
 export const candidatePaths = (url, { dir, deckName }) => {
   const target = cleanTarget(url)
   if (!target || /^(https?:)?\/\//i.test(target)) return []
   const courseRoot = path.dirname(dir)
+  const coursesRoot = path.dirname(courseRoot)
   const candidates = []
 
   if (target.startsWith('/')) {
     // `/content/courses/<course>/slides/images/x.png` — try progressively
-    // shorter tails against the course root and the lecture directory.
+    // shorter tails against the course root, the lecture directory, and the
+    // courses directory the sibling courses share. The longest tail that
+    // matches wins, so a path naming another course lands in that course
+    // rather than on a same-named file in this one.
     const parts = target.replace(/^\/+/, '').split('/')
     for (let i = 0; i < parts.length; i++) {
       const tail = parts.slice(i).join('/')
-      candidates.push(path.resolve(courseRoot, tail), path.resolve(dir, tail))
+      candidates.push(
+        path.resolve(courseRoot, tail),
+        path.resolve(dir, tail),
+        path.resolve(coursesRoot, tail),
+      )
     }
   } else {
     // Relative to the published page — the reading that makes the source's

@@ -26,6 +26,7 @@ import {
  */
 let root
 let dir
+let sibling
 const deckName = 'what-is-software-engineering'
 
 beforeAll(() => {
@@ -38,6 +39,34 @@ beforeAll(() => {
   fs.writeFileSync(path.join(dir, 'images', 'notes.txt'), 'text')
   fs.writeFileSync(path.join(dir, 'images', 'chart.drawio'), 'xml')
   fs.writeFileSync(path.join(dir, 'assets', deckName, 'diagram.png'), 'png')
+  // A second course beside the first, holding a picture the first one links
+  // to by its site-absolute path.
+  sibling = path.join(root, 'agile-development-and-devops', 'slides')
+  fs.mkdirSync(path.join(sibling, 'assets', 'git-github'), { recursive: true })
+  fs.mkdirSync(
+    path.join(root, 'software-engineering', 'assets', 'conventions'),
+    {
+      recursive: true,
+    },
+  )
+  fs.writeFileSync(
+    path.join(sibling, 'assets', 'git-github', 'merge-options.png'),
+    'png',
+  )
+  fs.writeFileSync(
+    path.join(
+      root,
+      'software-engineering',
+      'assets',
+      'conventions',
+      'branch.png',
+    ),
+    'png',
+  )
+  // The same filename in both courses, to prove the named one wins.
+  fs.mkdirSync(path.join(sibling, 'images'), { recursive: true })
+  fs.writeFileSync(path.join(sibling, 'images', 'shared.png'), 'sibling')
+  fs.writeFileSync(path.join(dir, 'images', 'shared.png'), 'local')
 })
 
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
@@ -193,6 +222,55 @@ describe('resolveMaterialPath', () => {
         { dir, deckName },
       ),
     ).toBe(path.join(dir, 'images', 'waterfall.png'))
+  })
+
+  /**
+   * Courses sit side by side on disk, and a lecture may link to a picture in
+   * another one by the path it has on the published site. Resolving that
+   * against the importing course alone finds nothing, so the shared courses
+   * directory is tried too.
+   */
+  it('resolves a picture that lives in a sibling course', () => {
+    expect(
+      resolveMaterialPath(
+        '/content/courses/agile-development-and-devops/slides/assets/git-github/merge-options.png',
+        { dir, deckName },
+      ),
+    ).toBe(path.join(sibling, 'assets', 'git-github', 'merge-options.png'))
+  })
+
+  it('resolves a sibling course path that skips the slides directory', () => {
+    expect(
+      resolveMaterialPath(
+        '/content/courses/software-engineering/assets/conventions/branch.png',
+        {
+          dir: path.join(root, 'agile-development-and-devops', 'slides'),
+          deckName,
+        },
+      ),
+    ).toBe(
+      path.join(
+        root,
+        'software-engineering',
+        'assets',
+        'conventions',
+        'branch.png',
+      ),
+    )
+  })
+
+  /**
+   * Both courses have an `images/shared.png`. A path naming the sibling has
+   * to land there rather than on this course's same-named file, which the
+   * shorter tail would otherwise match first.
+   */
+  it('picks the course the path names, not the same-named local file', () => {
+    expect(
+      resolveMaterialPath(
+        '/content/courses/agile-development-and-devops/slides/images/shared.png',
+        { dir, deckName },
+      ),
+    ).toBe(path.join(sibling, 'images', 'shared.png'))
   })
 
   it('resolves a lecture’s own assets directory', () => {

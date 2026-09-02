@@ -47,3 +47,17 @@ Changes are tracked on the GitHub project board and follow a branch → PR flow 
 - **Do not hand-create board issues.** The board is generated from the SPEC via `npm run board:derive` then `npm run board:sync` (see docs/PROJECT_BOARD.md).
 
 If asked to use a different workflow (e.g. commit straight to the default branch), **remind the user that it diverges from this flow and confirm before proceeding** — then honor the confirmed request.
+
+## Protected paths
+
+**IMPORTANT:** `.env*` hold live credentials, and `docs/study/data/` holds research study data (P-14). A `PreToolUse` hook
+(`.claude/hooks/guard-paths.sh`, tested by `npm run test:hooks`) blocks writes to them. A block is a signal to stop and
+report — never route around it.
+
+## Agent workflow
+
+Implementation runs as a supervisor/developer split: `.claude/agents/developer-agent.md` implements a scoped
+slice against a brief, `.claude/agents/spec-reviewer.md` reviews the diff in fresh context, and the agent
+doing the work is never the one grading it. The brief template and definition of done are in the
+`phase-handoff` skill. The plan being built is summarised in `docs/SPEC.md` and `docs/ROADMAP.md`; decisions
+made along the way are in `docs/DECISIONS.md`.

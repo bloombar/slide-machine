@@ -35,16 +35,44 @@ export class ApiError extends Error {
  *
  * `baseUrl` is the app's origin (e.g. `http://localhost:3000`); the API is
  * always under `/api`.
+ *
+ * Pass `token` instead of a password for an account that has none — one
+ * signed in with Google has no password to send, and the password grant
+ * would reject it. The token is then the only credential the client holds,
+ * so an expired one cannot be renewed by signing in again: mint it with a
+ * lifetime that covers the whole run.
  */
 export const createClient = async ({
   baseUrl,
   email,
   password,
+  token: presetToken = null,
   retries = 4,
   fetchImpl = fetch,
 }) => {
   const api = `${baseUrl.replace(/\/+$/, '')}/api`
-  let token = null
+  let token = presetToken
+
+  /**
+   * Reads the account the token belongs to, standing in for the sign-in that
+   * a password would have done — so a bad or expired token fails here, with
+   * the same error shape, rather than midway through an import.
+   */
+  const whoami = async () => {
+    const res = await fetchImpl(`${api}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      throw new ApiError(
+        res.status,
+        body?.error?.code ?? 'token_rejected',
+        body?.error?.message ??
+          `The supplied token was rejected (${res.status})`,
+      )
+    }
+    return body.user ?? body
+  }
 
   const login = async () => {
     const res = await fetchImpl(`${api}/auth/login`, {
@@ -64,7 +92,9 @@ export const createClient = async ({
     return body.user
   }
 
-  const user = await login()
+  // A preset token replaces the password grant, not just its result: there
+  // is no credential to sign in with again.
+  const user = presetToken ? await whoami() : await login()
 
   /**
    * Dispatches one action. Retries transient failures with backoff, and
@@ -87,7 +117,11 @@ export const createClient = async ({
       const code = body?.error?.code
       const message = body?.error?.message ?? `${name} failed (${res.status})`
 
-      if (!reauthorized && (code === 'invalid_token' || res.status === 401)) {
+      if (
+        !presetToken &&
+        !reauthorized &&
+        (code === 'invalid_token' || res.status === 401)
+      ) {
         reauthorized = true
         await login()
         continue
@@ -128,7 +162,11 @@ export const createClient = async ({
       const message =
         body?.error?.message ?? `Upload of ${filename} failed (${res.status})`
 
-      if (!reauthorized && (code === 'invalid_token' || res.status === 401)) {
+      if (
+        !presetToken &&
+        !reauthorized &&
+        (code === 'invalid_token' || res.status === 401)
+      ) {
         reauthorized = true
         await login()
         continue

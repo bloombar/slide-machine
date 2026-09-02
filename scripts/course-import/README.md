@@ -96,17 +96,22 @@ one `../` too many next to the file itself.
 All of these are understood, both for the URLs written onto slides and for
 finding the file on disk:
 
-| Written in the source                           | The file it means               |
-| ----------------------------------------------- | ------------------------------- |
-| `../images/x.png`                               | `slides/images/x.png`           |
-| `../assets/<lecture>/x.png`                     | `slides/assets/<lecture>/x.png` |
-| `images/x.png`                                  | `slides/<lecture>/images/x.png` |
-| `/content/courses/<course>/slides/images/x.png` | `slides/images/x.png`           |
-| `{{ site.baseurl }}/slides/images/x.pdf`        | `slides/images/x.pdf`           |
-| `https://example.com/x.pdf`                     | Left as a link; not downloaded  |
+| Written in the source                           | The file it means                   |
+| ----------------------------------------------- | ----------------------------------- |
+| `../images/x.png`                               | `slides/images/x.png`               |
+| `../assets/<lecture>/x.png`                     | `slides/assets/<lecture>/x.png`     |
+| `images/x.png`                                  | `slides/<lecture>/images/x.png`     |
+| `/content/courses/<course>/slides/images/x.png` | `slides/images/x.png`               |
+| `/content/courses/<other>/assets/x.png`         | the sibling course's `assets/x.png` |
+| `{{ site.baseurl }}/slides/images/x.pdf`        | `slides/images/x.pdf`               |
+| `https://example.com/x.pdf`                     | Left as a link; not downloaded      |
 
 Readings are tried most-correct first and the first that exists on disk wins,
-so a source that is inconsistent about `../` still resolves. A query string or
+so a source that is inconsistent about `../` still resolves. A site-absolute
+path is matched by its tail against this course _and_ against the directory the
+courses share, so a lecture that borrows a picture from a sibling course finds
+it; the longest tail that matches wins, so the course the path names beats a
+same-named file in the course being imported. A query string or
 `#anchor` after the filename is ignored. Anything with no file extension —
 `../version-control-systems`, `../uml-diagrams#use-cases` — is a link to
 another lecture, not a file, and is left alone.
