@@ -9,6 +9,11 @@
 import { test, expect, type Page } from './fixtures'
 import { chooseAccountDesign, createProject } from './helpers'
 
+// The mock generator title-cases a slide's heading, so the second slide
+// reads "Igneous, Sedimentary, Metamorphic" above its bullets. Match the
+// phrase without pinning its casing.
+const secondSlideText = /igneous, sedimentary, metamorphic/i
+
 const email = `duplicate-${Date.now()}@example.com`
 const password = 'sturdy-passw0rd'
 
@@ -48,6 +53,9 @@ test('duplicate slide: the copy is adjacent to its source and active', async ({
   // Speak leaves the second slide active; step back to the title slide and
   // duplicate it. Its copy is inserted right after it — slide 2 of 3 now —
   // and the view flips straight to the copy.
+  // Speaking refocuses the phrase input, and arrow keys are ignored while
+  // typing, so drop focus first or the deck never moves.
+  await page.getByLabel('Spoken phrase').blur()
   await page.keyboard.press('ArrowLeft')
   await expect(page.getByText('1 / 2')).toBeVisible()
   await page.getByRole('button', { name: 'Options for slide 1' }).click()
@@ -73,9 +81,7 @@ test('duplicate slide: the copy is adjacent to its source and active', async ({
   await page.keyboard.press('ArrowRight')
   await page.keyboard.press('ArrowRight')
   await expect(page.getByText('3 / 3')).toBeVisible()
-  await expect(page.getByTestId('slide')).toContainText(
-    'Igneous, sedimentary, metamorphic',
-  )
+  await expect(page.getByTestId('slide')).toContainText(secondSlideText)
 
   // List view: duplicating the last slide appends its copy, which scrolls
   // into view as the active one.
@@ -84,8 +90,6 @@ test('duplicate slide: the copy is adjacent to its source and active', async ({
   await page.getByRole('button', { name: 'Options for slide 3' }).click()
   await page.getByRole('menuitem', { name: 'Duplicate slide' }).click()
   await expect(page.getByTestId('slide')).toHaveCount(4)
-  await expect(page.getByTestId('slide').nth(3)).toContainText(
-    'Igneous, sedimentary, metamorphic',
-  )
+  await expect(page.getByTestId('slide').nth(3)).toContainText(secondSlideText)
   await expect(page.getByTestId('slide').nth(3)).toBeInViewport()
 })
