@@ -110,6 +110,7 @@ import { ShellActions } from '../components/layout/ShellActions'
 import ViewModeToggle, { type ViewMode } from '../components/ViewModeToggle'
 import VoteControl from '../components/VoteControl'
 import SlideLanguageSwitcher from '../components/SlideLanguageSwitcher'
+import SignInDialog, { type AuthGateFeature } from '../components/SignInDialog'
 import { lectureTitle, untitledLecture } from '../lib/lecture'
 import { untitledProject } from '../lib/project'
 
@@ -216,6 +217,12 @@ export default function DeckViewerPage() {
   const navigate = useNavigate()
   const { user, status } = useAuth()
   const isAdmin = useIsAdmin()
+  // Which feature a signed-out visitor reached for, if any — playback,
+  // narration, or translated viewing all need an account (AUTH-8). Raising
+  // the dialog is just setting this; `user` flipping true on a successful
+  // sign-in is what makes the gated controls live again, so nothing here
+  // has to remember what to do next.
+  const [authGate, setAuthGate] = useState<AuthGateFeature | null>(null)
   const [view, setView] = useState<DeckViewResponse | null>(null)
   // Always-fresh view for callbacks that outlive their render (the mic
   // queue submits phrases from closures captured when listening began)
@@ -232,7 +239,23 @@ export default function DeckViewerPage() {
   // fetched alongside the deck and laid over it at render time — `view.slides`
   // stays the authored text that every edit, narration and save path reads.
   const translationAvailable = getTranslationEnabled()
-  const translation = useSlideTranslation(slug, translationAvailable)
+  // Translated viewing needs an account (AUTH-8), and the hook reaches it
+  // two ways: an explicit choice in the switcher, and a language remembered
+  // from a previous visit that it restores and fetches with nobody clicking.
+  // The switcher is gated by `locked` below; the remembered language is
+  // gated here, because the translation endpoint is deliberately
+  // `optionalAuth` (SHARE-2) and would otherwise re-open the permalink fully
+  // translated for a lapsed session with no gate ever raised.
+  //
+  // `status` matters as much as `user`: a signed-in reader's session is
+  // restored asynchronously, so treating the `restoring` window as signed
+  // out would drop their remembered language on every load. `null` says
+  // "not yet known", and the hook waits.
+  const translation = useSlideTranslation(
+    slug,
+    translationAvailable && Boolean(user),
+    status === 'restoring' ? null : Boolean(user),
+  )
   const sourceLocale = deckSourceLocale(
     view?.deck.language,
     view?.projectLanguage,
@@ -1241,12 +1264,27 @@ export default function DeckViewerPage() {
   const narrationPlaying = tts.status === 'playing'
   /** Speaks a slide's content (kebab option), stopping any current playback. */
   const speakSlide = (slide: Slide) => tts.speakSlide(slide)
+  /** Deck playback (play/pause button and the space shortcut below): a
+   * signed-out visitor raises the sign-in dialog instead (AUTH-8). */
+  const requestPlayback = () => {
+    if (!user) {
+      setAuthGate('playback')
+      return
+    }
+    tts.toggle(activePlayIndex())
+  }
+  /** The kebab's "Speak this slide": gated the same way as deck playback,
+   * but named separately — narration is its own ask (AUTH-8). */
+  const requestSpeakSlide = (slide: Slide) => {
+    if (!user) {
+      setAuthGate('narration')
+      return
+    }
+    speakSlide(slide)
+  }
   // Space toggles narration play/pause, matching the toolbar button —
   // active only when TTS is on and the deck has slides to play.
-  useSpaceKey(
-    () => tts.toggle(activePlayIndex()),
-    ttsEnabled && (view?.slides.length ?? 0) > 0,
-  )
+  useSpaceKey(requestPlayback, ttsEnabled && (view?.slides.length ?? 0) > 0)
 
   // --- Whiteboard drawing state (WB-1/WB-2) ---
   // Defined above the early returns so undo/redo (below) and its keyboard hook
@@ -2017,6 +2055,8 @@ export default function DeckViewerPage() {
             value={translation.locale}
             onChange={setSlideLanguage}
             busy={translation.busy}
+            locked={!user}
+            onLockedClick={() => setAuthGate('translation')}
           />
         )}
         {(canEdit || adminOverride) && (
@@ -2063,7 +2103,7 @@ export default function DeckViewerPage() {
                   }
                   aria-pressed={narrationPlaying}
                   disabled={view.slides.length === 0}
-                  onClick={() => tts.toggle(activePlayIndex())}
+                  onClick={requestPlayback}
                   className={`rounded-md p-2 ${
                     narrationPlaying
                       ? 'bg-indigo-50 text-indigo-600'
@@ -2280,7 +2320,9 @@ export default function DeckViewerPage() {
               />
               <SlideMenu
                 number={nav.current + 1}
-                onSpeak={ttsEnabled ? () => speakSlide(slide!) : undefined}
+                onSpeak={
+                  ttsEnabled ? () => requestSpeakSlide(slide!) : undefined
+                }
                 onChangeLayout={
                   canEdit ? () => setLayoutPickerFor(slide!.id) : undefined
                 }
@@ -2337,7 +2379,9 @@ export default function DeckViewerPage() {
                   />
                   <SlideMenu
                     number={i + 1}
-                    onSpeak={ttsEnabled ? () => speakSlide(s) : undefined}
+                    onSpeak={
+                      ttsEnabled ? () => requestSpeakSlide(s) : undefined
+                    }
                     onChangeLayout={() => setLayoutPickerFor(s.id)}
                     onEditTranscript={() => setTranscriptEditorFor(s.id)}
                     onRefine={
@@ -2363,7 +2407,10 @@ export default function DeckViewerPage() {
                 >
                   <SlideView slide={displaySlide(s)} template={view.template} />
                   {ttsEnabled && (
-                    <SlideMenu number={i + 1} onSpeak={() => speakSlide(s)} />
+                    <SlideMenu
+                      number={i + 1}
+                      onSpeak={() => requestSpeakSlide(s)}
+                    />
                   )}
                 </li>
               ),
@@ -2434,6 +2481,10 @@ export default function DeckViewerPage() {
           }}
           onClose={() => setRefineSlideFor(null)}
         />
+      )}
+
+      {authGate && (
+        <SignInDialog feature={authGate} onClose={() => setAuthGate(null)} />
       )}
 
       {editFailed && (

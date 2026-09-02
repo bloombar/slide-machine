@@ -10,6 +10,7 @@ import { Link, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import type { Deck, Project } from '@slide-machine/shared'
 import { useAuth } from '../auth/AuthContext'
+import { takeReturnPath } from '../auth/returnPath'
 import { dispatchAction } from '../api/actions'
 import { userHandle } from '../lib/handle'
 import { untitledLecture } from '../lib/lecture'
@@ -115,6 +116,15 @@ export default function HomePage() {
   const [importInto, setImportInto] = useState<Project | null>(null)
   /** The lecture that just arrived, highlighted briefly so it is findable. */
   const [justArrived, setJustArrived] = useState<string | null>(null)
+
+  // Google sign-in always lands here, having taken the whole tab (AUTH-8).
+  // If the visitor started somewhere else — the sign-in dialog on a lecture —
+  // that page parked itself before leaving, so hand them back to it. Read
+  // once and cleared, so a later plain visit to /app stays on /app.
+  useEffect(() => {
+    const back = takeReturnPath()
+    if (back) navigate(back, { replace: true })
+  }, [navigate])
 
   // A pointer, not a state: it says "here it is" and then stops.
   useEffect(() => {

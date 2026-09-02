@@ -1,9 +1,15 @@
 /**
- * Post-lecture translated viewing end to end (SHARE-2): an anonymous visitor
- * arriving through a shared permalink switches the slide language, reads the
+ * Post-lecture translated viewing end to end (SHARE-2): a visitor arriving
+ * through a shared permalink switches the slide language, reads the
  * translated text, and switches back to the authored original — which is
  * unchanged, because a translation is a layer over the deck and never a
  * rewrite of it.
+ *
+ * Translated viewing needs an account (AUTH-8): the first test's visitor
+ * reaches the permalink signed out, is offered the sign-in dialog instead of
+ * the language menu, and signs in through it — on the spot, same lecture —
+ * before the rest of the scenario below is unchanged from before that
+ * requirement.
  *
  * TRANSLATION_PROVIDER is `mock` here (see playwright.config), which tags each
  * translated segment with `[<locale>]`, so the assertions are exact.
@@ -13,6 +19,10 @@ import { createProject, verifyEmail } from './helpers'
 
 const stamp = Date.now()
 const author = { email: `translate-${stamp}@example.com`, name: 'Author' }
+const visitor = {
+  email: `translate-visitor-${stamp}@example.com`,
+  name: 'Visitor',
+}
 const password = 'sturdy-passw0rd'
 
 const register = async (page: Page, user: { email: string; name: string }) => {
@@ -53,17 +63,44 @@ test('translated viewing: switch language, read, and return to the original', as
   const authorOriginal =
     (await authorPage.getByTestId('slide').textContent()) ?? ''
 
-  // An anonymous visitor opens the permalink — no account, no sign-in
+  // A visitor with an account of their own, currently signed out, opens the
+  // permalink — reading needs no account, so the lecture shows right away.
   const visitorContext = await browser.newContext()
   const visitorPage = await visitorContext.newPage()
+  await register(visitorPage, visitor)
+  await visitorPage.getByRole('button', { name: 'Menu' }).click()
+  await visitorPage.getByRole('menuitem', { name: 'Log out' }).click()
+  // Logging out from /app races RequireAuth's own redirect for where it
+  // lands (/ or /login) — immaterial here, since the very next step
+  // navigates on regardless; only that the session is gone matters.
+  await expect(visitorPage).not.toHaveURL(/\/app$/)
+
   await visitorPage.goto(deckUrl)
   await expect(visitorPage.getByTestId('slide')).toBeVisible()
   const visitorOriginal =
     (await visitorPage.getByTestId('slide').textContent()) ?? ''
 
-  // The switcher offers the deck's own language as "Original"
+  // The switcher is offered, but reaching for it signed out raises the
+  // sign-in dialog instead of the language menu (AUTH-8) — translated
+  // viewing needs an account, unlike reading the lecture itself.
   const switcher = visitorPage.getByRole('button', { name: /Slide language/ })
   await expect(switcher).toBeVisible()
+  await switcher.click()
+  const gate = visitorPage.getByRole('dialog', {
+    name: 'Translated viewing needs an account',
+  })
+  await expect(gate).toBeVisible()
+  await expect(visitorPage.getByRole('menu')).toHaveCount(0)
+
+  // Signs in on the spot, without leaving the lecture
+  await gate.getByLabel('Email').fill(visitor.email)
+  await gate.getByLabel('Password').fill(password)
+  await gate.getByRole('button', { name: 'Sign in' }).click()
+  await expect(gate).toHaveCount(0)
+  await expect(visitorPage).toHaveURL(deckUrl)
+
+  // Signing in did not open the language menu itself — that press is next
+  await expect(visitorPage.getByRole('menu')).toHaveCount(0)
   await switcher.click()
   await visitorPage.getByRole('menuitemradio', { name: /Français/ }).click()
 

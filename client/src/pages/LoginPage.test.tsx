@@ -10,6 +10,21 @@ import { setAccessToken } from '../auth/token'
 import LoginPage from './LoginPage'
 import { mockFetchRoutes } from '../test/fetch-mock'
 
+// Records that the shared component was the thing rendered, while still
+// rendering the real form so every other test here exercises it for real.
+const signInFormSpy = vi.hoisted(() => vi.fn())
+vi.mock('../components/SignInForm', async importOriginal => {
+  const actual =
+    await importOriginal<typeof import('../components/SignInForm')>()
+  return {
+    ...actual,
+    default: (props: Parameters<typeof actual.default>[0]) => {
+      signInFormSpy(props)
+      return actual.default(props)
+    },
+  }
+})
+
 const renderLogin = () =>
   render(
     <MemoryRouter initialEntries={['/login']}>
@@ -41,6 +56,20 @@ afterEach(() => {
 })
 
 describe('LoginPage', () => {
+  // The form itself is SignInForm (AUTH-8), shared with the sign-in dialog.
+  // This spies on the module both surfaces import, so it fails if this page
+  // ever renders its own copy of the form instead of that component —
+  // which a testid assertion alone would not catch, since a copy-paste
+  // carries the testid with it. SignInDialog.test.tsx makes the same
+  // assertion on the dialog side; between them the two cannot drift apart
+  // without one of them going red.
+  it('renders the shared SignInForm component itself', async () => {
+    mockFetchRoutes({ '/api/auth/refresh': () => ({ status: 401 }) })
+    renderLogin()
+    await screen.findByTestId('sign-in-form')
+    expect(signInFormSpy).toHaveBeenCalled()
+  })
+
   it('signs in and redirects to /app', async () => {
     mockFetchRoutes({
       '/api/auth/refresh': () => ({ status: 401 }),

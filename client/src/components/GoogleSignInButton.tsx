@@ -7,6 +7,7 @@
  */
 import { useTranslation } from 'react-i18next'
 import { config } from '../config'
+import { rememberReturnPath } from '../auth/returnPath'
 
 /** Google's multicolour "G", inlined so the button needs no network. */
 function GoogleGlyph() {
@@ -50,6 +51,13 @@ export default function GoogleSignInButton({ action }: Props) {
       </div>
       <a
         href={`${config.apiBaseUrl}/api/auth/google/start`}
+        // The OAuth callback always lands on /app, and this navigation takes
+        // the whole tab, so the page being left is parked here and picked up
+        // there (AUTH-8) — otherwise choosing Google from the sign-in dialog
+        // loses the lecture the dialog exists to keep the visitor on.
+        onClick={() =>
+          rememberReturnPath(window.location.pathname + window.location.search)
+        }
         className="flex items-center justify-center gap-2 rounded-md border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-50"
       >
         <GoogleGlyph />

@@ -136,7 +136,12 @@
       "confirmed": "Confirmed"
     },
     "legalRegister": "By creating an account you agree to our <termsLink>Terms & conditions</termsLink> and <privacyLink>Privacy policy</privacyLink>.",
-    "legalSignIn": "By signing in you agree to our <termsLink>Terms & conditions</termsLink> and <privacyLink>Privacy policy</privacyLink>."
+    "legalSignIn": "By signing in you agree to our <termsLink>Terms & conditions</termsLink> and <privacyLink>Privacy policy</privacyLink>.",
+    "gate": {
+      "playback": "Playback needs an account",
+      "narration": "Narration needs an account",
+      "translation": "Translated viewing needs an account"
+    }
   },
   "health": {
     "summary": "API {status}",

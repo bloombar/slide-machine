@@ -45,7 +45,7 @@ This document specifies both the **functional** behavior (what the system does, 
 | ----------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | **Instructor / author**             | Registered user who creates projects, delivers live lectures, and authors templates.               | Reliable real-time slides, seeding, editing, sharing, quiz oversight.        |
 | **Student**                         | Receives the exit-ticket quiz; may also be a registered author (pilot students extend the system). | Timely quiz access; auto-grading; ability to browse/learn from public decks. |
-| **Viewer (public/shared)**          | Anyone with a deck permalink.                                                                      | Read-only deck playback; optional voting if registered.                      |
+| **Viewer (public/shared)**          | Anyone with a deck permalink.                                                                      | Read the slides; narration and translated viewing need an account ([AUTH-8](#auth-8-signing-in-without-leaving-the-page)); optional voting if registered. |
 | **Researcher / evaluator**          | PI and collaborators evaluating the pilot.                                                         | Anonymized exit-ticket scores, latency/reliability metrics, quality ratings. |
 | **Administrator / operator**        | Allowlisted operator running the deployment ([§20](#20-administration-operations--moderation)).    | Oversight of users & content, audited moderation, health/config control.     |
 | **Contributor (student developer)** | Pilot students extending the codebase.                                                             | Clear module boundaries, shared types, documented APIs.                      |
@@ -96,6 +96,15 @@ The privacy policy and the terms are reachable in **one click from any page with
 
 These are conditions of Google's OAuth homepage requirements as well as good manners; the homepage, the policy and the terms must sit on the deployment's own verified domain (docs/GOOGLE_PRODUCTION_MODE.md).
 
+
+
+#### AUTH-8 Signing in without leaving the page
+
+Some of what a lecture offers needs an account: **playback, spoken narration, and translated viewing**. A signed-out visitor reaching for any of them — the play button, "Speak this slide" in a slide's menu, or the language switcher — is told so in a dialog that says which feature they reached for, and signs them in **on the spot**. It carries everything the sign-in page carries, Google included, so nothing is lost by not going there; on success the dialog closes and the visitor is signed in on the lecture they were reading, at the slide they were on.
+
+The dialog is a general one, not a lecture's: any page may raise it to ask for an account without sending a visitor away and losing where they were.
+
+This is a change to what a signed-out visitor can do. Narration already required an account and failed silently; translated viewing did not, and now asks for one — [SHARE-2](#share-2-post-lecture-translated-viewing) is narrowed accordingly. Reading a shared lecture still needs no account: what is gated is hearing it and re-languaging it, never seeing it.
 
 ### 5. Plans, Billing & Usage Limits
 
@@ -1053,7 +1062,7 @@ Saved decks have a **deck viewer** reachable via a stable **permalink** that can
 
 #### SHARE-2 Post-lecture translated viewing
 
-When viewing a saved deck, students and instructors can switch the **displayed language of the slide content** to any supported locale (English, French, Spanish, Russian, Mandarin — [TECH-12](#tech-12-internationalization-i18n--localization)). This is an on-demand, **post-lecture viewing** option — distinct from the out-of-scope live/real-time translated generation ([§2.2](#22-non-goals)).
+When viewing a saved deck, **signed-in** students and instructors can switch the **displayed language of the slide content** to any supported locale (English, French, Spanish, Russian, Mandarin — [TECH-12](#tech-12-internationalization-i18n--localization)). This is an on-demand, **post-lecture viewing** option — distinct from the out-of-scope live/real-time translated generation ([§2.2](#22-non-goals)).
 
 - Translation uses **Google Cloud Translation** (key already provisioned — [TECH-4](#tech-4-server-configuration)), behind a provider-agnostic adapter consistent with [GEN-2](#gen-2-ai-provider-abstraction).
 - **Non-destructive** — the translated text is an alternate view layered over the deck; the original authored/generated content is preserved and remains authoritative (machine translation may be imperfect).
