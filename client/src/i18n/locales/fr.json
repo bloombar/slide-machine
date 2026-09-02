@@ -540,6 +540,7 @@
   "lecture": {
     "untitled": "Cours sans titre",
     "options": "Options pour {name}",
+    "dragHandle": "Faire glisser pour réorganiser {name}",
     "new": {
       "action": "Nouveau cours",
       "label": "Démarrer un nouveau cours",
@@ -620,6 +621,7 @@
     },
     "errors": {
       "load": "Impossible de charger ce projet",
+      "reorder": "Impossible de réorganiser ces cours — réessayez",
       "create": "Impossible de créer le projet"
     }
   },

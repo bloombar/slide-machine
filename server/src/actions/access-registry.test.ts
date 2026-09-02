@@ -86,6 +86,7 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
   'project.create': { resource: 'none', level: 'signedIn' },
   'project.delete': { resource: 'project', level: 'own' },
   'project.list': { resource: 'none', level: 'signedIn' },
+  'project.reorderLectures': { resource: 'project', level: 'own' },
   'project.transferOwnership': { resource: 'project', level: 'own' },
   'seedAsset.delete': { resource: 'seedAsset', level: 'edit' },
   'seedAsset.list': { resource: 'seedAsset', level: 'edit' },

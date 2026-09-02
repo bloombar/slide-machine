@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { MoreVertical } from 'lucide-react'
+import { GripVertical, MoreVertical } from 'lucide-react'
 import type { Deck } from '@slide-machine/shared'
 import { useTimeAgo } from '../hooks/useTimeAgo'
 import { lectureTitle } from '../lib/lecture'
@@ -123,6 +123,7 @@ export default function LectureRow({
   deck,
   onDeleted,
   justArrived = false,
+  reorderable = false,
 }: {
   deck: Deck
   /** Owner lists only: enables the kebab menu (share / delete). */
@@ -135,19 +136,56 @@ export default function LectureRow({
    * where, which is the half a sentence cannot point at.
    */
   justArrived?: boolean
+  /**
+   * The project page's owner view (PROJ-4): drops the row's own `<li>` in
+   * favor of a `<div>` — the caller wraps it in DraggableListRow, whose
+   * `<li>` is the drag surface, and a `<li>` inside a `<li>` is invalid —
+   * and adds a grip handle. A lecture row is a link end to end (the title
+   * is the click target for the whole width), so unlike a slide there is
+   * no non-interactive stretch of the row itself to drag from; the handle
+   * is the one spot that is deliberately neither. Every other list (home,
+   * profiles, a non-owner or editor here) is not reorderable and keeps the
+   * default: no handle, its own `<li>`.
+   */
+  reorderable?: boolean
 }) {
   const { t } = useTranslation()
   const age = useTimeAgo(deck.updatedAt)
   const count = deck.slideOrder.length
+  const Tag = reorderable ? 'div' : 'li'
 
   return (
-    <li
+    <Tag
       className={`flex items-center gap-1 rounded-md border pe-2 transition-colors duration-700 hover:border-slate-300 hover:bg-slate-50 ${
         justArrived
           ? 'border-indigo-400 bg-indigo-50 ring-2 ring-indigo-200'
           : 'border-slate-200'
       }`}
     >
+      {reorderable && (
+        // DraggableListRow's designated pickup spot (data-drag-handle,
+        // handleOnly on the wrapper) — the row's Link and kebab are both
+        // interactive, so nothing else here can start a drag. A plain
+        // button, not a Link, so a click never navigates.
+        //
+        // tabIndex=-1: the row itself (DraggableListRow's own <li>) is
+        // already the keyboard affordance — focusable, announcing
+        // Alt+ArrowUp/Down via aria-keyshortcuts, and wired to the same
+        // move handler this grip's drag calls. Leaving the grip in the tab
+        // order would add a second stop per row whose Enter/Space do
+        // nothing, a control that announces "drag to reorder" and then
+        // does not.
+        <button
+          type="button"
+          tabIndex={-1}
+          data-drag-handle
+          aria-label={t('lecture.dragHandle', { name: lectureTitle(deck) })}
+          onClick={e => e.preventDefault()}
+          className="cursor-grab touch-none rounded-md p-2 text-slate-300 hover:text-slate-500 active:cursor-grabbing"
+        >
+          <GripVertical className="h-4 w-4" aria-hidden />
+        </button>
+      )}
       <Link
         to={`/d/${deck.permalinkSlug}`}
         className="min-w-0 flex-1 px-4 py-2"
@@ -158,6 +196,6 @@ export default function LectureRow({
         </span>
       </Link>
       {onDeleted && <RowMenu deck={deck} onDeleted={onDeleted} />}
-    </li>
+    </Tag>
   )
 }

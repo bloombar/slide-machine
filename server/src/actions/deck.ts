@@ -138,6 +138,7 @@ import {
 import { slotsOf, remapSlots } from '../lib/slide-slots'
 import { remapSlideTranslations } from '../lib/translate-slides'
 import { buildDeckStructure, headerLayoutTypes } from '../lib/deck-structure'
+import { orderByLectureOrder } from '../lib/lecture-order'
 import { registry } from '../providers/registry'
 import { GenerationUnavailableError } from '../providers/errors'
 import { recordSessionEvent } from '../telemetry/recorder'
@@ -384,12 +385,19 @@ export const deckList = defineAction<DeckListInput, Deck[], Signed>({
       // A tombstoned project lists the lectures deleted with it, as its admin
       // page does — the ones a restore would bring back.
       const { filter, options } = asOf(project.deletedAt)
-      const docs = await DeckModel.find({
-        projectId: input.projectId,
-        ...filter,
-      })
-        .sort({ updatedAt: -1 })
-        .setOptions(options)
+      const docs = orderByLectureOrder(
+        await DeckModel.find({
+          projectId: input.projectId,
+          ...filter,
+        })
+          .sort({ updatedAt: -1 })
+          .setOptions(options),
+        d => d._id.toString(),
+        // PROJ-4: the project's own chosen order, honoured here once so the
+        // project page and the home page (which calls this with no
+        // projectId, below) both follow it.
+        project.lectureOrder,
+      )
       const acls = await loadDeckAcls(docs, {
         withDeleted: Boolean(project.deletedAt),
       })
@@ -401,6 +409,39 @@ export const deckList = defineAction<DeckListInput, Deck[], Signed>({
       updatedAt: -1,
     })
     const acls = await loadDeckAcls(docs)
+    // PROJ-4: this list spans every project the caller owns lectures in, and
+    // the chosen order is a project's, not the whole list's — so it applies
+    // within each project's own run of decks here, not across all of them.
+    // HomePage then groups these by project, preserving the order it finds,
+    // which is what makes "the project page and the home page both show it"
+    // free: reordering only the positions each project already occupies
+    // leaves an unarranged project's decks (most of them) untouched.
+    const projectIds = [...new Set(docs.map(d => d.projectId.toString()))]
+    const arranged = await ProjectModel.find(
+      { _id: { $in: projectIds }, lectureOrder: { $exists: true } },
+      'lectureOrder',
+    )
+    if (arranged.length) {
+      const orderByProject = new Map(
+        arranged.map(p => [p._id.toString(), p.lectureOrder]),
+      )
+      const positionsByProject = new Map<string, number[]>()
+      docs.forEach((d, i) => {
+        const pid = d.projectId.toString()
+        if (!orderByProject.has(pid)) return
+        positionsByProject.set(pid, [...(positionsByProject.get(pid) ?? []), i])
+      })
+      for (const [pid, positions] of positionsByProject) {
+        const reordered = orderByLectureOrder(
+          positions.map(i => docs[i]!),
+          d => d._id.toString(),
+          orderByProject.get(pid),
+        )
+        positions.forEach((pos, k) => {
+          docs[pos] = reordered[k]!
+        })
+      }
+    }
     return docs.map(d => toDeckDto(d, acls.get(d._id.toString())!))
   },
 })

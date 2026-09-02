@@ -1,10 +1,16 @@
 /**
- * Reorderable list row where the whole row is the drag surface,
- * generalizable to any vertical list. Pointer dragging comes from
- * Atlassian's pragmatic-drag-and-drop (each row is both draggable and a
- * drop target). Drags never start from interactive or editable elements
- * inside the row, so click-to-edit keeps working; Alt+ArrowUp/Down on
- * the focused row is the keyboard path.
+ * Reorderable list row, generalizable to any vertical list. Pointer
+ * dragging comes from Atlassian's pragmatic-drag-and-drop (each row is
+ * both draggable and a drop target). Alt+ArrowUp/Down on the focused row
+ * is the keyboard path, always available regardless of the drag surface.
+ *
+ * By default the whole row is the drag surface, and a drag never starts
+ * from an interactive or editable element inside it (so click-to-edit
+ * keeps working) — what slide rows use, since a slide's surface is mostly
+ * non-interactive. `handleOnly` inverts that: a drag may start ONLY from a
+ * descendant carrying `data-drag-handle` — for a row that is a link end to
+ * end (a lecture row, PROJ-4), where "everywhere but the interactive bits"
+ * leaves nothing usable.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine'
@@ -19,6 +25,10 @@ const isInteractive = (target: EventTarget | null): boolean =>
   target.closest(
     'input, textarea, select, button, a, [role="button"], [contenteditable="true"]',
   ) !== null
+
+/** True when `target` is inside the row's nominated drag handle. */
+const isDragHandle = (target: EventTarget | null): boolean =>
+  target instanceof Element && target.closest('[data-drag-handle]') !== null
 
 interface Props {
   /** Stable identity carried through the drag. */
@@ -35,6 +45,11 @@ interface Props {
   /** Extra classes for the row itself — e.g. off-screen deferral on a list
    * long enough to be worth it. The row's own drag styling is kept. */
   className?: string
+  /** Restricts the drag surface to a `data-drag-handle` descendant instead
+   * of the whole row (see the module doc). The row still supplies its own
+   * handle as a child of `children`; this only changes where a pointer may
+   * pick it up from. */
+  handleOnly?: boolean
   children: ReactNode
 }
 
@@ -46,11 +61,13 @@ export default function DraggableListRow({
   onKeyMove,
   itemRef,
   className = '',
+  handleOnly = false,
   children,
 }: Props) {
   const rowRef = useRef<HTMLLIElement | null>(null)
-  // Where the pointer went down, checked when the drag tries to start
-  const pointerOnInteractive = useRef(false)
+  // Whether the pointer went down somewhere a drag may start from,
+  // checked when the drag itself tries to start.
+  const pointerAllowsDrag = useRef(false)
   const [dragging, setDragging] = useState(false)
   const [isOver, setIsOver] = useState(false)
 
@@ -61,7 +78,7 @@ export default function DraggableListRow({
       draggable({
         element: row,
         getInitialData: () => ({ rowId: id }),
-        canDrag: () => !pointerOnInteractive.current,
+        canDrag: () => pointerAllowsDrag.current,
         onDragStart: () => setDragging(true),
         onDrop: () => setDragging(false),
       }),
@@ -90,7 +107,9 @@ export default function DraggableListRow({
       aria-label={label}
       aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
       onMouseDownCapture={e => {
-        pointerOnInteractive.current = isInteractive(e.target)
+        pointerAllowsDrag.current = handleOnly
+          ? isDragHandle(e.target)
+          : !isInteractive(e.target)
       }}
       onKeyDown={e => {
         if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
@@ -99,9 +118,9 @@ export default function DraggableListRow({
           onKeyMove(id, e.key === 'ArrowUp' ? -1 : 1)
         }
       }}
-      className={`relative w-full cursor-grab select-none active:cursor-grabbing ${className} ${
-        dragging ? 'opacity-40' : ''
-      } ${
+      className={`relative w-full select-none ${
+        handleOnly ? '' : 'cursor-grab active:cursor-grabbing'
+      } ${className} ${dragging ? 'opacity-40' : ''} ${
         isOver
           ? 'rounded-lg outline-2 outline-offset-4 outline-indigo-400 outline-dashed'
           : ''

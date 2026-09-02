@@ -540,6 +540,7 @@
   "lecture": {
     "untitled": "Clase sin título",
     "options": "Opciones de {name}",
+    "dragHandle": "Arrastrar para reordenar {name}",
     "new": {
       "action": "Nueva clase",
       "label": "Empezar una clase nueva",
@@ -620,6 +621,7 @@
     },
     "errors": {
       "load": "No se pudo cargar este proyecto",
+      "reorder": "No se pudo reordenar estas clases — inténtalo de nuevo",
       "create": "No se pudo crear el proyecto"
     }
   },

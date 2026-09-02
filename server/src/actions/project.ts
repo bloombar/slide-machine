@@ -10,6 +10,7 @@ import type {
   Project,
   ProjectCreateInput,
   ProjectDeleteInput,
+  ProjectReorderLecturesInput,
   ProjectSetAccessInput,
   ProjectShareInput,
   ProjectSharesInput,
@@ -34,7 +35,7 @@ import {
 } from '../models/project'
 import { UserModel } from '../models/user'
 import { emailVerified, requireVerifiedEmail } from '../auth/verified'
-import { canEditAcl, isAclMember } from '../lib/access'
+import { canEditAcl, canViewAcl, isAclMember } from '../lib/access'
 import {
   adminViewer,
   isAllowlistedAdmin,
@@ -59,8 +60,9 @@ import { ttsVoiceIdSchema } from '../lib/tts-voice'
 import { sharesOfAcl } from '../lib/shares'
 import { templateExists } from '../templates/resolve'
 import type { HydratedDocument, Types } from 'mongoose'
-import { DeckModel } from '../models/deck'
+import { DeckModel, loadDeckAcls } from '../models/deck'
 import { deleteProjectCascade } from '../lib/cascade'
+import { orderByLectureOrder } from '../lib/lecture-order'
 
 /** The settings gate: an owner or editor, otherwise an allowlisted admin
  * overriding the ACL, whose edit is then audited (ADMIN-5). */
@@ -295,6 +297,82 @@ export const projectUpdate = defineAction<
     }),
 })
 
+/**
+ * Sets the order the project's owner has dragged its lectures into (PROJ-4).
+ * Mirrors deck.reorderSlides: the full array must be a permutation of the
+ * project's current (live) lecture ids — not a superset or a subset — which
+ * is what stops a stale client dropping or duplicating one. Owner-only,
+ * verbatim from the SPEC ("A project's owner can drag its lectures"),
+ * unlike most project changes which an editor may also make: an editor
+ * already reshapes any lecture's content, but the shelf they sit on is the
+ * owner's arrangement to set, the same way project.delete is stricter than
+ * its settings siblings.
+ */
+export const projectReorderLectures = defineAction<
+  ProjectReorderLecturesInput,
+  Project,
+  ProjectAccess
+>({
+  name: 'project.reorderLectures',
+  access: ownerOf,
+  input: z.object({
+    projectId: z.string().min(1),
+    lectureOrder: z.array(z.string().min(1)).min(1),
+  }),
+  execute: async (_ctx, input, { project, userId }) => {
+    // Live decks only — a soft-deleted one is not part of "the project's
+    // current lectures" to reorder, and DeckModel.find already excludes it.
+    // Sorted newest-first and run through the project's CURRENT stored
+    // order (if any), so this is the exact sequence deck.list would have
+    // handed the owner to build the array it is now sending back.
+    const decks = await DeckModel.find({
+      projectId: input.projectId,
+    }).sort({ updatedAt: -1 })
+    const currentFull = orderByLectureOrder(
+      decks,
+      d => d._id.toString(),
+      project.lectureOrder,
+    )
+    // Ownership does not imply visibility: a lecture handed to someone
+    // else (deck.transferOwnership) who then revokes the former owner's
+    // access is still in the project, but deck.list's per-row ACL filter
+    // (canViewAcl) already hid it from whatever list the client built this
+    // array from. Checking the proposal against every live deck — rather
+    // than the subset the caller could ever have been shown — means a
+    // lecture like that wedges every future reorder with a permanent 400.
+    const acls = await loadDeckAcls(decks)
+    const visiblePositions: number[] = []
+    currentFull.forEach((d, i) => {
+      if (canViewAcl(acls.get(d._id.toString())!, userId)) {
+        visiblePositions.push(i)
+      }
+    })
+    const current = visiblePositions
+      .map(i => currentFull[i]!._id.toString())
+      .sort()
+    const proposed = [...input.lectureOrder].sort()
+    if (
+      current.length !== proposed.length ||
+      current.some((id, i) => id !== proposed[i])
+    ) {
+      throw new ActionValidationError('project.reorderLectures', [
+        'lectureOrder must contain exactly the caller’s visible lecture ids',
+      ])
+    }
+    // Splice the caller's new order back into the visible slots; a lecture
+    // they cannot see keeps the position it already held rather than being
+    // dropped from the stored order (and rather than letting the caller
+    // move something they never knew was there).
+    const next = currentFull.map(d => d._id.toString())
+    visiblePositions.forEach((pos, k) => {
+      next[pos] = input.lectureOrder[k]!
+    })
+    project.lectureOrder = next
+    await project.save()
+    return toProjectDto(project)
+  },
+})
+
 export const projectDelete = defineAction<
   ProjectDeleteInput,
   { deleted: true },
@@ -493,6 +571,7 @@ registerAction(projectCreate)
 registerAction(projectList)
 registerAction(projectGet)
 registerAction(projectUpdate)
+registerAction(projectReorderLectures)
 registerAction(projectDelete)
 registerAction(projectSetAccess)
 registerAction(projectSwitchTemplate)

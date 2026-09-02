@@ -20,11 +20,12 @@ import { useAuth } from '../auth/AuthContext'
 import { useIsAdmin } from '../hooks/useIsAdmin'
 import { projectTitle, untitledProject } from '../lib/project'
 import { displayHandle } from '../lib/handle'
-import { untitledLecture } from '../lib/lecture'
+import { lectureTitle, untitledLecture } from '../lib/lecture'
 // Module-level translator for the load effect: stable, so it is not a
 // dependency the way the hook's `t` is.
 import { t as translate } from '../i18n'
 import ConfirmDialog from '../components/ConfirmDialog'
+import DraggableListRow from '../components/DraggableListRow'
 import LectureRow from '../components/LectureRow'
 import NewLectureZone from '../components/NewLectureZone'
 import CreateMenu from '../components/CreateMenu'
@@ -131,6 +132,11 @@ export default function ProjectPage() {
   // an admin about to be asked, or a plain viewer — is not known yet.
   const rightsPending = !canEdit && isAdmin === null
   const askAdmin = settingsOpen && adminOverride && !adminEditConfirmed
+  // Reordering is stricter than editing (PROJ-4): the SPEC gives it to "a
+  // project's owner", not an editor, the same way project.delete is
+  // stricter than its settings siblings — so this is its own check rather
+  // than reusing canEdit/adminOverride.
+  const isOwner = !!project && project.ownerId === user?.id
 
   /** Starts a new untitled lecture and jumps straight into it. */
   const startLecture = async () => {
@@ -143,6 +149,52 @@ export default function ProjectPage() {
     } catch {
       setError(t('lecture.errors.create'))
     }
+  }
+
+  /**
+   * Persists a new lecture order optimistically (PROJ-4), mirroring
+   * DeckViewerPage's slide-order handling — with one deliberate
+   * difference: on failure this refetches rather than snapping back to
+   * `previous`. A rejection here is not always a stale permutation from a
+   * slow client; it can be a genuine race (a lecture arrives, is moved, or
+   * is removed mid-drag) that `previous` — the snapshot from BEFORE this
+   * drag — cannot repair, since the server has already moved past it too.
+   * Falling back to `previous` only if the refetch itself fails keeps the
+   * silent-snap-back case rare rather than the norm, and either way the
+   * visitor is told, not just shown a row sliding back on its own.
+   */
+  const applyOrder = (ids: string[]) => {
+    setError(null)
+    const previous = decks
+    const byId = new Map(decks.map(d => [d.id, d]))
+    setDecks(ids.map(id => byId.get(id)!))
+    dispatchAction<Project>('project.reorderLectures', {
+      projectId,
+      lectureOrder: ids,
+    }).catch(() => {
+      setError(t('project.errors.reorder'))
+      dispatchAction<Deck[]>('deck.list', { projectId })
+        .then(setDecks)
+        .catch(() => setDecks(previous))
+    })
+  }
+
+  /** Drag drop: move the dragged lecture to the target row's position. */
+  const moveLectureTo = (sourceId: string, targetIndex: number) => {
+    const ids = decks.map(d => d.id)
+    const from = ids.indexOf(sourceId)
+    if (from < 0 || from === targetIndex) return
+    ids.splice(from, 1)
+    ids.splice(targetIndex, 0, sourceId)
+    applyOrder(ids)
+  }
+
+  /** Keyboard path on the handle: move a lecture one step up or down. */
+  const moveLectureBy = (sourceId: string, delta: -1 | 1) => {
+    const from = decks.findIndex(d => d.id === sourceId)
+    const to = from + delta
+    if (from < 0 || to < 0 || to >= decks.length) return
+    moveLectureTo(sourceId, to)
   }
 
   return (
@@ -263,16 +315,43 @@ export default function ProjectPage() {
               onStart={() => void startLecture()}
             />
           )}
-          {decks.map(d => (
-            <LectureRow
-              key={d.id}
-              deck={d}
-              justArrived={d.id === justArrived}
-              onDeleted={id =>
-                setDecks(prev => prev.filter(deck => deck.id !== id))
-              }
-            />
-          ))}
+          {/* Draggable for the owner (PROJ-4); everyone else — including an
+              editor, whose rights stop short of reordering — gets the plain
+              row DraggableListRow would otherwise wrap. handleOnly: a
+              lecture row is a link end to end, so the grip LectureRow
+              renders (reorderable) is the only place a pointer drag may
+              start from — unlike a slide row, which is draggable anywhere. */}
+          {decks.map((d, i) =>
+            isOwner ? (
+              <DraggableListRow
+                key={d.id}
+                id={d.id}
+                index={i}
+                label={lectureTitle(d)}
+                onDropOn={moveLectureTo}
+                onKeyMove={moveLectureBy}
+                handleOnly
+              >
+                <LectureRow
+                  deck={d}
+                  justArrived={d.id === justArrived}
+                  onDeleted={id =>
+                    setDecks(prev => prev.filter(deck => deck.id !== id))
+                  }
+                  reorderable
+                />
+              </DraggableListRow>
+            ) : (
+              <LectureRow
+                key={d.id}
+                deck={d}
+                justArrived={d.id === justArrived}
+                onDeleted={id =>
+                  setDecks(prev => prev.filter(deck => deck.id !== id))
+                }
+              />
+            ),
+          )}
         </ul>
       </section>
 

@@ -217,6 +217,13 @@ The lecture carries everything of its own across: slides, transcript, template, 
 
 Moving is authorized exactly as creating would be: the mover must own the lecture **and** own the destination project, which is what starting a lecture in a project asks ([PROJ-1](#proj-1-pre-create-a-project)). So the destinations offered are the projects the user could have created the lecture in to begin with.
 
+
+#### PROJ-4 Order the lectures in a project
+
+Lectures are listed newest-first, which is the order a course is recorded in but rarely the order it is taught in — a session recorded out of sequence, a revision lecture made late, a guest slot that belongs mid-term. A project's owner can **drag its lectures into the order they choose**, on the project's own page.
+
+The chosen order is the project's, not the page's: it is what the project page and the home page both show, so the list a student is pointed at and the list the instructor arranges are the same list. A lecture added, imported or moved in afterwards appears first, where a newly recorded lecture has always appeared, rather than at the end of an order it was never part of. A project whose lectures have never been arranged keeps the newest-first default.
+
 #### SEED-1 Document seeding
 
 Users can seed a project by importing content from:
