@@ -13,7 +13,14 @@
  * raised for the file rather than chased test by test.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+  cleanup,
+} from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useParams } from 'react-router'
 import { AuthProvider } from '../auth/AuthContext'
 import { setAccessToken } from '../auth/token'
@@ -2057,6 +2064,36 @@ describe('DeckViewerPage slide reordering', () => {
     expect(
       screen.queryByRole('listitem', { name: /slide \d/i }),
     ).not.toBeInTheDocument()
+  })
+
+  // A list row's contents are skipped until it is scrolled to. The reader's
+  // row always did this; the owner's — the person with the long lectures —
+  // did not, and rendered every slide of one up front.
+  it('defers off-screen rows for owner and reader alike', async () => {
+    renderViewer(200)
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'List view' }))
+    for (const row of screen.getAllByRole('listitem', { name: /slide \d/i })) {
+      expect(row).toHaveClass(
+        '[content-visibility:auto]',
+        '[contain-intrinsic-size:auto_549px]',
+      )
+    }
+
+    cleanup()
+    renderViewer(401)
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'List view' }))
+    const readerRows = screen
+      .getAllByTestId('slide')
+      .map(el => el.closest('li'))
+    expect(readerRows.length).toBeGreaterThan(0)
+    for (const row of readerRows) {
+      expect(row).toHaveClass(
+        '[content-visibility:auto]',
+        '[contain-intrinsic-size:auto_549px]',
+      )
+    }
   })
 })
 
