@@ -334,6 +334,14 @@ function ImageSlot({
       src={imageRef}
       alt={slide.caption ?? slide.title ?? t('slide.image.alt')}
       onError={() => setFailedSrc(imageRef ?? null)}
+      // List view puts every slide of a lecture on one page, so without this
+      // a hundred-slide lecture fetches and decodes a hundred pictures the
+      // moment it opens — the one cost in that view that grows with the
+      // deck. Decoding off the main thread keeps a picture arriving mid-scroll
+      // from stalling the frame. Carousel view is unaffected: its one slide
+      // is in the viewport, which is what `lazy` loads.
+      loading="lazy"
+      decoding="async"
       className={`h-full w-full ${fit} transition-opacity duration-500`}
       // What a picture with a transparent ground sits on, from the design
       // rather than from whatever the slide happens to be (`imageBackground`).

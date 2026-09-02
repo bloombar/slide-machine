@@ -119,6 +119,24 @@ import { untitledProject } from '../lib/project'
 // dialog and Lecture settings in the meantime.
 const SHOW_SEED_UPLOAD_IN_TOOLBAR = false
 
+/**
+ * A list-view row whose contents are skipped until it is scrolled to. A
+ * lecture of a hundred slides is a list some fifty thousand pixels tall, and
+ * every slide is a query container measured against its own width; laying all
+ * of them out at once is work no reader has asked for.
+ *
+ * `auto` in the intrinsic size means the real height is remembered once a
+ * slide has been seen, so the figure here only has to be close before that: a
+ * slide is 16:9 in a column capped at 5xl, which is 549px.
+ *
+ * Both list rows carry it. The reader's row always did; the owner's
+ * (`DraggableListRow`) did not, which had the person who writes the long
+ * lectures rendering all of one eagerly while a passing reader got the cheap
+ * path.
+ */
+const DEFER_OFFSCREEN =
+  '[contain-intrinsic-size:auto_549px] [content-visibility:auto]'
+
 // Carousel/list is a display preference, remembered across reloads so a
 // refresh keeps whichever view the user was reading in
 const VIEW_MODE_KEY = 'sm:view-mode'
@@ -2305,6 +2323,7 @@ export default function DeckViewerPage() {
                   onDropOn={moveSlideTo}
                   onKeyMove={moveSlideBy}
                   itemRef={nav.registerItem(i)}
+                  className={DEFER_OFFSCREEN}
                 >
                   <SlideView
                     slide={displaySlide(s)}
@@ -2340,17 +2359,7 @@ export default function DeckViewerPage() {
                 <li
                   key={s.id}
                   ref={nav.registerItem(i)}
-                  // Slides off screen are skipped until they are scrolled
-                  // to. A lecture of a hundred slides is a list some fifty
-                  // thousand pixels tall, and every slide is a query
-                  // container measured against its own width; laying all of
-                  // them out at once is work no reader has asked for.
-                  //
-                  // `auto` in the intrinsic size means the real height is
-                  // remembered once a slide has been seen, so the figure here
-                  // only has to be close before that: a slide is 16:9 in a
-                  // column capped at 5xl, which is 549px.
-                  className="relative [contain-intrinsic-size:auto_549px] [content-visibility:auto]"
+                  className={`relative ${DEFER_OFFSCREEN}`}
                 >
                   <SlideView slide={displaySlide(s)} template={view.template} />
                   {ttsEnabled && (

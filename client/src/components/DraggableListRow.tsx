@@ -32,6 +32,9 @@ interface Props {
   onKeyMove: (id: string, delta: -1 | 1) => void
   /** Ref for external consumers (e.g. scroll-into-view registration). */
   itemRef?: (el: HTMLLIElement | null) => void
+  /** Extra classes for the row itself — e.g. off-screen deferral on a list
+   * long enough to be worth it. The row's own drag styling is kept. */
+  className?: string
   children: ReactNode
 }
 
@@ -42,6 +45,7 @@ export default function DraggableListRow({
   onDropOn,
   onKeyMove,
   itemRef,
+  className = '',
   children,
 }: Props) {
   const rowRef = useRef<HTMLLIElement | null>(null)
@@ -95,7 +99,7 @@ export default function DraggableListRow({
           onKeyMove(id, e.key === 'ArrowUp' ? -1 : 1)
         }
       }}
-      className={`relative w-full cursor-grab select-none active:cursor-grabbing ${
+      className={`relative w-full cursor-grab select-none active:cursor-grabbing ${className} ${
         dragging ? 'opacity-40' : ''
       } ${
         isOver
