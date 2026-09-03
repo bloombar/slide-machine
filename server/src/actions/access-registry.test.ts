@@ -221,6 +221,7 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
   'session.phrase': { resource: 'deck', level: 'edit' },
   'slide.add': { resource: 'deck', level: 'edit' },
   'slide.delete': { resource: 'slide', level: 'edit' },
+  'slide.duplicate': { resource: 'slide', level: 'edit' },
   'slide.editContent': { resource: 'slide', level: 'edit' },
   'slide.editDrawings': { resource: 'slide', level: 'edit' },
   'slide.editTranscript': { resource: 'slide', level: 'edit' },

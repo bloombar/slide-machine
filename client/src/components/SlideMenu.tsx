@@ -3,8 +3,8 @@
  * (replacing the old bare delete icon). The items are grouped by what they act
  * on: what the slide SAYS (Speak, Play original audio), then how it is
  * improved or edited (Refine this slide with AI, Edit spoken transcript,
- * Change layout), then Delete slide (immediate, no confirmation). Sits above the
- * SlideNavZones hotspots (z-10, see
+ * Change layout, Duplicate slide), then Delete slide (immediate, no
+ * confirmation). Sits above the SlideNavZones hotspots (z-10, see
  * the z-index tiers) so clicks act on the menu instead of navigating.
  */
 import { useEffect, useRef, useState } from 'react'
@@ -20,6 +20,9 @@ interface Props {
   onEditTranscript?: () => void
   /** Owner-only; omitted for read-only viewers. */
   onChangeLayout?: () => void
+  /** Inserts a copy of this slide right after it and makes the copy active
+   * (owner-only; omitted for read-only viewers). */
+  onDuplicate?: () => void
   /** Open the per-slide "Refine this slide with AI" dialog (owner-only;
    * omitted when no applicable refine pass is enabled). */
   onRefine?: () => void
@@ -40,6 +43,7 @@ export default function SlideMenu({
   onSpeak,
   onEditTranscript,
   onChangeLayout,
+  onDuplicate,
   onRefine,
   onPlayOriginalAudio,
   onDelete,
@@ -83,6 +87,7 @@ export default function SlideMenu({
   if (
     !onSpeak &&
     !onChangeLayout &&
+    !onDuplicate &&
     !onEditTranscript &&
     !onRefine &&
     !onPlayOriginalAudio &&
@@ -161,6 +166,15 @@ export default function SlideMenu({
               className="block w-full px-4 py-2 text-start text-sm text-slate-700 hover:bg-slate-50"
             >
               {t('slide.menu.changeLayout')}
+            </button>
+          )}
+          {onDuplicate && (
+            <button
+              role="menuitem"
+              onClick={pick(onDuplicate)}
+              className="block w-full px-4 py-2 text-start text-sm text-slate-700 hover:bg-slate-50"
+            >
+              {t('slide.menu.duplicate')}
             </button>
           )}
           {onDelete && (

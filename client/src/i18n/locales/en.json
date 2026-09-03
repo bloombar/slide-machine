@@ -812,6 +812,7 @@
       "refine": "Refine this slide with AI",
       "editTranscript": "Edit spoken transcript",
       "changeLayout": "Change layout",
+      "duplicate": "Duplicate slide",
       "delete": "Delete slide"
     },
     "math": {

@@ -600,6 +600,21 @@ export interface SlideDeleteInput {
   slideId: string
 }
 
+/** Duplicates a slide: the copy is inserted immediately after the source in
+ * the deck's slideOrder. */
+export interface SlideDuplicateInput {
+  slideId: string
+}
+
+export interface SlideDuplicateResult {
+  /** The newly created copy. */
+  slide: Slide
+  /** The deck's slide order after the insert, so the client can place the
+   * copy and reindex without a full reload — mirrors SlideDeleteInput's
+   * result. */
+  slideOrder: string[]
+}
+
 /** Switches one slide's layout to another of its template's layouts (EDIT-3). */
 export interface SlideSetLayoutInput {
   slideId: string

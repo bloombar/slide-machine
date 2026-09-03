@@ -323,6 +323,65 @@ describe('DeckViewerPage slide deletion', () => {
   })
 })
 
+describe('DeckViewerPage slide duplication', () => {
+  it('lets the owner duplicate a slide and moves to the copy', async () => {
+    const duplicateBody = vi.fn()
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/slide.duplicate': init => {
+        duplicateBody(JSON.parse(String(init?.body)))
+        return {
+          status: 200,
+          body: {
+            slide: {
+              id: 's1-copy',
+              deckId: 'deck1',
+              index: 1,
+              layoutType: 'title',
+              title: 'Hello',
+            },
+            slideOrder: ['s1', 's1-copy', 's2'],
+          },
+        }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Options for slide 1' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplicate slide' }))
+
+    expect(duplicateBody).toHaveBeenCalledWith({ slideId: 's1' })
+    // Three slides now, and the copy — inserted right after the source, at
+    // index 1 — is the one on screen.
+    expect(await screen.findByText('2 / 3')).toBeInTheDocument()
+    expect(screen.getByTestId('slide')).toHaveAttribute('data-layout', 'title')
+  })
+
+  it('hides the duplicate item from non-owners', async () => {
+    renderViewer(401)
+    await screen.findByText('Shared Lecture')
+    expect(
+      screen.queryByRole('button', { name: /duplicate slide/i }),
+    ).not.toBeInTheDocument()
+  })
+})
+
 describe('DeckViewerPage spoken transcript editing (EDIT-6)', () => {
   /** One whiteboard mark, timed to the narration below. */
   const mark = {

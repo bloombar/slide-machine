@@ -812,6 +812,7 @@
       "refine": "Améliorer cette diapositive avec l'IA",
       "editTranscript": "Modifier la transcription orale",
       "changeLayout": "Changer la mise en page",
+      "duplicate": "Dupliquer la diapositive",
       "delete": "Supprimer la diapositive"
     },
     "math": {

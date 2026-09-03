@@ -812,6 +812,7 @@
       "refine": "用 AI 优化这张幻灯片",
       "editTranscript": "编辑口述文稿",
       "changeLayout": "更改版式",
+      "duplicate": "复制幻灯片",
       "delete": "删除幻灯片"
     },
     "math": {
