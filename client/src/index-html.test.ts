@@ -70,4 +70,27 @@ describe('index.html', () => {
     expect(noscript).toContain('href="/privacy"')
     expect(noscript).toContain('href="/terms"')
   })
+
+  /*
+   * TECH-15 says mobile zoom-on-focus is fixed with a 16px floor and
+   * explicitly NOT by disabling zoom. The floor has its own test
+   * (index.css.test.ts); this is the other half — nothing enforced that the
+   * wrong fix stays out, and the wrong fix is a one-line edit to this meta
+   * tag that would look like it solved the same bug.
+   *
+   * Read as source rather than as a rendered page for the same reason the
+   * rest of this file is: the viewport tag is consumed by the browser before
+   * any bundle runs.
+   */
+  it('does not disable pinch-zoom to solve zoom-on-focus (TECH-15)', () => {
+    const viewport = html.match(/<meta[^>]*name="viewport"[^>]*>/)
+    expect(viewport, 'expected a viewport meta tag').not.toBeNull()
+
+    const content = viewport![0]
+    expect(content).not.toMatch(/user-scalable\s*=\s*(no|0)/i)
+    // A maximum-scale at or below 1 disables pinch-zoom just as effectively
+    // as user-scalable=no, on iOS in particular.
+    const maxScale = content.match(/maximum-scale\s*=\s*([\d.]+)/i)
+    if (maxScale) expect(Number(maxScale[1])).toBeGreaterThan(1)
+  })
 })
