@@ -1867,6 +1867,23 @@
   phase: 3
   status: Backlog
   review: false
+- id: EVAL-7
+  title: Lecture view counting
+  full: "Opening a saved lecture in the viewer (SHARE-1) is recorded, whether or
+    not the reader is signed in. It is the denominator the other post-lecture
+    measures were missing: narration (PLAY-2) and translated reading (SHARE-2)
+    are metered and therefore counted, but a lecture nobody opened and a lecture
+    thirty students read straight through look identical without this. Anonymous
+    readers are counted, never identified. A signed-out reader's opening is
+    recorded with no viewer id, and nothing is invented to stand in for one — no
+    cookie, no fingerprint, no visit token. This is the same rule BILL-7 applies
+    to unregistered playbacks and it comes from §16: making anonymous readers
+    countable as people…"
+  section: §12 Evaluation & Metrics
+  family: EVAL
+  phase: 3
+  status: Backlog
+  review: false
 - id: GEN-12
   title: Mid-speech interim generation
   full: "Speech recognizers only finalize a phrase after a trailing pause (CAP-3),

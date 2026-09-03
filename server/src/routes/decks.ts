@@ -48,6 +48,7 @@ import { verifyAccessToken } from '../auth/tokens'
 import { ProjectModel } from '../models/project'
 import { UserModel } from '../models/user'
 import { VoteModel, voteBreakdown } from '../models/vote'
+import { DeckViewModel } from '../models/deck-view'
 import { env } from '../config/env'
 import { HttpError } from '../middleware/error'
 import type { MyVote } from '@slide-machine/shared'
@@ -213,6 +214,59 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
     voteDown,
   }
   res.json(body)
+})
+
+/**
+ * POST /api/decks/:slug/view — records that somebody opened this lecture
+ * (EVAL-7).
+ *
+ * Gated on VIEW access and not on sign-in, because the reader this most needs
+ * to count is the student who arrived through a permalink without an account.
+ *
+ * A separate call rather than a count of `GET /decks/:slug`, and that is the
+ * whole point of it existing. The viewer fetches the same deck again to poll
+ * for newly retained audio and after a settings change, so metering the read
+ * route would file an owner's polling loop as student readings. Only the
+ * viewer knows which fetch was somebody opening the lecture, so only the
+ * viewer says so.
+ *
+ * Answers 204 whatever happens. A reader whose lecture failed to be counted
+ * has still read it, and failing their request to protect a statistic would
+ * be the wrong way round — the same discipline the cost ledger and the audit
+ * log use.
+ */
+decksRouter.post('/decks/:slug/view', optionalAuth, async (req, res) => {
+  const { deck } = await loadViewableDeck(String(req.params.slug), req.userId)
+  const acl = await loadDeckAcl(deck, { withDeleted: Boolean(deck.deletedAt) })
+  const project = await ProjectModel.findById(deck.projectId)
+    .setOptions(deck.deletedAt ? withDeleted : {})
+    .catch(() => null)
+
+  try {
+    await DeckViewModel.create({
+      deckId: deck._id,
+      deckName: deck.title,
+      projectId: deck.projectId ?? null,
+      projectName: project?.title,
+      ownerId: acl.ownerId,
+      // Null for a signed-out reader, and nothing invented to stand in for it
+      // (§16). Their openings are counted; they are not identified.
+      viewerId: req.userId ?? null,
+      // An editor opening a lecture they can edit is its author at work, not a
+      // member of its audience — the same line the metered paths draw, drawn
+      // the same way so the two sets of numbers can be read together.
+      actorKind: canEditAcl(acl, req.userId) ? 'owner' : 'audience',
+      // This route is the browser viewer's beacon; an assistant reads a
+      // lecture through MCP without ever opening the viewer.
+      channel: 'app',
+      occurredAt: new Date(),
+    })
+  } catch (error) {
+    // Logged, never raised. Losing a row costs a report some accuracy;
+    // failing here would cost a reader their lecture.
+    console.error(`Failed to record view of deck ${deck._id}:`, error)
+  }
+  res.status(204).end()
 })
 
 /**

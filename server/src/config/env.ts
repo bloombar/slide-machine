@@ -402,6 +402,19 @@ const envSchema = z
       .int()
       .nonnegative()
       .default(365),
+    /**
+     * How long lecture openings (EVAL-7) are kept before the daily sweep
+     * deletes them. `0` keeps them forever, which is fine for a small
+     * deployment and unwise for a busy one: this and the cost ledger are the
+     * only two collections that grow with usage rather than content. A year by
+     * default, matching the ledger, so a term's readings and the costs they
+     * caused age out together rather than one outliving the other.
+     */
+    DECK_VIEW_RETENTION_DAYS: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .default(365),
     // GCS bucket the diarization pass copies audio into — Google BatchRecognize
     // reads only from gs:// (GEN-4 Phase 3). Required for DIARIZATION_PROVIDER=
     // google-cloud; unused otherwise.

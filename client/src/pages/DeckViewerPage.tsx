@@ -53,6 +53,7 @@ import { strokeVisible, erasureReplays } from '../lib/drawing'
 import { runLayoutFlip } from '../lib/layoutFlip'
 import { apiFetch, ApiError } from '../api/http'
 import { dispatchAction } from '../api/actions'
+import { recordDeckView } from '../api/decks'
 import {
   applySlideImageFromSource,
   editSlideDrawings,
@@ -682,6 +683,24 @@ export default function DeckViewerPage() {
       cancelled = true
     }
   }, [slug, status])
+
+  /**
+   * Records that this lecture was opened (EVAL-7).
+   *
+   * Latched per lecture rather than tied to a fetch, because neither a fetch
+   * nor this effect corresponds to a reading. The deck is re-fetched to poll
+   * for newly retained audio and after a settings change, and the effect above
+   * re-runs when the session finishes restoring or the reader signs in
+   * mid-visit — none of which is somebody opening the lecture a second time.
+   * Navigating to another lecture and back unmounts the page and so counts
+   * again, which is right: that is a second reading.
+   */
+  const reportedViewRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!view || !slug || reportedViewRef.current === slug) return
+    reportedViewRef.current = slug
+    void recordDeckView(slug)
+  }, [view, slug])
 
   /**
    * A link from outside naming one slide — `?slide=<slide id>`, which an
