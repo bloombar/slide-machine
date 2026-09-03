@@ -197,6 +197,12 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
   const attribution = attributionForDeck(acl.ownerId, deck, {
     actorId: req.userId,
     audience: actor === 'audience',
+    // The language actually heard (PLAY-3): the one being read in when the
+    // lecture is translated, otherwise the one it was authored in. Always a
+    // language, unlike the translation side — every playback is in some
+    // language, and recording only the translated ones would leave the
+    // original-language plays as an unlabelled remainder rather than a count.
+    locale: target ?? sourceLocale,
   })
   // Translating the narration is translation work, charged to the same owner
   // out of the same two pools as translated reading (BILL-3, SHARE-2).

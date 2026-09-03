@@ -80,7 +80,14 @@ downstream before analysis, as the study protocol (P-7, P-14) requires.
 - votes.csv — votes cast in the window, voter keyed by study id.
 - cost-events.csv — the cost ledger over the window (BILL-7), payer and
   actor keyed by study id. A blank actor is an anonymous viewer; a blank
-  study id is an account purged since the event.
+  study id is an account purged since the event. The locale column is the
+  language the lecture was read or heard in; it is blank for work that has
+  no language, which is not the same as English. Count distinct
+  actorStudyId per (deckId, locale) for how many students used a language,
+  and count rows for how many times — never sum quantity, which is 0 on a
+  cache hit. Treat a language as a quasi-identifier when you do: a lecture
+  with one reader in a language singles that pseudonym out, and every other
+  row it appears in with it. Suppress small cells before publishing.
 
 Rows with a deletedAt value were soft-deleted in the application but are
 exported for completeness; exclude them downstream if the analysis calls
@@ -311,6 +318,7 @@ export const buildResearchBundle = async (
         'projectName',
         'deckId',
         'deckName',
+        'locale',
         'metric',
         'quantity',
         'billable',
@@ -326,6 +334,7 @@ export const buildResearchBundle = async (
         e.projectName,
         e.deckId?.toString(),
         e.deckName,
+        e.locale,
         e.metric,
         e.quantity,
         e.billable,

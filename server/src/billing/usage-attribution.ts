@@ -20,7 +20,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 // Type-only, so it erases at compile and this file still pulls in no
 // project code at runtime — which is what keeps the counters and the cost
 // ledger able to share it without importing each other.
-import type { ActorChannel } from '@slide-machine/shared'
+import type { ActorChannel, Locale } from '@slide-machine/shared'
 
 /**
  * What is known about a piece of metered work at the moment it happens.
@@ -62,6 +62,23 @@ export interface UsageAttribution {
    * by the account that authorized them.
    */
   channel?: ActorChannel
+  /**
+   * The language the work was *for* — the language a viewer read the lecture
+   * in, or heard it spoken in (SHARE-2, PLAY-3).
+   *
+   * Recorded because it cannot be recovered afterwards. `SlideTranslation`
+   * knows which languages a lecture exists in, and the ledger knows who read
+   * it and how often, but neither can say **which** language any one reading
+   * was — and in a class where the first viewer of each language pays and
+   * everyone behind them is a cache hit, almost every row is a cache hit. So
+   * "how many students read this in Mandarin" has no answer unless the row
+   * carries the language itself.
+   *
+   * Absent when the work has no language: generating a lecture, extracting
+   * seed material, importing a file. A row without one means "not a
+   * language-specific piece of work", never "English".
+   */
+  locale?: Locale
   /** The project the work belonged to, and its name at the time. */
   projectId?: string
   projectName?: string

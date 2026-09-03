@@ -226,3 +226,27 @@ describe('window validation', () => {
     expect(res.window!.from).toBe(new Date('2019-01-01').toISOString())
   })
 })
+
+describe('the CSV export', () => {
+  it('carries the language a lecture was read or heard in', async () => {
+    await event(adaId, {
+      actorKind: 'audience',
+      metric: 'audienceLocales',
+      locale: 'zh',
+      billable: false,
+      quantity: 0,
+      costMicros: 0,
+    })
+    // Language-less work in the same export, so a blank column is shown to be
+    // the honest rendering of "no language" rather than a missing value.
+    await event(adaId, { metric: 'sttMinutes' })
+
+    const res = await get(admin, '/api/admin/cost/export')
+    expect(res.status).toBe(200)
+
+    const [header = '', ...rows] = res.text.trim().split('\n')
+    const at = header.split(',').indexOf('locale')
+    expect(at).toBeGreaterThan(-1)
+    expect(rows.map(r => r.split(',')[at]).sort()).toEqual(['', 'zh'])
+  })
+})

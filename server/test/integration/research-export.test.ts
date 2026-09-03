@@ -283,6 +283,47 @@ describe('the bundle', () => {
     expect(column(bundle.get('cost-events.csv')!, 'actorStudyId')).toEqual([''])
   })
 
+  it('exports the language a lecture was read or heard in', async () => {
+    const owner = await makeUser()
+    const reader = await makeUser({ email: 'reader@example.com' })
+    const deck = await makeDeck(owner._id)
+    // One reading in Mandarin, and one piece of work with no language at all.
+    // Both belong in the bundle; only the first one has a language, and the
+    // second must come out blank rather than defaulting to English.
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorId: reader._id,
+      actorKind: 'audience',
+      deckId: deck._id,
+      deckName: deck.title,
+      locale: 'zh',
+      metric: 'audienceLocales',
+      quantity: 0,
+      billable: false,
+      costMicros: 0,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorKind: 'owner',
+      deckId: deck._id,
+      metric: 'sttMinutes',
+      quantity: 3,
+      billable: true,
+      costMicros: 1_500_000,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+
+    const bundle = await getBundle()
+    expect(column(bundle.get('cost-events.csv')!, 'locale').sort()).toEqual([
+      '',
+      'zh',
+    ])
+    expect(bundle.get('README.md')).toContain('read or heard in')
+  })
+
   it('exports tombstoned lectures marked by deletedAt', async () => {
     const owner = await makeUser()
     await makeDeck(owner._id, { deletedAt: new Date() })

@@ -164,6 +164,10 @@ adminCostRouter.get('/cost/export', async (req, res) => {
       // assistant do this" has no other way to tell: an agent's calls are
       // ordinary calls by the account that authorized them.
       'channel',
+      // The language the lecture was read or heard in (SHARE-2, PLAY-3), or
+      // blank for work that has none. Blank is "not language-specific", not
+      // English.
+      'locale',
       'projectId',
       'projectName',
       'deckId',
@@ -186,6 +190,7 @@ adminCostRouter.get('/cost/export', async (req, res) => {
         doc.actorId?.toString(),
         doc.actorKind,
         doc.channel,
+        doc.locale,
         doc.projectId?.toString(),
         doc.projectName,
         doc.deckId?.toString(),
