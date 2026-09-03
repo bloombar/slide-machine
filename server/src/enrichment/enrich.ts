@@ -154,13 +154,19 @@ export const enrichSlideImage = async (
       )
     }
 
-    // Fill only a slide that has no image yet. "No image" means the field
-    // is absent (never set) OR an empty string — the latter is a common,
-    // documented state (an image the user removed, or a placeholder left by
-    // a layout switch). Matching only { $exists: false } silently dropped
-    // the sourced image whenever imageRef was ''. A real URL is still never
-    // overwritten (IMG-3 stability). 'replace' captions ride this same write
-    // so the caption reaches the client together with the image.
+    // Fill only a picture box that holds nothing yet. The box itself is the
+    // whole question: the slot map is where a slide's content lives, so a
+    // slot with a real URL is a picture the user has and is never overwritten
+    // (IMG-3 stability), and a slot without one is a hole to fill. "Holds
+    // nothing" means the slot is absent (never written) OR its ref is an
+    // empty string — the latter is a common, documented state (an image the
+    // user removed, or a placeholder left by a layout switch), and matching
+    // only { $exists: false } silently dropped the sourced image. The
+    // mirrored top-level `imageRef` gets no say: it is a derived copy of
+    // `slots.image`, so letting it veto this write would leave a slide whose
+    // copy and map disagree unable to converge — the picture box permanently
+    // unfillable. 'replace' captions ride this same write so the caption
+    // reaches the client together with the image.
     const replaceCaption =
       image.caption && context?.captionMode === 'replace'
         ? { caption: image.caption }
@@ -169,16 +175,9 @@ export const enrichSlideImage = async (
     await SlideModel.updateOne(
       {
         _id: slideId,
-        $and: [
-          {
-            $or: [
-              { [`${path}.ref`]: { $in: [null, ''] } },
-              { [path]: { $exists: false } },
-            ],
-          },
-          // A slide written before the map holds its picture in the old
-          // field alone, and that picture is still the user's (IMG-3).
-          ...(slot === 'image' ? [{ imageRef: { $in: [null, ''] } }] : []),
+        $or: [
+          { [`${path}.ref`]: { $in: [null, ''] } },
+          { [path]: { $exists: false } },
         ],
       },
       {
