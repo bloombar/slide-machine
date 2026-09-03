@@ -88,6 +88,14 @@ const deckView = {
   projectGenerationFreedom: 3,
 }
 
+/**
+ * Ceiling for the individual waits in the multi-step narration test below.
+ * `asyncUtilTimeout` (src/test/setup.ts) caps every `waitFor`/`findBy*` at 5s
+ * regardless of the surrounding `it` timeout, which is short for a chain of
+ * sequential network round-trips on a loaded CI runner.
+ */
+const WAIT = 15000
+
 const renderViewer = (refreshStatus: number, ownerId = 'u1') => {
   mockFetchRoutes({
     '/api/auth/refresh': () =>
@@ -2651,6 +2659,95 @@ describe('DeckViewerPage settings modal', () => {
     ).not.toBeInTheDocument()
   })
 
+  // EDIT-3: the "[" / "]" shortcut has to act on SOME slide in list view even
+  // when nav.visibleIndex() has nothing to report — e.g. the reader has
+  // scrolled on past the last row, into the footer, without giving up the
+  // slide they were just looking at. nav.current is the last slide an
+  // explicit navigation landed on; falling back to it here is exactly what
+  // activePlayIndex and its sibling already do a few hundred lines down —
+  // cycleLayout was the one call site that never got that fallback.
+  it('cycles the layout of the last-navigated slide when nothing is on screen (list view)', async () => {
+    const calls: Array<{ slideId: string; layoutType: string }> = []
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: {
+          ...deckView,
+          canEdit: true,
+          template: {
+            ...deckView.template,
+            layouts: [
+              {
+                type: 'title',
+                label: 'Title',
+                purpose: 'Opening slide',
+                slots: [],
+                elementPositions: {},
+              },
+              {
+                type: 'content',
+                label: 'Content',
+                purpose: 'Title and text',
+                slots: [],
+                elementPositions: {},
+              },
+            ],
+          },
+        },
+      }),
+      '/api/actions/slide.setLayout': init => {
+        calls.push(JSON.parse(String(init?.body)))
+        return {
+          status: 200,
+          body: { ...deckView.slides[1], layoutType: 'title' },
+        }
+      },
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'List view' }))
+
+    // Land on slide 2 the way a reader actually does — an explicit move —
+    // before the page scrolls it out of view.
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+
+    // Every row reports as off-screen: nothing visibleIndex() can measure
+    // registers as "on screen", the way the whole list does once scrolled
+    // well past it (into the page footer, say).
+    for (const row of screen.getAllByRole('listitem', { name: /slide \d/i })) {
+      row.getBoundingClientRect = () =>
+        ({
+          top: 5000,
+          bottom: 5549,
+          height: 549,
+          left: 0,
+          right: 0,
+          width: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        }) as DOMRect
+    }
+
+    fireEvent.keyDown(window, { key: ']' })
+
+    await vi.waitFor(() =>
+      expect(calls).toEqual([{ slideId: 's2', layoutType: 'title' }]),
+    )
+  })
+
   it('polls for a sourced image after switching onto an image layout', async () => {
     let sent: unknown
     mockFetchRoutes({
@@ -3267,6 +3364,14 @@ describe('DeckViewerPage title in the primary nav', () => {
   // vitest's five-second default on an idle machine and not on a busy one, and
   // it has tipped over both in CI and locally. Elapsed time is not what this
   // test is about.
+  //
+  // Raising the `it` timeout alone does not cover that: every `waitFor` and
+  // `findBy*` here has its OWN ceiling, the 5s `asyncUtilTimeout` set in
+  // src/test/setup.ts, and it is that ceiling — not the 20s one — a busy
+  // runner hits (CI failed this test at 5051ms on the first wait). So each
+  // wait below carries the same generous budget explicitly. These helpers
+  // return the moment their condition holds, so a longer ceiling costs
+  // nothing on a quick machine.
   it(
     'skips deck narration to the slide the arrow keys move to',
     { timeout: 20000 },
@@ -3300,8 +3405,10 @@ describe('DeckViewerPage title in the primary nav', () => {
       )
 
       fireEvent.click(await screen.findByRole('button', { name: 'Play deck' }))
-      await waitFor(() =>
-        expect(calls.some(u => u.includes('/api/slides/s1/tts'))).toBe(true),
+      await waitFor(
+        () =>
+          expect(calls.some(u => u.includes('/api/slides/s1/tts'))).toBe(true),
+        { timeout: WAIT },
       )
 
       // Wait for playback to actually BE running, not merely for its first
@@ -3310,19 +3417,27 @@ describe('DeckViewerPage title in the primary nav', () => {
       // dropped — and the test then waits out its timeout for a request that
       // will never come. The control flipping to Pause is the state itself
       // saying so.
-      await screen.findByRole('button', { name: 'Pause playback' })
+      await screen.findByRole(
+        'button',
+        { name: 'Pause playback' },
+        { timeout: WAIT },
+      )
 
       fireEvent.keyDown(window, { key: 'ArrowRight' })
-      await waitFor(() =>
-        expect(calls.some(u => u.includes('/api/slides/s2/tts'))).toBe(true),
+      await waitFor(
+        () =>
+          expect(calls.some(u => u.includes('/api/slides/s2/tts'))).toBe(true),
+        { timeout: WAIT },
       )
 
       // ...and back: arrowing left re-speaks the previous slide.
       fireEvent.keyDown(window, { key: 'ArrowLeft' })
-      await waitFor(() =>
-        expect(
-          calls.filter(u => u.includes('/api/slides/s1/tts')),
-        ).toHaveLength(2),
+      await waitFor(
+        () =>
+          expect(
+            calls.filter(u => u.includes('/api/slides/s1/tts')),
+          ).toHaveLength(2),
+        { timeout: WAIT },
       )
     },
   )
