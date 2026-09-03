@@ -88,6 +88,14 @@ const deckView = {
   projectGenerationFreedom: 3,
 }
 
+/**
+ * Ceiling for the individual waits in the multi-step narration test below.
+ * `asyncUtilTimeout` (src/test/setup.ts) caps every `waitFor`/`findBy*` at 5s
+ * regardless of the surrounding `it` timeout, which is short for a chain of
+ * sequential network round-trips on a loaded CI runner.
+ */
+const WAIT = 15000
+
 const renderViewer = (refreshStatus: number, ownerId = 'u1') => {
   mockFetchRoutes({
     '/api/auth/refresh': () =>
@@ -3107,6 +3115,14 @@ describe('DeckViewerPage title in the primary nav', () => {
   // vitest's five-second default on an idle machine and not on a busy one, and
   // it has tipped over both in CI and locally. Elapsed time is not what this
   // test is about.
+  //
+  // Raising the `it` timeout alone does not cover that: every `waitFor` and
+  // `findBy*` here has its OWN ceiling, the 5s `asyncUtilTimeout` set in
+  // src/test/setup.ts, and it is that ceiling — not the 20s one — a busy
+  // runner hits (CI failed this test at 5051ms on the first wait). So each
+  // wait below carries the same generous budget explicitly. These helpers
+  // return the moment their condition holds, so a longer ceiling costs
+  // nothing on a quick machine.
   it(
     'skips deck narration to the slide the arrow keys move to',
     { timeout: 20000 },
@@ -3140,8 +3156,10 @@ describe('DeckViewerPage title in the primary nav', () => {
       )
 
       fireEvent.click(await screen.findByRole('button', { name: 'Play deck' }))
-      await waitFor(() =>
-        expect(calls.some(u => u.includes('/api/slides/s1/tts'))).toBe(true),
+      await waitFor(
+        () =>
+          expect(calls.some(u => u.includes('/api/slides/s1/tts'))).toBe(true),
+        { timeout: WAIT },
       )
 
       // Wait for playback to actually BE running, not merely for its first
@@ -3150,19 +3168,27 @@ describe('DeckViewerPage title in the primary nav', () => {
       // dropped — and the test then waits out its timeout for a request that
       // will never come. The control flipping to Pause is the state itself
       // saying so.
-      await screen.findByRole('button', { name: 'Pause playback' })
+      await screen.findByRole(
+        'button',
+        { name: 'Pause playback' },
+        { timeout: WAIT },
+      )
 
       fireEvent.keyDown(window, { key: 'ArrowRight' })
-      await waitFor(() =>
-        expect(calls.some(u => u.includes('/api/slides/s2/tts'))).toBe(true),
+      await waitFor(
+        () =>
+          expect(calls.some(u => u.includes('/api/slides/s2/tts'))).toBe(true),
+        { timeout: WAIT },
       )
 
       // ...and back: arrowing left re-speaks the previous slide.
       fireEvent.keyDown(window, { key: 'ArrowLeft' })
-      await waitFor(() =>
-        expect(
-          calls.filter(u => u.includes('/api/slides/s1/tts')),
-        ).toHaveLength(2),
+      await waitFor(
+        () =>
+          expect(
+            calls.filter(u => u.includes('/api/slides/s1/tts')),
+          ).toHaveLength(2),
+        { timeout: WAIT },
       )
     },
   )
