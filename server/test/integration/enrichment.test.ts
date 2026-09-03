@@ -146,14 +146,18 @@ describe('enrichSlideImage', () => {
   })
 
   it('never overwrites an existing image (IMG-3 stability)', async () => {
-    await SlideModel.updateOne(
-      { _id: slideId },
-      { imageRef: 'http://original.png' },
-    )
+    // A picture the slide already has lives in its `image` box. The
+    // top-level `imageRef` is the mirror the box folds out to, so both must
+    // still read the user's picture after enrichment has run and declined.
+    await act(ada, 'slide.editContent', {
+      slideId,
+      slots: { image: { kind: 'image', ref: 'http://original.png' } },
+    })
     stubImageApis()
     await enrichSlideImage(slideId, ['mitochondria'])
 
     const slide = await act(ada, 'slide.get', { slideId })
+    expect(slide.body.slots.image.ref).toBe('http://original.png')
     expect(slide.body.imageRef).toBe('http://original.png')
   })
 

@@ -107,7 +107,6 @@ import {
 import {
   imageSlotNames,
   layoutHasImageSlot,
-  legacyImageRefGuard,
   reconcileImageLayout,
 } from '../lib/image-layout'
 import { UserModel } from '../models/user'
@@ -190,20 +189,14 @@ const maybeEnrich = (
     // are left for enrichment or the instructor to fill.
     const slot = slots[0] ?? 'image'
     void SlideModel.updateOne(
-      // "No image yet" is an absent field OR an empty string (see
-      // enrichSlideImage); a real URL is never overwritten (IMG-3).
+      // "No picture yet" is an absent slot OR one whose ref is an empty
+      // string (see enrichSlideImage); a slot holding a real URL is never
+      // overwritten (IMG-3).
       {
         _id: slideId,
-        $and: [
-          {
-            $or: [
-              { [`slots.${slot}.ref`]: { $in: [null, ''] } },
-              { [`slots.${slot}`]: { $exists: false } },
-            ],
-          },
-          // A slide written before the map keeps its picture in the old
-          // field alone, and that picture is still the user's (IMG-3).
-          ...(slot === 'image' ? [legacyImageRefGuard()] : []),
+        $or: [
+          { [`slots.${slot}.ref`]: { $in: [null, ''] } },
+          { [`slots.${slot}`]: { $exists: false } },
         ],
       },
       {
