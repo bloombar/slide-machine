@@ -52,6 +52,7 @@ import { VoteModel, voteBreakdown } from '../models/vote'
 import { DeckViewModel } from '../models/deck-view'
 import { env } from '../config/env'
 import { HttpError } from '../middleware/error'
+import { requireAuth } from '../middleware/auth'
 import type { MyVote } from '@slide-machine/shared'
 
 /** Attaches userId when a valid Bearer token is present; never rejects. */
@@ -354,13 +355,25 @@ decksRouter.post('/decks/:slug/view', optionalAuth, async (req, res) => {
  * POST /api/decks/:slug/translation — the deck's slide content in another
  * language (SHARE-2).
  *
- * Gated on VIEW access, not edit and not sign-in: reading a shared lecture in
- * your own language is part of viewing it, and the students this exists for
- * arrive through a permalink without an account. Results are cached per deck +
- * locale, so this is usually a database read; only new or edited slides reach
- * the paid API.
+ * Needs an account, and then VIEW access — not edit. SHARE-2 says *signed-in*
+ * students and instructors, and AUTH-8 records the narrowing: "narration
+ * already required an account and failed silently; translated viewing did not,
+ * and now asks for one". The viewer has raised that gate since, but only in
+ * the page — the route stayed open, so anyone who skipped the UI could spend
+ * the owner's translation allowance without an account, on a path with no
+ * rate limit and nothing tying the spend to a person.
+ *
+ * Sign-in is checked before the ACL, so an anonymous caller learns nothing
+ * about which lectures exist: every unauthenticated request is 401 whether the
+ * slug names a public deck, a private one, or nothing.
+ *
+ * Reading a shared lecture still needs no account. What is gated is
+ * re-languaging it, never seeing it.
+ *
+ * Results are cached per deck + locale, so this is usually a database read;
+ * only new or edited slides reach the paid API.
  */
-decksRouter.post('/decks/:slug/translation', optionalAuth, async (req, res) => {
+decksRouter.post('/decks/:slug/translation', requireAuth, async (req, res) => {
   if (!translationEnabled()) {
     throw new HttpError(
       503,
@@ -402,8 +415,9 @@ decksRouter.post('/decks/:slug/translation', optionalAuth, async (req, res) => {
   // about decks and languages but nothing about requests, so the context has
   // to be established here or the row lands with none: charged to the right
   // account, but attributed to the system, on no lecture, in no language.
-  // `audience` is stated rather than inferred because the case this most has
-  // to get right is the student without an account, who has no id to compare.
+  // `audience` is stated rather than inferred: a reader is not the author
+  // merely because they are signed in, and the pool their reading is charged
+  // to has to follow the ACL rather than the presence of a token.
   const attribution = attributionForDeck(acl.ownerId, deck, {
     actorId: req.userId,
     audience: actor === 'audience',

@@ -250,9 +250,9 @@ export default function DeckViewerPage() {
   // two ways: an explicit choice in the switcher, and a language remembered
   // from a previous visit that it restores and fetches with nobody clicking.
   // The switcher is gated by `locked` below; the remembered language is
-  // gated here, because the translation endpoint is deliberately
-  // `optionalAuth` (SHARE-2) and would otherwise re-open the permalink fully
-  // translated for a lapsed session with no gate ever raised.
+  // gated here, so a lapsed session does not re-open the permalink fully
+  // translated with no gate ever raised. The route refuses an anonymous
+  // caller too — this gate is the courtesy, not the enforcement.
   //
   // `status` matters as much as `user`: a signed-in reader's session is
   // restored asynchronously, so treating the `restoring` window as signed

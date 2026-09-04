@@ -80,8 +80,10 @@ downstream before analysis, as the study protocol (P-7, P-14) requires.
   window (EVAL-1), the same shape as the admin telemetry export.
 - votes.csv — votes cast in the window, voter keyed by study id.
 - cost-events.csv — the cost ledger over the window (BILL-7), payer and
-  actor keyed by study id. A blank actor is an anonymous viewer; a blank
-  study id is an account purged since the event. The locale column is the
+  actor keyed by study id. Read a blank actor with the actorKind column
+  beside it: 'system' means work no request was attributed to, and
+  anything else means an account purged since the event, or a row from
+  before translated viewing required one. The locale column is the
   language the lecture was read or heard in; it is blank for work that has
   no language, which is not the same as English. Count distinct
   actorStudyId per (deckId, locale) for how many students used a language,
