@@ -96,6 +96,12 @@ export const recordCostEvent = async ({
       // true of every piece of work the request causes, whoever ends up
       // paying for it. Absent context is the system, which is not an agent.
       channel: context?.channel ?? 'app',
+      // Also outside the `sameParty` guard, and for the same reason as the
+      // channel: the language is a fact about the work, not a reference to an
+      // entity one account owns. A viewer reading a lecture in French is
+      // reading it in French whoever ends up being charged for it, so there is
+      // nothing here that could land on the wrong account's report.
+      locale: context?.locale ?? null,
       projectId: sameParty ? (context?.projectId ?? null) : null,
       projectName: sameParty ? context?.projectName : undefined,
       deckId: sameParty ? (context?.deckId ?? null) : null,

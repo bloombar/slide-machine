@@ -32,7 +32,9 @@
 import { Schema, type Types } from 'mongoose'
 import {
   ACTOR_CHANNELS,
+  LOCALES,
   type ActorChannel,
+  type Locale,
   type UsageMetric,
 } from '@slide-machine/shared'
 import { defineModel } from './define-model'
@@ -64,6 +66,25 @@ export interface CostEventDb {
    * Rows written before this field existed have none, and mean `app`.
    */
   channel: ActorChannel
+  /**
+   * The language this work was for — read or spoken (SHARE-2, PLAY-3).
+   *
+   * The one thing about a translated reading that nothing else can recover.
+   * `SlideTranslation` records which languages a lecture exists in and when
+   * each first appeared; this ledger records who read it and how many times.
+   * Neither can say which language a given reading was, because the first
+   * viewer of a language creates the entry and every viewer behind them is a
+   * cache hit against it — so in a class of thirty, twenty-eight readings are
+   * invisible to a join on creation time.
+   *
+   * Null for work that has no language: generating a lecture, extracting seed
+   * material. Null is "not language-specific", never "English" — a row that
+   * defaulted to English would silently inflate the count of the one language
+   * the question is least about.
+   *
+   * Rows written before this field existed have none, and mean unknown.
+   */
+  locale?: Locale | null
   projectId?: Types.ObjectId | null
   /** The project's title when the event happened; the row outlives it. */
   projectName?: string
@@ -96,6 +117,7 @@ const costEventSchema = new Schema<CostEventDb>({
     required: true,
     default: 'app',
   },
+  locale: { type: String, enum: [...LOCALES], default: null },
   projectId: { type: Schema.Types.ObjectId, ref: 'Project', default: null },
   projectName: String,
   deckId: { type: Schema.Types.ObjectId, ref: 'Deck', default: null },
@@ -121,6 +143,11 @@ costEventSchema.index({ occurredAt: -1 })
 // the channel exists to answer, and one that would otherwise scan the whole
 // ledger, since agent rows are a small minority of it.
 costEventSchema.index({ payerId: 1, channel: 1, occurredAt: -1 })
+// "How many people read this lecture in each language, over this window" — the
+// per-language roll-up the locale exists to answer. Keyed by lecture first
+// because that is how it is always asked: a language total across every deck
+// in a deployment is not a question anyone has.
+costEventSchema.index({ deckId: 1, locale: 1, occurredAt: -1 })
 
 // Deliberately no soft-delete plugin: a deleted lecture's cost still happened,
 // and a ledger that disappears with the thing it describes cannot answer what

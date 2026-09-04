@@ -24,6 +24,7 @@ import { isValidObjectId } from 'mongoose'
 import { DeckModel } from '../models/deck'
 import { ProjectModel } from '../models/project'
 import { SlideModel } from '../models/slide'
+import type { Locale } from '@slide-machine/shared'
 import type { UsageAttribution } from './usage-attribution'
 
 /** The entity half of an attribution — what the work was for. */
@@ -104,11 +105,16 @@ export const entityFromInput = async (
 }
 
 /** Both halves of an attribution for work on a known lecture, for the paths
- * that have the deck in hand already and need no lookup at all. */
+ * that have the deck in hand already and need no lookup at all.
+ *
+ * `locale` is the language the work is for, and only the language-bearing
+ * paths pass one: reading a lecture in translation, and hearing it narrated.
+ * Left off, the rows say nothing about language rather than claiming English.
+ */
 export const attributionForDeck = (
   payerId: string,
   deck: { _id: unknown; title?: string; projectId?: unknown },
-  options: { actorId?: string; audience?: boolean } = {},
+  options: { actorId?: string; audience?: boolean; locale?: Locale } = {},
 ): UsageAttribution => ({
   userId: payerId,
   ...options,

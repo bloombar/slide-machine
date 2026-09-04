@@ -41,6 +41,8 @@ import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { resolveDeckTemplateForRead } from '../templates/versions'
 import { translateSlides, translationEnabled } from '../lib/translate-slides'
 import { translationBillingFor } from '../billing/translation-usage'
+import { attributionForDeck } from '../billing/attribution-resolve'
+import { runWithUsage } from '../billing/usage-context'
 import { PlanLimitExceededError } from '../billing/limits'
 import { verifyAccessToken } from '../auth/tokens'
 import { ProjectModel } from '../models/project'
@@ -256,21 +258,33 @@ decksRouter.post('/decks/:slug/translation', optionalAuth, async (req, res) => {
   // preparing the lecture draws on a different allowance than a student
   // reading it, so who triggered this decides the pool before anything else.
   const acl = await loadDeckAcl(deck, { withDeleted: Boolean(deck.deletedAt) })
-  const billing = await translationBillingFor(
-    acl.ownerId,
-    canEditAcl(acl, req.userId) ? 'author' : 'audience',
-  )
+  const actor = canEditAcl(acl, req.userId) ? 'author' : 'audience'
+  const billing = await translationBillingFor(acl.ownerId, actor)
+  // Who pays, who asked, what for, and in which language (BILL-7). The
+  // metering lives several layers down inside `translateSlides`, which knows
+  // about decks and languages but nothing about requests, so the context has
+  // to be established here or the row lands with none: charged to the right
+  // account, but attributed to the system, on no lecture, in no language.
+  // `audience` is stated rather than inferred because the case this most has
+  // to get right is the student without an account, who has no id to compare.
+  const attribution = attributionForDeck(acl.ownerId, deck, {
+    actorId: req.userId,
+    audience: actor === 'audience',
+    locale,
+  })
 
   const slides = await SlideModel.find({ deckId: deck._id, ...filter })
     .sort({ index: 1 })
     .setOptions(options)
   try {
-    const perSlide = await translateSlides(
-      deck._id,
-      slides.map(toSlideDto),
-      source,
-      locale,
-      billing,
+    const perSlide = await runWithUsage(attribution, () =>
+      translateSlides(
+        deck._id,
+        slides.map(toSlideDto),
+        source,
+        locale,
+        billing,
+      ),
     )
     // Narration rides in the same entries (PLAY-3) but is not part of reading:
     // it is fetched when someone actually presses play, and shipping it here
