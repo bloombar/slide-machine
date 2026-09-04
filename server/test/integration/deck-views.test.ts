@@ -8,7 +8,15 @@
  * records for each kind of reader, and that nothing about reading a lecture
  * touches an allowance.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  afterAll,
+  beforeEach,
+} from 'vitest'
 import request from 'supertest'
 import { env } from '../../src/config/env'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
@@ -243,40 +251,54 @@ describe('retention', () => {
 })
 
 describe('the nuisance guard on an endpoint anyone can post to', () => {
+  const FLOOD = env.DECK_VIEW_RATE_LIMIT
+
   // The endpoint takes no credentials and writes a row that survives a year,
   // so a loop against a public permalink would both skew the count and grow
   // the collection. The guard bounds that without the reader ever seeing it.
   it('stops recording once a caller floods the endpoint, still answering 204', async () => {
-    for (let i = 0; i < 120; i += 1) {
-      const res = await open()
-      expect(res.status).toBe(204)
-    }
-    expect(await DeckViewModel.countDocuments({})).toBe(120)
+    for (let i = 0; i < FLOOD; i += 1) await open()
+    expect(await DeckViewModel.countDocuments({})).toBe(FLOOD)
 
     // Over the line: still 204, but no longer recorded. A reader is never
     // refused their lecture to protect a statistic.
     const over = await open()
     expect(over.status).toBe(204)
-    expect(await DeckViewModel.countDocuments({})).toBe(120)
+    expect(await DeckViewModel.countDocuments({})).toBe(FLOOD)
   })
 
   it('counts again once the window is reset', async () => {
-    for (let i = 0; i < 121; i += 1) await open()
-    expect(await DeckViewModel.countDocuments({})).toBe(120)
+    for (let i = 0; i < FLOOD + 1; i += 1) await open()
+    expect(await DeckViewModel.countDocuments({})).toBe(FLOOD)
 
     resetDeckViewRateLimit()
     await open()
-    expect(await DeckViewModel.countDocuments({})).toBe(121)
+    expect(await DeckViewModel.countDocuments({})).toBe(FLOOD + 1)
+  })
+
+  // A dropped row is missing research data. The reader is not told, so the
+  // operator has to be — and told which lecture, since that is what is short.
+  it('warns once, naming the lecture and never the caller', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      for (let i = 0; i < FLOOD + 3; i += 1) await open()
+
+      expect(warn).toHaveBeenCalledTimes(1)
+      const line = String(warn.mock.calls[0]?.[0])
+      expect(line).toContain(slug)
+      // Never the address: this route takes care not to name a reader (§16),
+      // and a log line would undo that for the anonymous ones.
+      expect(line).not.toMatch(/\d+\.\d+\.\d+\.\d+|::ffff:|::1/)
+    } finally {
+      warn.mockRestore()
+    }
   })
 
   // The guard must not be usable as a remote off-switch. Charging the budget
   // before the lecture resolved let a stranger spend it on slugs that name
-  // nothing, and the next genuine opening of a real lecture went uncounted —
-  // silently, and for the rest of the window.
+  // nothing, and the next genuine opening of a real lecture went uncounted.
   it('does not let unknown lectures spend the budget', async () => {
-    for (let i = 0; i < 130; i += 1) {
-      expect((await open('no-such-lecture')).status).toBe(404)
-    }
+    for (let i = 0; i < FLOOD + 10; i += 1) await open('no-such-lecture')
     expect(await DeckViewModel.countDocuments({})).toBe(0)
 
     // The real lecture still counts, which is the whole point.
@@ -285,16 +307,40 @@ describe('the nuisance guard on an endpoint anyone can post to', () => {
   })
 
   // Same reasoning for a lecture the caller may not see: it never becomes a
-  // row, so it must never cost a reader who may.
+  // row, so it must never cost the readers who may see it. No reset here —
+  // resetting between the flood and the assertion would clear the very budget
+  // the test claims was never spent, and the test would pass either way.
   it('does not let unviewable lectures spend the budget', async () => {
-    await act(ada, 'deck.setAccess', { deckId, visibility: 'restricted' })
-    for (let i = 0; i < 130; i += 1) {
-      expect((await open(slug, byron)).status).toBe(404)
+    const other = await act(byron, 'project.create', { title: 'Byron' })
+    const mine = await act(byron, 'deck.create', {
+      projectId: other.body.id,
+      title: 'Private',
+    })
+    await act(byron, 'deck.setAccess', {
+      deckId: mine.body.id,
+      visibility: 'restricted',
+    })
+    const hidden = (await DeckModel.findById(mine.body.id))!.permalinkSlug
+
+    for (let i = 0; i < FLOOD + 10; i += 1) {
+      expect((await open(hidden, ada)).status).toBe(404)
     }
 
-    resetDeckViewRateLimit()
-    await act(ada, 'deck.setAccess', { deckId, visibility: 'public' })
-    expect((await open(slug, byron)).status).toBe(204)
+    // Ada's budget is untouched, so her openings of a lecture she can see
+    // are still recorded.
+    expect((await open(slug, ada)).status).toBe(204)
     expect(await DeckViewModel.countDocuments({})).toBe(1)
+  })
+
+  // A shared address must not make readers share a budget: a lecture hall
+  // behind one NAT is the case this guard most needs not to break.
+  it('gives each signed-in reader their own budget', async () => {
+    for (let i = 0; i < FLOOD + 1; i += 1) await open(slug, ada)
+    const afterAda = await DeckViewModel.countDocuments({})
+    expect(afterAda).toBe(FLOOD)
+
+    // Same address, different account — and still counted.
+    expect((await open(slug, byron)).status).toBe(204)
+    expect(await DeckViewModel.countDocuments({})).toBe(afterAda + 1)
   })
 })

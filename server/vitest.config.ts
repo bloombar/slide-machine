@@ -49,6 +49,10 @@ export default defineConfig({
       FEEDBACK_EMAIL: 'feedback@example.test',
       // No grace window in tests: rotated-out tokens must die immediately
       REFRESH_GRACE_SECONDS: '0',
+      // Small enough that a case can cross the line in a handful of requests
+      // rather than six hundred; the guard's behaviour is what is under test,
+      // not the size of its budget.
+      DECK_VIEW_RATE_LIMIT: '20',
       // Uploads land on disk in an isolated test dir
       STORAGE_PROVIDER: 'local',
       STORAGE_LOCAL_DIR: '.uploads-test',

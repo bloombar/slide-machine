@@ -255,19 +255,24 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
  * viewable lecture has resolved, so a loop against slugs that do not exist
  * cannot spend a budget it never appears in.
  *
- * The limit is deliberately loose. Even with a per-client address, a NAT or an
- * institutional proxy can put a whole lecture hall behind one — a hall of
- * thirty opening a handful of lectures each sits far below this, a script far
- * above it, and between those two the guard does nothing, which is the right
- * place for it to be uncertain.
+ * The limit clears real use by a wide margin, deliberately. A signed-in
+ * reader is keyed on their account, so a NAT cannot make them share; only
+ * signed-out readers fall back to the address, and there a whole lecture hall
+ * can sit behind one. The old ceiling of 120 was not a margin at all — thirty
+ * students opening four lectures each is exactly 120, and a hall of 121
+ * opening one lecture apiece passed it. At 600 a human cannot reach it and a
+ * script passes it in seconds.
  *
  * Over the line the row is dropped and the reader still gets their 204 — the
  * same discipline the rest of the route follows. Refusing the request would
  * turn a statistics guard into something a reader can feel. The operator is
- * told, once per caller per window: a suppressed opening is missing research
- * data, and it must not be missing silently.
+ * told which lecture is affected, once per caller per window; a suppressed
+ * opening is missing research data and must not be missing silently. The
+ * caller is identified by nothing: their address is what the guard is keyed
+ * on, but writing it to a log would identify a reader this route otherwise
+ * takes care never to name (§16).
  */
-const VIEW_RATE_LIMIT = 120
+const VIEW_RATE_LIMIT = env.DECK_VIEW_RATE_LIMIT
 const VIEW_RATE_WINDOW_MS = 15 * 60 * 1000
 
 const viewLimiter = createRateLimiter({
@@ -297,13 +302,18 @@ decksRouter.post('/decks/:slug/view', optionalAuth, async (req, res) => {
   // lecture, or one this reader may not see, never reaches a `DeckView` row,
   // so letting it spend the budget would let a stranger switch counting off
   // for a real lecture using addresses that do not exist.
-  const caller = req.ip ?? 'unknown'
+  // Keyed on the account when there is one, so a lecture hall sharing an
+  // address does not share a budget; only signed-out readers fall back to it.
+  const caller = req.userId ?? req.ip ?? 'unknown'
   if (!viewLimiter.take(caller)) {
     if (dropNotice.take(caller)) {
+      // The lecture, never the caller: an address here would identify a
+      // reader whose row deliberately does not (§16).
       console.warn(
-        `Deck view not recorded: ${caller} passed ${VIEW_RATE_LIMIT} openings ` +
-          `in ${VIEW_RATE_WINDOW_MS / 60000} minutes. Further openings from ` +
-          `this caller go uncounted until the window closes.`,
+        `Deck views going uncounted for "${deck.permalinkSlug}": one caller ` +
+          `passed ${VIEW_RATE_LIMIT} openings in ` +
+          `${VIEW_RATE_WINDOW_MS / 60000} minutes. This lecture's count is ` +
+          `short until the window closes.`,
       )
     }
     return res.status(204).end()
