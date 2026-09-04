@@ -240,7 +240,9 @@ describe('retention', () => {
     expect(await purgeExpiredDeckViews(0, now)).toEqual({ deleted: 0 })
     expect(await views()).toHaveLength(1)
   })
+})
 
+describe('the nuisance guard on an endpoint anyone can post to', () => {
   // The endpoint takes no credentials and writes a row that survives a year,
   // so a loop against a public permalink would both skew the count and grow
   // the collection. The guard bounds that without the reader ever seeing it.
@@ -265,5 +267,34 @@ describe('retention', () => {
     resetDeckViewRateLimit()
     await open()
     expect(await DeckViewModel.countDocuments({})).toBe(121)
+  })
+
+  // The guard must not be usable as a remote off-switch. Charging the budget
+  // before the lecture resolved let a stranger spend it on slugs that name
+  // nothing, and the next genuine opening of a real lecture went uncounted —
+  // silently, and for the rest of the window.
+  it('does not let unknown lectures spend the budget', async () => {
+    for (let i = 0; i < 130; i += 1) {
+      expect((await open('no-such-lecture')).status).toBe(404)
+    }
+    expect(await DeckViewModel.countDocuments({})).toBe(0)
+
+    // The real lecture still counts, which is the whole point.
+    expect((await open()).status).toBe(204)
+    expect(await DeckViewModel.countDocuments({})).toBe(1)
+  })
+
+  // Same reasoning for a lecture the caller may not see: it never becomes a
+  // row, so it must never cost a reader who may.
+  it('does not let unviewable lectures spend the budget', async () => {
+    await act(ada, 'deck.setAccess', { deckId, visibility: 'restricted' })
+    for (let i = 0; i < 130; i += 1) {
+      expect((await open(slug, byron)).status).toBe(404)
+    }
+
+    resetDeckViewRateLimit()
+    await act(ada, 'deck.setAccess', { deckId, visibility: 'public' })
+    expect((await open(slug, byron)).status).toBe(204)
+    expect(await DeckViewModel.countDocuments({})).toBe(1)
   })
 })

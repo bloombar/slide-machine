@@ -245,18 +245,27 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
  * This endpoint takes no credentials and writes a row, so a loop against it
  * would both grow the collection and poison the very count EVAL-7 exists to
  * produce — and the rows survive a year (`DECK_VIEW_RETENTION_DAYS`), so the
- * damage is not self-clearing. The guard bounds that.
+ * damage is not self-clearing.
  *
- * The limit is deliberately loose. Behind a NAT or an institutional proxy a
- * whole lecture hall shares one address, and a limit tight enough to be a
- * real quota would silently delete exactly the readings the study needs.
- * A hall of thirty opening a handful of lectures each sits far below this;
- * a script sits far above it. Between those two the guard does nothing, which
- * is the right place for it to be uncertain.
+ * Two things make this guard safe to have, and it is worth being explicit
+ * because getting either wrong turns it into the thing it is guarding against.
+ * `req.ip` must be the reader's address and not the ingress's, or the budget
+ * is deployment-wide and one flood stops counting everybody (`app.ts` sets
+ * `trust proxy` for this reason). And the token is charged only once a real,
+ * viewable lecture has resolved, so a loop against slugs that do not exist
+ * cannot spend a budget it never appears in.
+ *
+ * The limit is deliberately loose. Even with a per-client address, a NAT or an
+ * institutional proxy can put a whole lecture hall behind one — a hall of
+ * thirty opening a handful of lectures each sits far below this, a script far
+ * above it, and between those two the guard does nothing, which is the right
+ * place for it to be uncertain.
  *
  * Over the line the row is dropped and the reader still gets their 204 — the
  * same discipline the rest of the route follows. Refusing the request would
- * turn a statistics guard into something a reader can feel.
+ * turn a statistics guard into something a reader can feel. The operator is
+ * told, once per caller per window: a suppressed opening is missing research
+ * data, and it must not be missing silently.
  */
 const VIEW_RATE_LIMIT = 120
 const VIEW_RATE_WINDOW_MS = 15 * 60 * 1000
@@ -266,18 +275,40 @@ const viewLimiter = createRateLimiter({
   windowMs: VIEW_RATE_WINDOW_MS,
 })
 
+/** Throttles the warning above to one line per caller per window, so a flood
+ * cannot turn the log into a second denial of service. */
+const dropNotice = createRateLimiter({
+  limit: 1,
+  windowMs: VIEW_RATE_WINDOW_MS,
+})
+
 /** Test seam: each case starts with a fresh window. */
-export const resetDeckViewRateLimit = (): void => viewLimiter.reset()
+export const resetDeckViewRateLimit = (): void => {
+  viewLimiter.reset()
+  dropNotice.reset()
+}
 
 decksRouter.post('/decks/:slug/view', optionalAuth, async (req, res) => {
-  // Checked before the lookups, so a flood costs the reads too, not just the
-  // insert. Silent: the reader is never told their opening went uncounted.
-  if (!viewLimiter.take(req.ip ?? 'unknown')) return res.status(204).end()
-
   const { deck, acl } = await loadViewableDeck(
     String(req.params.slug),
     req.userId,
   )
+  // Charged here rather than at the top of the handler: a slug that names no
+  // lecture, or one this reader may not see, never reaches a `DeckView` row,
+  // so letting it spend the budget would let a stranger switch counting off
+  // for a real lecture using addresses that do not exist.
+  const caller = req.ip ?? 'unknown'
+  if (!viewLimiter.take(caller)) {
+    if (dropNotice.take(caller)) {
+      console.warn(
+        `Deck view not recorded: ${caller} passed ${VIEW_RATE_LIMIT} openings ` +
+          `in ${VIEW_RATE_WINDOW_MS / 60000} minutes. Further openings from ` +
+          `this caller go uncounted until the window closes.`,
+      )
+    }
+    return res.status(204).end()
+  }
+
   const project = await ProjectModel.findById(deck.projectId)
     .setOptions(deck.deletedAt ? withDeleted : {})
     .catch(() => null)

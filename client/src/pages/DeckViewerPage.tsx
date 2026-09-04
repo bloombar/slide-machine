@@ -692,14 +692,21 @@ export default function DeckViewerPage() {
    * for newly retained audio and after a settings change, and the effect above
    * re-runs when the session finishes restoring or the reader signs in
    * mid-visit — none of which is somebody opening the lecture a second time.
-   * Navigating to another lecture and back unmounts the page and so counts
-   * again, which is right: that is a second reading.
+   * Navigating to another lecture and back counts again, which is right: that
+   * is a second reading.
    *
    * The guard is that the loaded deck is *this* slug's, not merely that some
-   * deck is loaded. `view` is not cleared when `slug` changes, so a slug
-   * change without a remount would otherwise beacon the new lecture while
-   * still holding the old one — counting an opening of something the reader
-   * may then be refused, or whose load failed.
+   * deck is loaded. The route carries no `key`, so a slug change re-renders
+   * this component rather than unmounting it, and neither `view` nor the ref
+   * is cleared — without the check the beacon would fire for the new lecture
+   * while still holding the old one, counting an opening of something the
+   * reader may then be refused, or whose load failed.
+   *
+   * The cost is one narrow miss: reach a lecture you cannot view and come back
+   * to the one you were reading, and the return is not counted, because the
+   * ref still names it. That is the safer direction to be wrong in — a reading
+   * uncounted rather than one invented — and it needs a link to a forbidden
+   * lecture from inside the viewer, which nothing renders today.
    */
   const reportedViewRef = useRef<string | null>(null)
   useEffect(() => {

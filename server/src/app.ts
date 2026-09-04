@@ -48,6 +48,26 @@ import './billing/stripe'
 
 export const createApp = (): Express => {
   const app = express()
+  /**
+   * One proxy in front of us, so `req.ip` is the reader's address rather than
+   * the ingress's.
+   *
+   * The deployment is a single container behind DigitalOcean App Platform's
+   * managed ingress (`.do/app.yaml`), which terminates TLS and forwards. Left
+   * unset, Express reports the socket peer — the ingress — so **every** request
+   * in production carries the same address, and every rate limiter keyed on it
+   * (the feedback form, the auth mail paths, the lecture-opening beacon) is a
+   * deployment-wide budget instead of a per-caller one. That is not a stricter
+   * limiter; it is a different and much worse one, since one caller exhausts
+   * everybody's allowance.
+   *
+   * The count is exact rather than `true`: Express takes the address that many
+   * hops from the right of `X-Forwarded-For`, and the ingress appends the real
+   * client to whatever the client sent. Trusting exactly one hop therefore
+   * reads the ingress's own entry and ignores any header the client forged;
+   * `true` would trust the leftmost value, which anyone can set.
+   */
+  app.set('trust proxy', 1)
   // Ahead of the JSON parser, and only for this path: webhook signatures are
   // computed over the exact bytes the provider sent, so the body has to reach
   // the adapter unparsed (BILL-2). Everything else gets JSON as usual.
