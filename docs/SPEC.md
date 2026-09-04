@@ -1028,6 +1028,18 @@ While a deck is being spoken aloud ([PLAY-2](#play-2-narration-playback)), the w
 - **Off is a real state** — a deck with narration playback stopped shows the reserved, empty line rather than removing it, so pausing and resuming never reflows the slide.
 - **Not a transcript view** — it shows the passing phrase only; reading or editing the whole narration is [EDIT-6](#edit-6-spoken-transcript-editing).
 
+#### PLAY-5 Full-screen slide viewing
+
+A deck can be viewed **full screen**: the slides are shown in carousel view ([PLAY-1](#play-1-playback-controls)) at the **largest proportional scale** that fits the browser viewport, centred both vertically and horizontally. Full screen is a way of *looking* at a lecture, not a separate mode of working on one — it is entered and left without changing anything about the deck, and nothing about it is remembered between visits.
+
+- **Proportional, never cropped or stretched** — the slide keeps its 16:9 shape, so one of the two axes is filled exactly and the other has space left over.
+- **The leftover space is filled the way a letterboxed picture's is** — with the design's own image background colour, the same fill an uncropped picture sits on inside a slot ([IMG-1](#img-1-real-time-image-enrichment)), so the surround belongs to the design rather than to the app.
+- **A close control returns to the regular view** — an "x" at the top right, drawn like the one over an image slot ([EDIT-1](#edit-1-full-content-editing)) but reverting the view instead of deleting anything. `Escape` does the same.
+- **Keyboard toggles** — `f`, `Command-Enter`, or `Control-Enter` enters full screen and leaves it again, ignored while the user is typing so the letter still reaches a field.
+- **Navigation still works** — the arrow keys and the prev/next zones move through the deck as they do in the regular carousel.
+- **A lecture stays live full screen** — full screen is a bigger view of the same carousel, not a locked-down one. Live capture and generation ([GEN-1](#gen-1-speech-to-slide-generation)/[GEN-3](#gen-3-live-display)) keep running and new slides keep arriving, and slot editing, the slide menu and whiteboard annotation ([EDIT-4](#edit-4-whiteboard-annotation)) all still work.
+- **The floating toolbars stay reachable** — the deck toolbar and the whiteboard toolbar are drawn over the full-screen slide rather than behind it, so every control they carry is still usable without leaving the view.
+
 #### EDIT-1 Full content editing
 
 Users can **add, edit, and delete** all slide content: every slot the slide's layout declares ([TMPL-9](#tmpl-9-open-slot--layout-model)) — text, bullets, and the specialized kinds ([EDIT-7](#edit-7-editing-specialized-content-slots)) — plus images (replace from seed, re-fetch, upload, or remove) and slide order. Editing is by slot, so a layout's own slots are as editable as the conventional ones.
