@@ -6,12 +6,7 @@
  * caret movement never flips slides.
  */
 import { useEffect } from 'react'
-
-const isTypingTarget = (target: EventTarget | null): boolean =>
-  target instanceof HTMLElement &&
-  (target.tagName === 'INPUT' ||
-    target.tagName === 'TEXTAREA' ||
-    target.isContentEditable)
+import { isTypingTarget } from './typingTarget'
 
 export const useArrowKeys = (onPrev: () => void, onNext: () => void): void => {
   useEffect(() => {

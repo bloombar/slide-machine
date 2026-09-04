@@ -1101,6 +1101,10 @@
       "carousel": "轮播视图",
       "list": "列表视图"
     },
+    "fullScreen": {
+      "enter": "全屏",
+      "exit": "退出全屏"
+    },
     "delete": {
       "action": "删除课程",
       "title": "删除课程？",

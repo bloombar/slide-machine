@@ -28,6 +28,12 @@ interface Props {
   whiteboard: Whiteboard
   /** Appends a blank whiteboard slide and arms the pen for drawing. */
   onNewWhiteboardSlide: () => void
+  /**
+   * Full-screen slide viewing is active (PLAY-5): this toolbar has to stay
+   * reachable over the full-screen overlay, which paints at the primary
+   * nav's own z-50 — see the z-index tiers in docs/DECISIONS.md.
+   */
+  fullScreen?: boolean
 }
 
 interface Point {
@@ -125,6 +131,7 @@ export default function WhiteboardToolbar({
   deckId,
   whiteboard,
   onNewWhiteboardSlide,
+  fullScreen,
 }: Props) {
   const {
     tool,
@@ -270,8 +277,13 @@ export default function WhiteboardToolbar({
           : { left: MARGIN, top: NAV_HEIGHT + MARGIN }
       }
       // z-30 page-chrome tier: above slide content + the drawing canvas (z-20),
-      // below modals and the primary nav.
-      className="fixed z-30 flex select-none flex-col items-center gap-1 rounded-2xl border border-slate-200 bg-white/95 px-1.5 py-2 shadow-lg backdrop-blur"
+      // below modals and the primary nav. Full screen (PLAY-5) raises it to
+      // z-[55], above the full-screen overlay's own z-50 (docs/DECISIONS.md)
+      // — a plain fixed positioning + z-index bump is enough here: nothing
+      // between this toolbar and the document root establishes a stacking
+      // context of its own (no transform/opacity/filter ancestor), so the
+      // z-index tier alone decides the paint order.
+      className={`fixed ${fullScreen ? 'z-[55]' : 'z-30'} flex select-none flex-col items-center gap-1 rounded-2xl border border-slate-200 bg-white/95 px-1.5 py-2 shadow-lg backdrop-blur`}
     >
       <Tooltip label={t('deck.toolbar.drag')} align="start">
         <button

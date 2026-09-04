@@ -1101,6 +1101,10 @@
       "carousel": "Vista de carrusel",
       "list": "Vista de lista"
     },
+    "fullScreen": {
+      "enter": "Pantalla completa",
+      "exit": "Salir de pantalla completa"
+    },
     "delete": {
       "action": "Eliminar la clase",
       "title": "¿Eliminar la clase?",

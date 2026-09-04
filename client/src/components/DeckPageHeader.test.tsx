@@ -243,6 +243,23 @@ describe('DeckPageHeader', () => {
     expect(header(container)).toHaveClass('sticky', 'top-16')
   })
 
+  it('stops Escape from also reaching a window-level handler (e.g. full screen, PLAY-5)', () => {
+    // DeckPageHeader can render while full screen is active (PLAY-5), which
+    // binds its own Escape handler on window in the bubble phase
+    // (useFullScreenKeys). Without stopPropagation, parking a dragged pill
+    // would let the same keystroke also exit full screen.
+    const onWindowKeyDown = vi.fn()
+    window.addEventListener('keydown', onWindowKeyDown)
+    renderToolbar()
+    dragTo(400, 300)
+
+    fireEvent.keyDown(grip(), { key: 'Escape' })
+
+    expect(pill()).not.toHaveClass('fixed')
+    expect(onWindowKeyDown).not.toHaveBeenCalled()
+    window.removeEventListener('keydown', onWindowKeyDown)
+  })
+
   it('re-clamps a floating pill when the window shrinks', () => {
     renderToolbar()
     dragTo(700, 600)

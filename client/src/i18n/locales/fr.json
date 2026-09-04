@@ -1101,6 +1101,10 @@
       "carousel": "Vue carrousel",
       "list": "Vue liste"
     },
+    "fullScreen": {
+      "enter": "Plein écran",
+      "exit": "Quitter le plein écran"
+    },
     "delete": {
       "action": "Supprimer le cours",
       "title": "Supprimer le cours ?",

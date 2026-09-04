@@ -5,12 +5,7 @@
  * brackets typed into a field never change a layout.
  */
 import { useEffect } from 'react'
-
-const isTypingTarget = (target: EventTarget | null): boolean =>
-  target instanceof HTMLElement &&
-  (target.tagName === 'INPUT' ||
-    target.tagName === 'TEXTAREA' ||
-    target.isContentEditable)
+import { isTypingTarget } from './typingTarget'
 
 export const useBracketKeys = (
   onPrev: () => void,

@@ -16,7 +16,20 @@ interface Props {
   actions?: ReactNode
   /** Scopes the remembered position; a lecture with no entry starts pinned. */
   deckId: string
+  /**
+   * Full-screen slide viewing is active (PLAY-5): the pill has to stay
+   * reachable over the full-screen overlay, which paints at the primary
+   * nav's own z-50. See the `fullScreen` handling below and the z-index
+   * tiers in docs/DECISIONS.md.
+   */
+  fullScreen?: boolean
 }
+
+/** Page-chrome tier (z-30, docs/DECISIONS.md) normally; while full screen is
+ * active this pill has to beat the full-screen overlay (z-50) too, so it
+ * moves to the tier just above it — still under modals (z-60). */
+const zTier = (fullScreen: boolean | undefined): string =>
+  fullScreen ? 'z-[55]' : 'z-30'
 
 /** Viewport coordinates of the pill's top-left corner. */
 interface Point {
@@ -102,7 +115,7 @@ const clampToViewport = (point: Point, size: DOMRect): Point => {
   }
 }
 
-export default function DeckPageHeader({ actions, deckId }: Props) {
+export default function DeckPageHeader({ actions, deckId, fullScreen }: Props) {
   const { t } = useTranslation()
   const pillRef = useRef<HTMLDivElement>(null)
   // null while parked in the default pinned spot; a point once dragged
@@ -194,6 +207,13 @@ export default function DeckPageHeader({ actions, deckId }: Props) {
   /** Keyboard parity: arrows nudge the pill, Escape parks it again. */
   const onKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
     if (e.key === 'Escape') {
+      // Full screen (PLAY-5) also binds Escape, on window in the bubble
+      // phase (useFullScreenKeys) — the same phase this handler's native
+      // event is still on its way through. Left alone, parking a dragged
+      // pill would keep bubbling past this button and exit full screen in
+      // the same keystroke. Stopping it here keeps Escape scoped to
+      // whichever the pill's own action actually was.
+      e.stopPropagation()
       setPos(null)
       return
     }
@@ -255,15 +275,25 @@ export default function DeckPageHeader({ actions, deckId }: Props) {
   }, [floating])
 
   return (
-    // Parked: sticky keeps the row in flow, so the first slide never
-    // starts underneath the pill, and top-16 clears the h-14 nav.
-    // Floating: the row stays behind as a fixed-height spacer.
-    // z-30 is the page-chrome tier (docs/DECISIONS.md) — above slide
-    // content, below modals and the nav. The row spans the full width but
-    // only the pill is interactive, so slides behind it stay clickable.
+    // Parked, regular view: sticky keeps the row in flow, so the first slide
+    // never starts underneath the pill, and top-16 clears the h-14 nav.
+    // Parked, full screen (PLAY-5): sticky is document-flow positioning, and
+    // the full-screen overlay covers the viewport regardless of where the
+    // document happens to be scrolled — so the pill goes `fixed` at a fixed
+    // viewport spot (top-left, under the margin it already keeps clear of
+    // the nav) instead of wherever sticky would have parked it. Floating
+    // (dragged): the row stays behind as a fixed-height spacer either way —
+    // the dragged pill is already `fixed` and unaffected by scrolling.
+    // z-30 is the page-chrome tier (docs/DECISIONS.md); full screen raises
+    // it to z-[55], above the overlay's z-50. The row spans the full width
+    // but only the pill is interactive, so slides behind it stay clickable.
     <header
-      className={`pointer-events-none mb-4 flex justify-center ${
-        floating ? '' : 'sticky top-16 z-30'
+      className={`pointer-events-none mb-4 flex ${
+        floating
+          ? ''
+          : fullScreen
+            ? `fixed top-16 start-2 ${zTier(fullScreen)}`
+            : `sticky top-16 justify-center ${zTier(fullScreen)}`
       }`}
       style={floating ? { height: reserved } : undefined}
     >
@@ -277,7 +307,7 @@ export default function DeckPageHeader({ actions, deckId }: Props) {
         // grabbable wherever the pointer lands. touch-none: a touch drag
         // must move the pill, not scroll the page.
         className={`pointer-events-auto flex touch-none cursor-grab items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-3 py-1.5 shadow-lg backdrop-blur select-none active:cursor-grabbing ${
-          pos ? 'fixed z-30' : ''
+          pos ? `fixed ${zTier(fullScreen)}` : ''
         }`}
       >
         <Tooltip label={t('deck.toolbar.drag')}>

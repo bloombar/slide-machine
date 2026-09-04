@@ -1034,6 +1034,7 @@ A deck can be viewed **full screen**: the slides are shown in carousel view ([PL
 
 - **Proportional, never cropped or stretched** — the slide keeps its 16:9 shape, so one of the two axes is filled exactly and the other has space left over.
 - **The leftover space is filled the way a letterboxed picture's is** — with the design's own image background colour, the same fill an uncropped picture sits on inside a slot ([IMG-1](#img-1-real-time-image-enrichment)), so the surround belongs to the design rather than to the app.
+- **An icon enters it** — a maximize icon at the top right of the lecture's own content, level with the first slide.
 - **A close control returns to the regular view** — an "x" at the top right, drawn like the one over an image slot ([EDIT-1](#edit-1-full-content-editing)) but reverting the view instead of deleting anything. `Escape` does the same.
 - **Keyboard toggles** — `f`, `Command-Enter`, or `Control-Enter` enters full screen and leaves it again, ignored while the user is typing so the letter still reaches a field.
 - **Navigation still works** — the arrow keys and the prev/next zones move through the deck as they do in the regular carousel.

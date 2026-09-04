@@ -45,7 +45,13 @@ export default function NotificationPill({
     // take pointer events: it sits directly over the Speak bar and would
     // swallow clicks across that whole band for as long as any pill is up.
     // The pill itself re-enables them so its action button still works.
-    <div className="pointer-events-none fixed inset-x-0 bottom-12 z-50 flex justify-center px-4">
+    //
+    // z-[55] rather than the primary nav's z-50 (docs/DECISIONS.md): the
+    // generation-pause pill (GEN-10) and error pills must stay readable over
+    // the full-screen overlay (PLAY-5), which also paints at z-50 but later
+    // in the DOM (portaled after #root) — an equal z-index would let it win
+    // the tie and hide every pill underneath it.
+    <div className="pointer-events-none fixed inset-x-0 bottom-12 z-[55] flex justify-center px-4">
       <div
         role={role}
         className={`pointer-events-auto flex items-center gap-3 rounded-md px-4 py-2 text-sm font-medium text-white shadow-lg ${

@@ -20,6 +20,7 @@ import {
   act,
   waitFor,
   cleanup,
+  within,
 } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useParams } from 'react-router'
 import { AuthProvider } from '../auth/AuthContext'
@@ -4746,6 +4747,216 @@ describe('DeckViewerPage sign-in gate (AUTH-8)', () => {
     )
     expect(
       screen.getByRole('dialog', { name: 'Log in to play back the lecture' }),
+    ).toBeInTheDocument()
+  })
+})
+
+describe('DeckViewerPage full-screen slide viewing (PLAY-5)', () => {
+  it('offers the maximize control at the top right of the deck content, above the first slide', async () => {
+    renderViewer(200)
+    await screen.findByText('Shared Lecture')
+
+    const enter = screen.getByRole('button', { name: 'Full screen' })
+    // It belongs to the deck's own content, not the nav action group the
+    // view toggle sits in: nothing in the row that holds it is a view-mode
+    // button (PLAY-5).
+    const row = enter.closest('div.flex')
+    expect(row).not.toBeNull()
+    expect(row?.className).toContain('justify-end')
+    expect(
+      within(row as HTMLElement).queryByRole('button', {
+        name: 'Carousel view',
+      }),
+    ).toBeNull()
+    // ...and it is drawn above the first slide.
+    const slide = screen.getAllByTestId('slide')[0] as HTMLElement
+    expect(
+      enter.compareDocumentPosition(slide) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('enters full screen from the toolbar button, replacing the in-flow carousel', async () => {
+    renderViewer(200)
+    await screen.findByText('Shared Lecture')
+    expect(screen.getAllByTestId('slide')).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Full screen' }))
+
+    // Still exactly one slide on screen — the overlay replaces the in-flow
+    // carousel rather than sitting alongside it.
+    expect(screen.getAllByTestId('slide')).toHaveLength(1)
+    expect(
+      screen.getByRole('button', { name: 'Exit full screen' }),
+    ).toBeInTheDocument()
+    // The enter control is the overlay's own business now — it lives in the
+    // page content the overlay covers, so it steps aside while full screen.
+    expect(
+      screen.queryByRole('button', { name: 'Full screen' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('forces the carousel from list view, and restores list view on exit', async () => {
+    renderViewer(200)
+    await screen.findByText('Shared Lecture')
+
+    fireEvent.click(screen.getByRole('button', { name: 'List view' }))
+    expect(screen.getAllByTestId('slide')).toHaveLength(2)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Full screen' }))
+    // Full screen has no use for list view — it forces the carousel.
+    expect(screen.getAllByTestId('slide')).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Exit full screen' }))
+    // Leaving restores whatever mode the user had — list, here.
+    expect(screen.getAllByTestId('slide')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'List view' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('enters full screen from list view showing the slide the reader scrolled to, not the last-navigated one', async () => {
+    renderViewer(200)
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'List view' }))
+
+    // The reader scrolled to slide 2 without navigating there explicitly
+    // (arrow keys / a chevron) — nav.current stays on slide 1, the same
+    // staleness cycleLayout/activeWhiteboardSlideId/activePlayIndex already
+    // correct for with visibleIndex(). Row 2 alone reports as on screen; an
+    // unmocked row keeps jsdom's zero rect, which visibleIndex() treats as
+    // off-screen (rect.bottom <= 0).
+    const scrolled = vi.fn()
+    Element.prototype.scrollIntoView = scrolled
+    const rows = screen.getAllByRole('listitem', { name: /slide \d/i })
+    const row2 = rows[1] as HTMLElement
+    row2.getBoundingClientRect = () =>
+      ({
+        top: 200,
+        bottom: 749,
+        height: 549,
+        left: 0,
+        right: 0,
+        width: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect
+
+    fireEvent.click(screen.getByRole('button', { name: 'Full screen' }))
+
+    // Slide 2 (content layout) is shown, not slide 1 (title) — nav.current's
+    // stale value, which the maximize control would otherwise have carried.
+    expect(screen.getByTestId('slide')).toHaveAttribute(
+      'data-layout',
+      'content',
+    )
+    expect(screen.getByText('2 / 2')).toBeInTheDocument()
+
+    // Leaving restores list view scrolled to slide 2 as well, not back to
+    // slide 1: nav.current is now genuinely 2, and the list's own
+    // scroll-to-current effect (useSlideNavigation) follows it out.
+    scrolled.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Exit full screen' }))
+    const restoredRows = screen.getAllByRole('listitem', {
+      name: /slide \d/i,
+    })
+    expect(scrolled.mock.contexts).toContain(restoredRows[1] as HTMLElement)
+  })
+
+  it('leaves full screen via the overlay close control', async () => {
+    renderViewer(200)
+    await screen.findByText('Shared Lecture')
+    fireEvent.click(screen.getByRole('button', { name: 'Full screen' }))
+    expect(
+      screen.getByRole('button', { name: 'Exit full screen' }),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Exit full screen' }))
+    expect(
+      screen.queryByRole('button', { name: 'Exit full screen' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Full screen' }),
+    ).toBeInTheDocument()
+  })
+
+  it('never writes full-screen state to localStorage', async () => {
+    renderViewer(200)
+    await screen.findByText('Shared Lecture')
+
+    // The full set of keys and values, not a filter for "full" — a filter
+    // only fails if the implementation happens to name its key that way, so
+    // it would pass just as well against one that persisted full screen
+    // under (say) "sm:view-mode" or any other existing key. Snapshotting
+    // everything and asserting it is byte-for-byte unchanged catches that
+    // too.
+    const snapshot = () =>
+      Object.fromEntries(
+        Object.keys(localStorage).map(k => [k, localStorage.getItem(k)]),
+      )
+    const before = snapshot()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Full screen' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Exit full screen' }))
+
+    expect(snapshot()).toEqual(before)
+  })
+
+  it('keeps delivering generated slides while full screen', async () => {
+    mockFetchRoutes({
+      '/api/auth/refresh': () => ({
+        status: 200,
+        body: { user: { id: 'u1', displayName: 'Ada' }, accessToken: 't' },
+      }),
+      '/api/decks/shared-abc123': () => ({
+        status: 200,
+        body: { ...deckView, canEdit: true },
+      }),
+      '/api/actions/session.phrase': () => ({
+        status: 200,
+        body: {
+          kind: 'slide.new',
+          slide: {
+            id: 's3',
+            deckId: 'deck1',
+            index: 2,
+            layoutType: 'content',
+            title: 'From the mic',
+            body: 'Spoken while full screen',
+          },
+        },
+      }),
+    })
+    render(
+      <MemoryRouter initialEntries={['/d/shared-abc123']}>
+        <AuthProvider>
+          <Routes>
+            <Route path="/d/:slug" element={<DeckViewerPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Shared Lecture')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Full screen' }))
+    expect(
+      screen.getByRole('button', { name: 'Exit full screen' }),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Spoken phrase' }), {
+      target: { value: 'a new slide from the mic' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Speak' }))
+
+    // The new slide lands and becomes the one shown — still inside the
+    // full-screen stage (still exactly one <SlideView>, not a second one
+    // rendered alongside it).
+    expect(await screen.findByText('From the mic')).toBeInTheDocument()
+    expect(screen.getAllByTestId('slide')).toHaveLength(1)
+    expect(
+      screen.getByRole('button', { name: 'Exit full screen' }),
     ).toBeInTheDocument()
   })
 })

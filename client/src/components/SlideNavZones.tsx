@@ -2,8 +2,21 @@
  * Pointer navigation for a slide in carousel mode (PLAY-1). A previous/next
  * chevron is revealed based on where the cursor sits relative to the
  * slide's horizontal midpoint — left of centre reveals previous, right of
- * centre reveals next — and each chevron is rendered OUTSIDE the slide's
- * edge so slide content is never covered.
+ * centre reveals next — and each chevron is normally rendered OUTSIDE the
+ * slide's edge so slide content is never covered; there is room for that
+ * beside the carousel in normal document flow.
+ *
+ * `inset` (PLAY-5) draws the chevrons INSIDE the slide's edge instead,
+ * flush against it rather than just outside — for full screen, whose stage
+ * is sized to the largest 16:9 box that fits the viewport with nothing left
+ * beside it on a 16:9-or-narrower screen, so "just outside" would be off
+ * screen entirely with no way to scroll there (the overlay is a
+ * non-scrolling `fixed inset-0`). The chevrons are transparent strips with
+ * only a `bg-black/40` circle drawn, revealed by pointer half exactly as
+ * before, so inset they cover almost nothing of the slide — the same
+ * unobtrusive convention every other full-screen viewer uses. The in-flow
+ * carousel keeps today's outside-the-edge behaviour exactly; only the
+ * full-screen render path opts in (see docs/DECISIONS.md).
  *
  * Why track the pointer instead of hovering superimposed hotspots: slide
  * content (images, editable text) is lifted above the slide with z-index so
@@ -37,15 +50,20 @@ interface Props {
   onPrev: () => void
   onNext: () => void
   children: ReactNode
+  /** Draws the chevrons inside the slide's edge instead of outside it
+   * (full screen, PLAY-5 — see the module comment above). Off by default,
+   * matching the in-flow carousel's existing behaviour. */
+  inset?: boolean
 }
 
 /** Which chevron the cursor position currently reveals, if any. */
 type Side = 'prev' | 'next' | null
 
-// A full-height strip flush against the slide's edge (right-full / left-full
-// sit it just outside), so moving the cursor from the slide onto the chevron
-// never crosses a dead gap that would hide it mid-reach. Transparent but for
-// the centred chevron; only clickable while it is the revealed side.
+// A full-height strip flush against the slide's edge — right-full/left-full
+// sit it just outside (the default), start-0/end-0 sit it just inside
+// (`inset`) — so moving the cursor from the slide onto the chevron never
+// crosses a dead gap that would hide it mid-reach. Transparent but for the
+// centred chevron; only clickable while it is the revealed side.
 const zoneClass =
   'absolute inset-y-0 flex w-14 items-center justify-center transition-opacity duration-150 focus-visible:opacity-100'
 
@@ -67,6 +85,7 @@ export default function SlideNavZones({
   onPrev,
   onNext,
   children,
+  inset = false,
 }: Props) {
   const { t } = useTranslation()
   const [side, setSide] = useState<Side>(null)
@@ -126,7 +145,7 @@ export default function SlideNavZones({
         <button
           aria-label={t('slide.previous')}
           onClick={onPrev}
-          className={`${zoneClass} right-full ${
+          className={`${zoneClass} ${inset ? 'start-0' : 'right-full'} ${
             side === 'prev' ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
         >
@@ -137,7 +156,7 @@ export default function SlideNavZones({
         <button
           aria-label={t('slide.next')}
           onClick={onNext}
-          className={`${zoneClass} left-full ${
+          className={`${zoneClass} ${inset ? 'end-0' : 'left-full'} ${
             side === 'next' ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
         >

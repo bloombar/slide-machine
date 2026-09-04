@@ -1101,6 +1101,10 @@
       "carousel": "Carousel view",
       "list": "List view"
     },
+    "fullScreen": {
+      "enter": "Full screen",
+      "exit": "Exit full screen"
+    },
     "delete": {
       "action": "Delete lecture",
       "title": "Delete lecture?",
