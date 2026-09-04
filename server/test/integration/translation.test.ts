@@ -3,7 +3,7 @@
  * POST /api/decks/:slug/translation.
  *
  * Covers the things that would break the feature for the people it exists
- * for — anonymous access, the ACL, the cache actually caching, per-slide
+ * for — the sign-in gate, the ACL, the cache actually caching, per-slide
  * staleness after an edit, and the guarantee that nothing here ever writes to
  * the slides themselves. TRANSLATION_PROVIDER is pinned to `mock` in the
  * vitest env, which prefixes each segment with `[<locale>]`.
@@ -47,7 +47,9 @@ const act = (token: string, name: string, input: object = {}) =>
     .set('Authorization', `Bearer ${token}`)
     .send(input)
 
-/** Anonymous translate request — no Authorization header at all. */
+/** Anonymous translate request — no Authorization header at all. Kept for the
+ * tests that are about the gate itself; SHARE-2 needs an account, so this is
+ * a refusal everywhere else. */
 const translateAnon = (slug: string, locale: string) =>
   request(server).post(`/api/decks/${slug}/translation`).send({ locale })
 
@@ -56,6 +58,11 @@ const translateAs = (token: string, slug: string, locale: string) =>
     .post(`/api/decks/${slug}/translation`)
     .set('Authorization', `Bearer ${token}`)
     .send({ locale })
+
+/** The ordinary case: a signed-in reader who is not the deck's owner, so the
+ * work is billed to the audience pool exactly as a student's would be. */
+const translate = (slug: string, locale: string) =>
+  translateAs(byron, slug, locale)
 
 /** Counts provider calls for the duration of one assertion. */
 const countingProvider = () => {
@@ -134,8 +141,17 @@ beforeEach(async () => {
 })
 
 describe('translated viewing', () => {
-  it('lets an anonymous viewer translate a public deck', async () => {
-    const res = await translateAnon(slug, 'fr')
+  // SHARE-2 says signed-in students and instructors, and AUTH-8 records the
+  // narrowing. The page has gated this since; the route had not, so anyone
+  // who skipped the UI could spend the owner's allowance without an account.
+  it('refuses an anonymous viewer, whatever the deck', async () => {
+    expect((await translateAnon(slug, 'fr')).status).toBe(401)
+    // Checked before the ACL, so nothing leaks about which lectures exist.
+    expect((await translateAnon('no-such-deck', 'fr')).status).toBe(401)
+  })
+
+  it('lets a signed-in viewer translate a public deck', async () => {
+    const res = await translate(slug, 'fr')
     expect(res.status).toBe(200)
     expect(res.body.locale).toBe('fr')
     expect(res.body.source).toBe('en')
@@ -146,13 +162,13 @@ describe('translated viewing', () => {
   })
 
   it('preserves markdown formatting through the round trip', async () => {
-    const entry = (await translateAnon(slug, 'fr')).body.perSlide[slideId]
+    const entry = (await translate(slug, 'fr')).body.perSlide[slideId]
     // The emphasis survives translation rather than being flattened
     expect(entry.slots.body.value).toContain('**stays**')
   })
 
   it('never touches the stored slides', async () => {
-    await translateAnon(slug, 'fr')
+    await translate(slug, 'fr')
     const slide = await SlideModel.findById(slideId)
     expect(slide!.title).toBe('Standing waves')
     expect(slide!.body).toBe('A wave that **stays** in place.')
@@ -162,7 +178,7 @@ describe('translated viewing', () => {
   it("is a no-op for the deck's own language", async () => {
     const counter = countingProvider()
     try {
-      const res = await translateAnon(slug, 'en')
+      const res = await translate(slug, 'en')
       expect(res.status).toBe(200)
       expect(res.body.perSlide).toEqual({})
       expect(counter.calls).toBe(0)
@@ -172,21 +188,21 @@ describe('translated viewing', () => {
   })
 
   it('rejects a language it does not support', async () => {
-    expect((await translateAnon(slug, 'de')).status).toBe(400)
-    expect((await translateAnon(slug, '')).status).toBe(400)
+    expect((await translate(slug, 'de')).status).toBe(400)
+    expect((await translate(slug, '')).status).toBe(400)
   })
 
   it('404s for a deck that does not exist', async () => {
-    expect((await translateAnon('no-such-deck', 'fr')).status).toBe(404)
+    expect((await translate('no-such-deck', 'fr')).status).toBe(404)
   })
 })
 
 describe('translation caching', () => {
   it('serves a repeat request from the cache without calling the provider', async () => {
-    await translateAnon(slug, 'fr')
+    await translate(slug, 'fr')
     const counter = countingProvider()
     try {
-      const second = await translateAnon(slug, 'fr')
+      const second = await translate(slug, 'fr')
       expect(second.status).toBe(200)
       expect(second.body.perSlide[slideId].slots.title.value).toContain('[fr]')
       expect(counter.calls).toBe(0)
@@ -210,7 +226,7 @@ describe('translation caching', () => {
         formula: { kind: 'math', tex: 'e^{i\\pi} + 1 = 0' },
       },
     })
-    const res = await translateAnon(slug, 'fr')
+    const res = await translate(slug, 'fr')
     const entry = res.body.perSlide[technical._id.toString()]
     expect(entry.slots.title.value).toContain('[fr]')
     expect(entry.slots.sample).toBeUndefined()
@@ -232,7 +248,7 @@ describe('translation caching', () => {
           },
         },
       })
-      const res = await translateAnon(slug, 'fr')
+      const res = await translate(slug, 'fr')
       const entry = res.body.perSlide[custom._id.toString()]
       // Nothing here is a conventional slot name; the walk found them anyway.
       expect(entry.slots.definition.value).toContain('[fr]')
@@ -242,13 +258,13 @@ describe('translation caching', () => {
     })())
 
   it('carries a translation across a layout switch instead of re-buying it', async () => {
-    await translateAnon(slug, 'fr')
+    await translate(slug, 'fr')
     const counter = countingProvider()
     try {
       // A switch between layouts that share the conventional names moves
       // nothing, so the cache must still be valid afterwards.
       await act(ada, 'slide.setLayout', { slideId, layoutType: 'title' })
-      await translateAnon(slug, 'fr')
+      await translate(slug, 'fr')
       expect(counter.calls).toBe(0)
     } finally {
       counter.restore()
@@ -259,7 +275,7 @@ describe('translation caching', () => {
     // The guard that matters: an entry whose slide was edited after it was
     // translated must not be carried across a move and stamped fresh, or the
     // viewer would be shown last week's words indefinitely.
-    await translateAnon(slug, 'fr')
+    await translate(slug, 'fr')
     await act(ada, 'slide.editContent', { slideId, title: 'Travelling waves' })
     await act(ada, 'slide.setLayout', { slideId, layoutType: 'title' })
 
@@ -270,7 +286,7 @@ describe('translation caching', () => {
       'Standing waves',
     )
 
-    const res = await translateAnon(slug, 'fr')
+    const res = await translate(slug, 'fr')
     expect(res.body.perSlide[slideId].slots.title.value).toContain(
       'Travelling waves',
     )
@@ -281,9 +297,9 @@ describe('translation caching', () => {
     // (BILL-3); on Free the second request is a deliberate 402, covered in the
     // metering suite below.
     await UserModel.updateOne({ _id: adaId }, { planTier: 'pro' })
-    await translateAnon(slug, 'fr')
-    await translateAnon(slug, 'es')
-    await translateAnon(slug, 'fr')
+    await translate(slug, 'fr')
+    await translate(slug, 'es')
+    await translate(slug, 'fr')
     expect(await SlideTranslationModel.countDocuments({ deckId })).toBe(2)
   })
 
@@ -294,7 +310,7 @@ describe('translation caching', () => {
       layoutType: 'content',
       title: 'Second slide',
     })
-    await translateAnon(slug, 'fr')
+    await translate(slug, 'fr')
     const before = await SlideTranslationModel.findOne({ deckId, locale: 'fr' })
     const untouchedHash = before!.perSlide.get(
       second._id.toString(),
@@ -311,7 +327,7 @@ describe('translation caching', () => {
       return original(input)
     }
     try {
-      const res = await translateAnon(slug, 'fr')
+      const res = await translate(slug, 'fr')
       // Only the edited slide's segments went to the provider
       expect(sentTexts.some(t => t.includes('Travelling waves'))).toBe(true)
       expect(sentTexts.some(t => t.includes('Second slide'))).toBe(false)
@@ -337,10 +353,10 @@ describe('translation caching', () => {
       layoutType: 'content',
       title: 'Doomed',
     })
-    await translateAnon(slug, 'fr')
+    await translate(slug, 'fr')
     await SlideModel.deleteOne({ _id: extra._id })
 
-    const res = await translateAnon(slug, 'fr')
+    const res = await translate(slug, 'fr')
     expect(res.body.perSlide[extra._id.toString()]).toBeUndefined()
     expect(res.body.perSlide[slideId]).toBeDefined()
   })
@@ -351,8 +367,10 @@ describe('translation access control', () => {
     await act(ada, 'deck.setAccess', { deckId, visibility: 'restricted' })
   })
 
-  it('404s for an anonymous visitor on a restricted deck', async () => {
-    expect((await translateAnon(slug, 'fr')).status).toBe(404)
+  it('401s for an anonymous visitor on a restricted deck', async () => {
+    // Not 404: sign-in is checked first, so the answer is the same one an
+    // anonymous caller gets for a deck that does not exist.
+    expect((await translateAnon(slug, 'fr')).status).toBe(401)
   })
 
   it('404s for a signed-in stranger on a restricted deck', async () => {
@@ -375,7 +393,7 @@ describe('translation access control', () => {
 
 describe('translation lifecycle', () => {
   it('removes the cache when the deck is deleted, and rebuilds on demand', async () => {
-    await translateAnon(slug, 'fr')
+    await translate(slug, 'fr')
     expect(await SlideTranslationModel.countDocuments({ deckId })).toBe(1)
 
     const deck = await DeckModel.findById(deckId)
@@ -384,7 +402,7 @@ describe('translation lifecycle', () => {
   })
 
   it('removes the cache when the deck is purged', async () => {
-    await translateAnon(slug, 'fr')
+    await translate(slug, 'fr')
     await purgeDeckCascade(deckId)
     expect(await SlideTranslationModel.countDocuments({ deckId })).toBe(0)
   })
@@ -418,7 +436,7 @@ describe('translation metering', () => {
   })
 
   it('charges a reader’s first language to the audience allowance', async () => {
-    await translateAnon(slug, 'fr')
+    await translate(slug, 'fr')
     expect(await spent('audienceLocales')).toBe(1)
     // Never the owner's own pool: a deck that finds an audience must not eat
     // the allowance its author needs to prepare tomorrow's lecture (BILL-3).
@@ -426,8 +444,8 @@ describe('translation metering', () => {
   })
 
   it('charges one unit per language however many students read it', async () => {
-    await translateAnon(slug, 'fr')
-    await translateAnon(slug, 'fr')
+    await translate(slug, 'fr')
+    await translate(slug, 'fr')
     await translateAs(byron, slug, 'fr')
     expect(await spent('audienceLocales')).toBe(1)
   })
@@ -436,21 +454,21 @@ describe('translation metering', () => {
     // Free allows exactly one audience language, which is what the next test
     // covers; here the question is only that two languages cost two units.
     await UserModel.updateOne({ _id: adaId }, { planTier: 'pro' })
-    await translateAnon(slug, 'fr')
-    await translateAnon(slug, 'es')
+    await translate(slug, 'fr')
+    await translate(slug, 'es')
     expect(await spent('audienceLocales')).toBe(2)
   })
 
   it('holds a free account to the one audience language it is sold', async () => {
-    await translateAnon(slug, 'fr')
-    expect((await translateAnon(slug, 'es')).status).toBe(402)
+    await translate(slug, 'fr')
+    expect((await translate(slug, 'es')).status).toBe(402)
     expect(await spent('audienceLocales')).toBe(1)
   })
 
   it('does not charge a reader for a language the owner already bought', async () => {
     await translateAs(ada, slug, 'fr')
     const before = await spent('translationCharacters')
-    await translateAnon(slug, 'fr')
+    await translate(slug, 'fr')
     expect(await spent('audienceLocales')).toBe(0)
     expect(await spent('translationCharacters')).toBe(before)
   })
@@ -483,7 +501,7 @@ describe('translation metering', () => {
 
   it('refuses a reader’s new language once the audience allowance is spent', async () => {
     await exhaust('audienceLocales')
-    const res = await translateAnon(slug, 'fr')
+    const res = await translate(slug, 'fr')
     expect(res.status).toBe(402)
     // A student is told the lecture is not readable in that language, and
     // learns nothing about their instructor's plan (BILL-4).
@@ -500,7 +518,7 @@ describe('translation metering', () => {
     // students must not lose a translation their instructor already paid for.
     await translateAs(ada, slug, 'fr')
     await exhaust('audienceLocales')
-    const res = await translateAnon(slug, 'fr')
+    const res = await translate(slug, 'fr')
     expect(res.status).toBe(200)
     expect(res.body.perSlide[slideId].slots.title.value).toContain('[fr]')
   })
@@ -510,11 +528,11 @@ describe('translation metering', () => {
     // A student reading a lecture in a language it already publishes must not
     // be shown last week's words because the owner is at their limit — the
     // edit was the owner's doing, and this call is charged nothing.
-    await translateAnon(slug, 'fr')
+    await translate(slug, 'fr')
     expect(await spent('audienceLocales')).toBe(1) // free's whole allowance
     await act(ada, 'slide.editContent', { slideId, title: 'Travelling waves' })
 
-    const res = await translateAnon(slug, 'fr')
+    const res = await translate(slug, 'fr')
     expect(res.status).toBe(200)
     expect(res.body.perSlide[slideId].slots.title.value).toContain(
       'Travelling waves',
@@ -525,7 +543,7 @@ describe('translation metering', () => {
   it('does not report an exhausted allowance as a provider outage', async () => {
     // A 502 would tell the viewer to retry something that cannot succeed.
     await exhaust('audienceLocales')
-    expect((await translateAnon(slug, 'fr')).status).not.toBe(502)
+    expect((await translate(slug, 'fr')).status).not.toBe(502)
   })
 
   it('charges a translated export to the owner’s own allowance', async () => {
@@ -537,7 +555,7 @@ describe('translation metering', () => {
 
   it('spends nothing translating a deck into its own language', async () => {
     await translateAs(ada, slug, 'en')
-    await translateAnon(slug, 'en')
+    await translate(slug, 'en')
     expect(await spent('translationCharacters')).toBe(0)
     expect(await spent('audienceLocales')).toBe(0)
   })

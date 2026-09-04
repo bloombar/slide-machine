@@ -237,15 +237,15 @@ describe('reading a lecture in another language', () => {
     ])
   })
 
-  it('counts an anonymous reader without naming them', async () => {
-    expect((await read('fr')).status).toBe(200)
+  // Translated viewing needs an account (SHARE-2, narrowed by AUTH-8), so
+  // there is no anonymous reading to attribute here any more — the refusal
+  // happens before anything is spent or recorded. Signed-out readers are
+  // counted where they still exist: opening a lecture (EVAL-7).
+  it('spends nothing and records nothing for a reader with no account', async () => {
+    expect((await read('fr')).status).toBe(401)
 
-    const row = await rowFor('audienceLocales')
-    // The language is a fact about the lecture, not about the reader, so it is
-    // recorded even when there is nobody to record (§16).
-    expect(row.locale).toBe('fr')
-    expect(row.actorKind).toBe('audience')
-    expect(row.actorId).toBeNull()
+    expect(await CostEventModel.countDocuments({})).toBe(0)
+    expect(await UsageRecordModel.countDocuments({})).toBe(0)
   })
 
   it('records the language when the owner translates their own lecture', async () => {

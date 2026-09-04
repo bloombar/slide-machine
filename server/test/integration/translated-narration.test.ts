@@ -294,6 +294,7 @@ describe('a slide nobody narrated', () => {
       .post(
         `/api/decks/${(await DeckModel.findById(deckId))!.permalinkSlug}/translation`,
       )
+      .set('Authorization', `Bearer ${byron}`)
       .send({ locale: 'fr' })
 
     vi.stubGlobal(
@@ -339,6 +340,7 @@ describe('the two fingerprints in one entry', () => {
     const slug = (await DeckModel.findById(deckId))!.permalinkSlug
     await request(server)
       .post(`/api/decks/${slug}/translation`)
+      .set('Authorization', `Bearer ${byron}`)
       .send({ locale: 'fr' })
 
     const after = await entryFor('fr')

@@ -609,3 +609,5 @@ Consent up front raises the bar for proposing rather than lowering it, and that 
 **A drop is announced, and names the lecture rather than the reader.** One line per caller per window, carrying the slug whose count is short. Not the address: the row this route writes deliberately does not name a signed-out reader, and a log line would undo that.
 
 **Limits.** Openings carry no language: a reader's locale is not settled when the lecture opens, so a language here would say "the one it was written in" for someone who switched a second later, and the metered translation event carries it honestly instead.
+
+## The translation route was gated in the page and nowhere else (2026-09-03)
