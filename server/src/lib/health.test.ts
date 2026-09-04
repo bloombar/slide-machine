@@ -46,7 +46,12 @@ vi.mock('../config/env', () => ({
   },
 }))
 
-import { computeOverall, getHealth, resetHealthCache } from './health'
+import {
+  computeOverall,
+  getHealth,
+  resetHealthCache,
+  proxyHopsSeen,
+} from './health'
 
 const ok: HealthComponent = { status: 'ok', detail: 'connected' }
 const disabled: HealthComponent = { status: 'disabled', detail: 'off' }
@@ -143,5 +148,28 @@ describe('cache', () => {
     // …until the cache is cleared.
     resetHealthCache()
     expect((await getHealth()).components.mongo.status).toBe('down')
+  })
+})
+
+describe('proxyHopsSeen', () => {
+  // The count is the whole point: it is what `TRUST_PROXY_HOPS` has to match,
+  // and getting it wrong breaks every rate limit keyed on an address.
+  it('counts the hops named in the header', () => {
+    expect(proxyHopsSeen('203.0.113.7')).toBe(1)
+    expect(proxyHopsSeen('203.0.113.7, 198.51.100.2')).toBe(2)
+    expect(proxyHopsSeen('203.0.113.7, 198.51.100.2, 192.0.2.9')).toBe(3)
+  })
+
+  it('reports no hops when nothing forwarded the request', () => {
+    expect(proxyHopsSeen(undefined)).toBe(0)
+    expect(proxyHopsSeen('')).toBe(0)
+  })
+
+  // A trailing comma or padding must not invent a hop that is not there —
+  // an off-by-one here is an off-by-one in the setting it is used to choose.
+  it('does not count empty entries', () => {
+    expect(proxyHopsSeen('203.0.113.7,')).toBe(1)
+    expect(proxyHopsSeen(' 203.0.113.7 , 198.51.100.2 ')).toBe(2)
+    expect(proxyHopsSeen('  ')).toBe(0)
   })
 })

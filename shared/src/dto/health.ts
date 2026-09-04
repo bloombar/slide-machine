@@ -39,5 +39,16 @@ export interface HealthResponse {
   version: string
   /** Server process uptime in seconds. */
   uptime: number
+  /**
+   * How the request reached us, so `TRUST_PROXY_HOPS` can be checked against
+   * reality rather than assumed.
+   *
+   * `seen` counts the entries in this request's `X-Forwarded-For`; `trusted`
+   * is what the app is configured to believe. When they disagree, every rate
+   * limit keyed on an address is wrong — too low and all callers share one
+   * budget, too high and a caller picks their own. Counts only: no address is
+   * reported, here or anywhere.
+   */
+  proxy: { seen: number; trusted: number }
   components: HealthComponents
 }

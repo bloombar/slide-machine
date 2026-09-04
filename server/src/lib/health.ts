@@ -118,14 +118,32 @@ export const computeOverall = (
   return anyProblem ? 'degraded' : 'ok'
 }
 
+/**
+ * Counts the hops named in an `X-Forwarded-For` header.
+ *
+ * Read off the raw header rather than `req.ips`, which is empty until the app
+ * already trusts a proxy — and the whole point is to check that setting from
+ * the outside, including when it is wrong or unset.
+ */
+export const proxyHopsSeen = (forwardedFor: string | undefined): number =>
+  forwardedFor
+    ? forwardedFor.split(',').filter(part => part.trim().length > 0).length
+    : 0
+
 /** Builds the full health response (cheap fields fresh, probes cached). */
-export const getHealth = async (): Promise<HealthResponse> => {
+export const getHealth = async (
+  forwardedFor?: string,
+): Promise<HealthResponse> => {
   const components = await getComponents()
   return {
     status: computeOverall(components),
     environment: env.NODE_ENV,
     version: APP_VERSION,
     uptime: process.uptime(),
+    proxy: {
+      seen: proxyHopsSeen(forwardedFor),
+      trusted: env.TRUST_PROXY_HOPS,
+    },
     components,
   }
 }
