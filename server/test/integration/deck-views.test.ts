@@ -22,6 +22,7 @@ import { CostEventModel } from '../../src/models/cost-event'
 import { UsageRecordModel } from '../../src/models/usage-record'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
 import { purgeExpiredDeckViews } from '../../src/jobs/deck-view-purge'
+import { resetDeckViewRateLimit } from '../../src/routes/decks'
 
 const server = createApp().listen(0)
 afterAll(() => server.close())
@@ -66,6 +67,9 @@ beforeAll(async () => {
 afterAll(disconnectMongo)
 
 beforeEach(async () => {
+  // The nuisance guard on the beacon counts per process, so one case's
+  // openings would otherwise be charged against the next one's budget.
+  resetDeckViewRateLimit()
   await Promise.all([
     UserModel.deleteMany({}),
     ProjectModel.deleteMany({}),
@@ -235,5 +239,31 @@ describe('retention', () => {
     // switch as "delete the lot", which is the opposite instruction.
     expect(await purgeExpiredDeckViews(0, now)).toEqual({ deleted: 0 })
     expect(await views()).toHaveLength(1)
+  })
+
+  // The endpoint takes no credentials and writes a row that survives a year,
+  // so a loop against a public permalink would both skew the count and grow
+  // the collection. The guard bounds that without the reader ever seeing it.
+  it('stops recording once a caller floods the endpoint, still answering 204', async () => {
+    for (let i = 0; i < 120; i += 1) {
+      const res = await open()
+      expect(res.status).toBe(204)
+    }
+    expect(await DeckViewModel.countDocuments({})).toBe(120)
+
+    // Over the line: still 204, but no longer recorded. A reader is never
+    // refused their lecture to protect a statistic.
+    const over = await open()
+    expect(over.status).toBe(204)
+    expect(await DeckViewModel.countDocuments({})).toBe(120)
+  })
+
+  it('counts again once the window is reset', async () => {
+    for (let i = 0; i < 121; i += 1) await open()
+    expect(await DeckViewModel.countDocuments({})).toBe(120)
+
+    resetDeckViewRateLimit()
+    await open()
+    expect(await DeckViewModel.countDocuments({})).toBe(121)
   })
 })

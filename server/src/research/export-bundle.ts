@@ -96,6 +96,10 @@ downstream before analysis, as the study protocol (P-7, P-14) requires.
   readers can be counted for signed-in viewers only. actorKind separates the
   lecture's own owner from its audience. A reload or a return visit is a new
   row, so this counts readings rather than people even when signed in.
+  occurredAt is a full-precision timestamp, which makes it a quasi-identifier
+  in a small cohort: a signed-in reader's rows here sit next to their rows in
+  cost-events.csv, and adjacent timestamps reconstruct a reading session for
+  one person. Aggregate before publishing, and suppress small cells here too.
 
 Rows with a deletedAt value were soft-deleted in the application but are
 exported for completeness; exclude them downstream if the analysis calls

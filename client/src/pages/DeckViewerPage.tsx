@@ -694,10 +694,17 @@ export default function DeckViewerPage() {
    * mid-visit — none of which is somebody opening the lecture a second time.
    * Navigating to another lecture and back unmounts the page and so counts
    * again, which is right: that is a second reading.
+   *
+   * The guard is that the loaded deck is *this* slug's, not merely that some
+   * deck is loaded. `view` is not cleared when `slug` changes, so a slug
+   * change without a remount would otherwise beacon the new lecture while
+   * still holding the old one — counting an opening of something the reader
+   * may then be refused, or whose load failed.
    */
   const reportedViewRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!view || !slug || reportedViewRef.current === slug) return
+    if (!slug || reportedViewRef.current === slug) return
+    if (view?.deck.permalinkSlug !== slug) return
     reportedViewRef.current = slug
     void recordDeckView(slug)
   }, [view, slug])

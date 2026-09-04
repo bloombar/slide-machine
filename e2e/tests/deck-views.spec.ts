@@ -103,6 +103,11 @@ test('a signed-out reader is counted once per opening', async ({ browser }) => {
   await visitorPage.reload()
   await expect(visitorPage.getByTestId('slide')).toBeVisible()
   await expect.poll(() => beacons.statuses).toEqual([204, 204])
+  // `expect.poll` passes at the first moment the array matches, so on its own
+  // it cannot see a third beacon arriving late — which is the whole property
+  // this test is named for. Settle, then assert once, hard.
+  await visitorPage.waitForTimeout(500)
+  expect(beacons.statuses).toEqual([204, 204])
 
   await visitorContext.close()
 })

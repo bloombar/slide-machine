@@ -21,6 +21,7 @@ import {
   type DeckTranslationResponse,
   type DeckViewResponse,
 } from '@slide-machine/shared'
+import { createRateLimiter } from '../lib/rate-limit'
 import {
   DeckModel,
   loadDeckAcl,
@@ -35,7 +36,7 @@ import {
   withDeleted,
   type AdminViewer,
 } from '../lib/admin-view'
-import { canEditAcl, canViewAcl } from '../lib/access'
+import { canEditAcl, canViewAcl, type ResolvedAcl } from '../lib/access'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { resolveDeckTemplateForRead } from '../templates/versions'
@@ -107,17 +108,21 @@ export const decksRouter = Router()
 const loadViewableDeck = async (
   slug: string,
   userId: string | undefined,
-): Promise<{ deck: HydratedDocument<DeckDb>; admin: AdminViewer | null }> => {
+): Promise<{
+  deck: HydratedDocument<DeckDb>
+  admin: AdminViewer | null
+  acl: ResolvedAcl
+}> => {
   const notFound = new HttpError(404, 'not_found', 'Deck not found')
   const live = await DeckModel.findOne({ permalinkSlug: slug })
   if (live) {
     const acl = await loadDeckAcl(live)
-    if (canViewAcl(acl, userId)) return { deck: live, admin: null }
+    if (canViewAcl(acl, userId)) return { deck: live, admin: null, acl }
     // Admin view bypass: allowlisted admins may always open a lecture
     // (read-only — canEdit still follows the ACL)
     const admin = await adminViewer(userId)
     if (!admin) throw notFound
-    return { deck: live, admin }
+    return { deck: live, admin, acl }
   }
   // Nothing live under this slug. It may still name a tombstoned lecture,
   // which only an admin may open — and only until the retention sweep
@@ -128,13 +133,13 @@ const loadViewableDeck = async (
     withDeleted,
   )
   if (!deck) throw notFound
-  return { deck, admin }
+  return { deck, admin, acl: await loadDeckAcl(deck, { withDeleted: true }) }
 }
 
 decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
   const notFound = new HttpError(404, 'not_found', 'Deck not found')
 
-  const { deck, admin } = await loadViewableDeck(
+  const { deck, admin, acl } = await loadViewableDeck(
     String(req.params.slug),
     req.userId,
   )
@@ -144,7 +149,6 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
   // opening, as for an admin's view of private content.
   const { filter, options } = asOf(deck.deletedAt)
   const parents = deck.deletedAt ? withDeleted : {}
-  const acl = await loadDeckAcl(deck, { withDeleted: Boolean(deck.deletedAt) })
 
   const template = await resolveDeckTemplateForRead(deck)
   if (!template) throw notFound
@@ -235,9 +239,45 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
  * be the wrong way round — the same discipline the cost ledger and the audit
  * log use.
  */
+/**
+ * Openings recorded per caller address per window.
+ *
+ * This endpoint takes no credentials and writes a row, so a loop against it
+ * would both grow the collection and poison the very count EVAL-7 exists to
+ * produce — and the rows survive a year (`DECK_VIEW_RETENTION_DAYS`), so the
+ * damage is not self-clearing. The guard bounds that.
+ *
+ * The limit is deliberately loose. Behind a NAT or an institutional proxy a
+ * whole lecture hall shares one address, and a limit tight enough to be a
+ * real quota would silently delete exactly the readings the study needs.
+ * A hall of thirty opening a handful of lectures each sits far below this;
+ * a script sits far above it. Between those two the guard does nothing, which
+ * is the right place for it to be uncertain.
+ *
+ * Over the line the row is dropped and the reader still gets their 204 — the
+ * same discipline the rest of the route follows. Refusing the request would
+ * turn a statistics guard into something a reader can feel.
+ */
+const VIEW_RATE_LIMIT = 120
+const VIEW_RATE_WINDOW_MS = 15 * 60 * 1000
+
+const viewLimiter = createRateLimiter({
+  limit: VIEW_RATE_LIMIT,
+  windowMs: VIEW_RATE_WINDOW_MS,
+})
+
+/** Test seam: each case starts with a fresh window. */
+export const resetDeckViewRateLimit = (): void => viewLimiter.reset()
+
 decksRouter.post('/decks/:slug/view', optionalAuth, async (req, res) => {
-  const { deck } = await loadViewableDeck(String(req.params.slug), req.userId)
-  const acl = await loadDeckAcl(deck, { withDeleted: Boolean(deck.deletedAt) })
+  // Checked before the lookups, so a flood costs the reads too, not just the
+  // insert. Silent: the reader is never told their opening went uncounted.
+  if (!viewLimiter.take(req.ip ?? 'unknown')) return res.status(204).end()
+
+  const { deck, acl } = await loadViewableDeck(
+    String(req.params.slug),
+    req.userId,
+  )
   const project = await ProjectModel.findById(deck.projectId)
     .setOptions(deck.deletedAt ? withDeleted : {})
     .catch(() => null)
@@ -295,7 +335,10 @@ decksRouter.post('/decks/:slug/translation', optionalAuth, async (req, res) => {
   // Switching language inside a lecture already opened is not a second
   // opening, so a tombstoned one is served here without another audit entry
   // — the view that got the admin here logged it.
-  const { deck } = await loadViewableDeck(String(req.params.slug), req.userId)
+  const { deck, acl } = await loadViewableDeck(
+    String(req.params.slug),
+    req.userId,
+  )
   const { filter, options } = asOf(deck.deletedAt)
   const parents = deck.deletedAt ? withDeleted : {}
   const project = await ProjectModel.findById(deck.projectId)
@@ -311,7 +354,6 @@ decksRouter.post('/decks/:slug/translation', optionalAuth, async (req, res) => {
   // Whoever asked, the owner's plan pays (BILL-3) — but an owner or editor
   // preparing the lecture draws on a different allowance than a student
   // reading it, so who triggered this decides the pool before anything else.
-  const acl = await loadDeckAcl(deck, { withDeleted: Boolean(deck.deletedAt) })
   const actor = canEditAcl(acl, req.userId) ? 'author' : 'audience'
   const billing = await translationBillingFor(acl.ownerId, actor)
   // Who pays, who asked, what for, and in which language (BILL-7). The
