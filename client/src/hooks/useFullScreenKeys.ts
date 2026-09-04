@@ -7,6 +7,7 @@
  */
 import { useEffect } from 'react'
 import { isTypingTarget } from './typingTarget'
+import { isDragging } from './dragGuard'
 
 /** A dialog (Modal.tsx `role`, either variant — including ConfirmDialog's
  * `alertdialog`) is open. All three shortcuts below skip while one is: an
@@ -33,6 +34,10 @@ export const useFullScreenKeys = ({
     const handler = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return
       if (dialogOpen()) return
+      // A floating toolbar (the deck pill, the whiteboard toolbar) is
+      // mid-drag: see dragGuard.ts for why toggling here would corrupt
+      // whichever mode's remembered position the drag is writing to.
+      if (isDragging()) return
       if (
         (event.key === 'f' || event.key === 'F') &&
         !event.metaKey &&

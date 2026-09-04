@@ -1034,12 +1034,13 @@ A deck can be viewed **full screen**: the slides are shown in carousel view ([PL
 
 - **Proportional, never cropped or stretched** — the slide keeps its 16:9 shape, so one of the two axes is filled exactly and the other has space left over.
 - **The leftover space is filled the way a letterboxed picture's is** — with the design's own image background colour, the same fill an uncropped picture sits on inside a slot ([IMG-1](#img-1-real-time-image-enrichment)), so the surround belongs to the design rather than to the app.
-- **An icon enters it** — a maximize icon at the top right of the lecture's own content, level with the first slide.
+- **An icon enters it** — a maximize icon at the top right of the lecture's own content, fixed to the deck toolbar's header band rather than to the pill itself, so it stays put at that band even once the pill has been dragged elsewhere.
 - **A close control returns to the regular view** — an "x" at the top right, drawn like the one over an image slot ([EDIT-1](#edit-1-full-content-editing)) but reverting the view instead of deleting anything. `Escape` does the same.
 - **Keyboard toggles** — `f`, `Command-Enter`, or `Control-Enter` enters full screen and leaves it again, ignored while the user is typing so the letter still reaches a field.
 - **Navigation still works** — the arrow keys and the prev/next zones move through the deck as they do in the regular carousel.
 - **A lecture stays live full screen** — full screen is a bigger view of the same carousel, not a locked-down one. Live capture and generation ([GEN-1](#gen-1-speech-to-slide-generation)/[GEN-3](#gen-3-live-display)) keep running and new slides keep arriving, and slot editing, the slide menu and whiteboard annotation ([EDIT-4](#edit-4-whiteboard-annotation)) all still work.
 - **The floating toolbars stay reachable** — the deck toolbar and the whiteboard toolbar are drawn over the full-screen slide rather than behind it, so every control they carry is still usable without leaving the view.
+- **Each floating toolbar remembers its own full-screen position, separately from its regular one** — dragging the deck toolbar or the whiteboard toolbar while full screen moves and remembers only where it sits full screen; leaving full screen restores the regular-view position untouched, and re-entering returns each toolbar to wherever it was left full screen.
 
 #### EDIT-1 Full content editing
 

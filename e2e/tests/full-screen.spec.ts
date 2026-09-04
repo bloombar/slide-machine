@@ -149,6 +149,125 @@ test('"f" fills the viewport with the current slide, toolbar still reachable, Es
 })
 
 /**
+ * Regression: the maximize icon sits in the deck toolbar pill's own header
+ * band (DeckPageHeader's `trailing` slot), not in its own flow row below
+ * it — the vertical centres of the icon and the pill must line up.
+ * Neither `sticky` nor an absolutely-positioned sibling lays out in jsdom,
+ * so this is a real-box measurement (boundingBox), same as the rest of the
+ * suite.
+ */
+test('the maximize icon aligns with the deck toolbar pill (PLAY-5)', async ({
+  page,
+}) => {
+  const project = `FullScreenProj-align-${Date.now()}`
+  await page.goto('/register')
+  await page.getByLabel('Display name').fill('Full Screen Tester')
+  await page
+    .getByLabel('Email')
+    .fill(`fullscreen-align-${Date.now()}@example.com`)
+  await page.getByLabel('Password').fill('sturdy-passw0rd')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await createProject(page, project)
+  await page
+    .getByRole('button', { name: `Start a new lecture in ${project}` })
+    .click()
+  await expect(page).toHaveURL(/\/d\//)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
+
+  await page
+    .getByLabel('Spoken phrase')
+    .fill('Watermelons are warm season fruits')
+  await page.getByRole('button', { name: 'Speak' }).click()
+  await expect(page.getByTestId('slide')).toBeVisible()
+
+  const pillBox = (await page.getByTestId('deck-toolbar').boundingBox())!
+  const enterBox = (await page
+    .getByRole('button', { name: 'Full screen' })
+    .boundingBox())!
+
+  // Same horizontal band as the pill: vertical centres within a couple of
+  // px, not the pill's height-plus-margin below it, where the in-flow row
+  // this replaces used to put it.
+  const pillCenter = pillBox.y + pillBox.height / 2
+  const enterCenter = enterBox.y + enterBox.height / 2
+  expect(Math.abs(pillCenter - enterCenter)).toBeLessThanOrEqual(2)
+  // To the right of the pill, not overlapping or to its left.
+  expect(enterBox.x).toBeGreaterThan(pillBox.x + pillBox.width)
+})
+
+/**
+ * Regression (PLAY-5 round 3): "f" and Cmd/Ctrl-Enter toggle full screen
+ * from `window`, with no drag guard of their own — the deck pill's drag
+ * threshold is what makes dragging vs. clicking safe, not anything in
+ * `useFullScreenKeys`. Pressing "f" mid-drag used to flip `fullScreen`
+ * underneath the gesture: the pill is rendered at `fullScreen ? fsPos :
+ * pos`, so the moment the prop flips the pill jumps to the OTHER mode's
+ * spot without releasing the pointer, while the still-running drag keeps
+ * writing to the mode it actually started in — landing a position
+ * measured against now-stale geometry there. `dragGuard.ts` blocks the
+ * shortcuts for a drag's duration; this proves both halves: full screen
+ * does not toggle mid-drag, and the toolbar still lands sensibly (at the
+ * spot released to) rather than skipping the shortcut but leaving the
+ * pill's own tracking broken.
+ */
+test('pressing "f" mid-drag does not toggle full screen or corrupt the drop spot (PLAY-5)', async ({
+  page,
+}) => {
+  const project = `FullScreenProj-middrag-${Date.now()}`
+  await page.goto('/register')
+  await page.getByLabel('Display name').fill('Full Screen Tester')
+  await page
+    .getByLabel('Email')
+    .fill(`fullscreen-middrag-${Date.now()}@example.com`)
+  await page.getByLabel('Password').fill('sturdy-passw0rd')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await createProject(page, project)
+  await page
+    .getByRole('button', { name: `Start a new lecture in ${project}` })
+    .click()
+  await expect(page).toHaveURL(/\/d\//)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
+  await page
+    .getByLabel('Spoken phrase')
+    .fill('Watermelons are warm season fruits')
+  await page.getByRole('button', { name: 'Speak' }).click()
+  await expect(page.getByTestId('slide')).toBeVisible()
+  // Closes the live-session bar so "f" isn't swallowed by the phrase field.
+  await page.getByRole('button', { name: 'Live session' }).click()
+
+  const grip = page.getByRole('button', { name: 'Drag to move the toolbar' })
+  const start = (await grip.boundingBox())!
+
+  await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2)
+  await page.mouse.down()
+  // Past the drag threshold — a real drag is now in progress.
+  await page.mouse.move(300, 300, { steps: 10 })
+  await page.keyboard.press('f')
+  await page.mouse.move(500, 500, { steps: 10 })
+  await page.mouse.up()
+
+  // Full screen never toggled — the shortcut was ignored for the drag's
+  // duration, not merely delayed.
+  await expect(
+    page.getByRole('button', { name: 'Exit full screen' }),
+  ).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Full screen' })).toBeVisible()
+
+  // The pill tracked the pointer the whole time and landed near where it
+  // was released, not at the full-screen default (fixed top-16 start-2,
+  // i.e. pinned to the window's top-left) that a mid-drag jump would have
+  // produced.
+  const dropped = (await page.getByTestId('deck-toolbar').boundingBox())!
+  expect(dropped.y).toBeGreaterThan(200)
+
+  // The shortcut works normally again once the drag is over.
+  await page.keyboard.press('f')
+  await expect(
+    page.getByRole('button', { name: 'Exit full screen' }),
+  ).toBeVisible()
+})
+
+/**
  * Regression: SlideNavZones normally draws its chevrons OUTSIDE the slide's
  * own edge (`right-full`/`left-full`, each `w-14` — 56px), which document
  * flow has room for beside the in-flow carousel but this overlay (a
