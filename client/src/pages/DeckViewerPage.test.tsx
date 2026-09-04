@@ -4416,7 +4416,7 @@ describe('DeckViewerPage sign-in gate (AUTH-8)', () => {
 
     expect(
       await screen.findByRole('dialog', {
-        name: 'Playback needs an account',
+        name: 'Log in to play back the lecture',
       }),
     ).toBeInTheDocument()
     expect(calls.some(u => u.includes('/tts'))).toBe(false)
@@ -4446,7 +4446,7 @@ describe('DeckViewerPage sign-in gate (AUTH-8)', () => {
 
     expect(
       await screen.findByRole('dialog', {
-        name: 'Translated viewing needs an account',
+        name: 'Log in to translate slides',
       }),
     ).toBeInTheDocument()
     // The language menu itself never opened
@@ -4584,7 +4584,7 @@ describe('DeckViewerPage sign-in gate (AUTH-8)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Slide language/ }))
     await screen.findByRole('dialog', {
-      name: 'Translated viewing needs an account',
+      name: 'Log in to translate slides',
     })
     fireEvent.change(screen.getByLabelText(/email/i), {
       target: { value: 'reader@example.com' },
@@ -4618,7 +4618,7 @@ describe('DeckViewerPage sign-in gate (AUTH-8)', () => {
 
     expect(
       await screen.findByRole('dialog', {
-        name: 'Playback needs an account',
+        name: 'Log in to play back the lecture',
       }),
     ).toBeInTheDocument()
     expect(calls.some(u => u.includes('/tts'))).toBe(false)
@@ -4636,7 +4636,9 @@ describe('DeckViewerPage sign-in gate (AUTH-8)', () => {
     // explicitly rather than assert against a state no user is ever in.
     play.focus()
     fireEvent.click(play)
-    await screen.findByRole('dialog', { name: 'Playback needs an account' })
+    await screen.findByRole('dialog', {
+      name: 'Log in to play back the lecture',
+    })
     expect(screen.getByLabelText(/email/i)).toHaveFocus()
 
     fireEvent.keyDown(window, { key: 'Escape' })
@@ -4673,7 +4675,9 @@ describe('DeckViewerPage sign-in gate (AUTH-8)', () => {
     expect(await screen.findByText('Second')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Play deck' }))
-    await screen.findByRole('dialog', { name: 'Playback needs an account' })
+    await screen.findByRole('dialog', {
+      name: 'Log in to play back the lecture',
+    })
 
     fireEvent.change(screen.getByLabelText(/email/i), {
       target: { value: 'reader@example.com' },
@@ -4725,7 +4729,9 @@ describe('DeckViewerPage sign-in gate (AUTH-8)', () => {
       </MemoryRouter>,
     )
     fireEvent.click(await screen.findByRole('button', { name: 'Play deck' }))
-    await screen.findByRole('dialog', { name: 'Playback needs an account' })
+    await screen.findByRole('dialog', {
+      name: 'Log in to play back the lecture',
+    })
 
     fireEvent.change(screen.getByLabelText(/email/i), {
       target: { value: 'reader@example.com' },
@@ -4739,7 +4745,7 @@ describe('DeckViewerPage sign-in gate (AUTH-8)', () => {
       'Incorrect email or password',
     )
     expect(
-      screen.getByRole('dialog', { name: 'Playback needs an account' }),
+      screen.getByRole('dialog', { name: 'Log in to play back the lecture' }),
     ).toBeInTheDocument()
   })
 })

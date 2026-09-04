@@ -62,7 +62,7 @@ describe('SignInDialog', () => {
     mount('playback', () => {})
     expect(
       await screen.findByRole('dialog', {
-        name: 'Playback needs an account',
+        name: 'Log in to play back the lecture',
       }),
     ).toBeInTheDocument()
   })
@@ -81,7 +81,7 @@ describe('SignInDialog', () => {
     mount('translation', () => {})
     expect(
       await screen.findByRole('dialog', {
-        name: 'Translated viewing needs an account',
+        name: 'Log in to translate slides',
       }),
     ).toBeInTheDocument()
   })

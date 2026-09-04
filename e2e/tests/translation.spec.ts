@@ -87,7 +87,7 @@ test('translated viewing: switch language, read, and return to the original', as
   await expect(switcher).toBeVisible()
   await switcher.click()
   const gate = visitorPage.getByRole('dialog', {
-    name: 'Translated viewing needs an account',
+    name: 'Log in to translate slides',
   })
   await expect(gate).toBeVisible()
   await expect(visitorPage.getByRole('menu')).toHaveCount(0)

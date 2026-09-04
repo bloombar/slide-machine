@@ -138,9 +138,9 @@
     "legalRegister": "Al crear una cuenta aceptas nuestros <termsLink>Términos y condiciones</termsLink> y nuestra <privacyLink>Política de privacidad</privacyLink>.",
     "legalSignIn": "Al iniciar sesión aceptas nuestros <termsLink>Términos y condiciones</termsLink> y nuestra <privacyLink>Política de privacidad</privacyLink>.",
     "gate": {
-      "playback": "Reproducir necesita una cuenta",
+      "playback": "Inicia sesión para reproducir la clase",
       "narration": "La narración necesita una cuenta",
-      "translation": "Ver la traducción necesita una cuenta"
+      "translation": "Inicia sesión para traducir las diapositivas"
     }
   },
   "health": {
