@@ -21,6 +21,7 @@ import {
   type DeckTranslationResponse,
   type DeckViewResponse,
 } from '@slide-machine/shared'
+import { createRateLimiter } from '../lib/rate-limit'
 import {
   DeckModel,
   loadDeckAcl,
@@ -35,7 +36,7 @@ import {
   withDeleted,
   type AdminViewer,
 } from '../lib/admin-view'
-import { canEditAcl, canViewAcl } from '../lib/access'
+import { canEditAcl, canViewAcl, type ResolvedAcl } from '../lib/access'
 import { SlideModel, toSlideDto } from '../models/slide'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
 import { resolveDeckTemplateForRead } from '../templates/versions'
@@ -48,6 +49,7 @@ import { verifyAccessToken } from '../auth/tokens'
 import { ProjectModel } from '../models/project'
 import { UserModel } from '../models/user'
 import { VoteModel, voteBreakdown } from '../models/vote'
+import { DeckViewModel } from '../models/deck-view'
 import { env } from '../config/env'
 import { HttpError } from '../middleware/error'
 import type { MyVote } from '@slide-machine/shared'
@@ -106,17 +108,21 @@ export const decksRouter = Router()
 const loadViewableDeck = async (
   slug: string,
   userId: string | undefined,
-): Promise<{ deck: HydratedDocument<DeckDb>; admin: AdminViewer | null }> => {
+): Promise<{
+  deck: HydratedDocument<DeckDb>
+  admin: AdminViewer | null
+  acl: ResolvedAcl
+}> => {
   const notFound = new HttpError(404, 'not_found', 'Deck not found')
   const live = await DeckModel.findOne({ permalinkSlug: slug })
   if (live) {
     const acl = await loadDeckAcl(live)
-    if (canViewAcl(acl, userId)) return { deck: live, admin: null }
+    if (canViewAcl(acl, userId)) return { deck: live, admin: null, acl }
     // Admin view bypass: allowlisted admins may always open a lecture
     // (read-only — canEdit still follows the ACL)
     const admin = await adminViewer(userId)
     if (!admin) throw notFound
-    return { deck: live, admin }
+    return { deck: live, admin, acl }
   }
   // Nothing live under this slug. It may still name a tombstoned lecture,
   // which only an admin may open — and only until the retention sweep
@@ -127,13 +133,13 @@ const loadViewableDeck = async (
     withDeleted,
   )
   if (!deck) throw notFound
-  return { deck, admin }
+  return { deck, admin, acl: await loadDeckAcl(deck, { withDeleted: true }) }
 }
 
 decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
   const notFound = new HttpError(404, 'not_found', 'Deck not found')
 
-  const { deck, admin } = await loadViewableDeck(
+  const { deck, admin, acl } = await loadViewableDeck(
     String(req.params.slug),
     req.userId,
   )
@@ -143,7 +149,6 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
   // opening, as for an admin's view of private content.
   const { filter, options } = asOf(deck.deletedAt)
   const parents = deck.deletedAt ? withDeleted : {}
-  const acl = await loadDeckAcl(deck, { withDeleted: Boolean(deck.deletedAt) })
 
   const template = await resolveDeckTemplateForRead(deck)
   if (!template) throw notFound
@@ -216,6 +221,136 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
 })
 
 /**
+ * POST /api/decks/:slug/view — records that somebody opened this lecture
+ * (EVAL-7).
+ *
+ * Gated on VIEW access and not on sign-in, because the reader this most needs
+ * to count is the student who arrived through a permalink without an account.
+ *
+ * A separate call rather than a count of `GET /decks/:slug`, and that is the
+ * whole point of it existing. The viewer fetches the same deck again to poll
+ * for newly retained audio and after a settings change, so metering the read
+ * route would file an owner's polling loop as student readings. Only the
+ * viewer knows which fetch was somebody opening the lecture, so only the
+ * viewer says so.
+ *
+ * Answers 204 whatever happens. A reader whose lecture failed to be counted
+ * has still read it, and failing their request to protect a statistic would
+ * be the wrong way round — the same discipline the cost ledger and the audit
+ * log use.
+ */
+/**
+ * Openings recorded per caller address per window.
+ *
+ * This endpoint takes no credentials and writes a row, so a loop against it
+ * would both grow the collection and poison the very count EVAL-7 exists to
+ * produce — and the rows survive a year (`DECK_VIEW_RETENTION_DAYS`), so the
+ * damage is not self-clearing.
+ *
+ * Two things make this guard safe to have, and it is worth being explicit
+ * because getting either wrong turns it into the thing it is guarding against.
+ * `req.ip` must be the reader's address and not the ingress's, or the budget
+ * is deployment-wide and one flood stops counting everybody (`app.ts` sets
+ * `trust proxy` for this reason). And the token is charged only once a real,
+ * viewable lecture has resolved, so a loop against slugs that do not exist
+ * cannot spend a budget it never appears in.
+ *
+ * The limit clears real use by a wide margin, deliberately. A signed-in
+ * reader is keyed on their account, so a NAT cannot make them share; only
+ * signed-out readers fall back to the address, and there a whole lecture hall
+ * can sit behind one. The old ceiling of 120 was not a margin at all — thirty
+ * students opening four lectures each is exactly 120, and a hall of 121
+ * opening one lecture apiece passed it. At 600 a human cannot reach it and a
+ * script passes it in seconds.
+ *
+ * Over the line the row is dropped and the reader still gets their 204 — the
+ * same discipline the rest of the route follows. Refusing the request would
+ * turn a statistics guard into something a reader can feel. The operator is
+ * told which lecture is affected, once per caller per window; a suppressed
+ * opening is missing research data and must not be missing silently. The
+ * caller is identified by nothing: their address is what the guard is keyed
+ * on, but writing it to a log would identify a reader this route otherwise
+ * takes care never to name (§16).
+ */
+const VIEW_RATE_LIMIT = env.DECK_VIEW_RATE_LIMIT
+const VIEW_RATE_WINDOW_MS = 15 * 60 * 1000
+
+const viewLimiter = createRateLimiter({
+  limit: VIEW_RATE_LIMIT,
+  windowMs: VIEW_RATE_WINDOW_MS,
+})
+
+/** Throttles the warning above to one line per caller per window, so a flood
+ * cannot turn the log into a second denial of service. */
+const dropNotice = createRateLimiter({
+  limit: 1,
+  windowMs: VIEW_RATE_WINDOW_MS,
+})
+
+/** Test seam: each case starts with a fresh window. */
+export const resetDeckViewRateLimit = (): void => {
+  viewLimiter.reset()
+  dropNotice.reset()
+}
+
+decksRouter.post('/decks/:slug/view', optionalAuth, async (req, res) => {
+  const { deck, acl } = await loadViewableDeck(
+    String(req.params.slug),
+    req.userId,
+  )
+  // Charged here rather than at the top of the handler: a slug that names no
+  // lecture, or one this reader may not see, never reaches a `DeckView` row,
+  // so letting it spend the budget would let a stranger switch counting off
+  // for a real lecture using addresses that do not exist.
+  // Keyed on the account when there is one, so a lecture hall sharing an
+  // address does not share a budget; only signed-out readers fall back to it.
+  const caller = req.userId ?? req.ip ?? 'unknown'
+  if (!viewLimiter.take(caller)) {
+    if (dropNotice.take(caller)) {
+      // The lecture, never the caller: an address here would identify a
+      // reader whose row deliberately does not (§16).
+      console.warn(
+        `Deck views going uncounted for "${deck.permalinkSlug}": one caller ` +
+          `passed ${VIEW_RATE_LIMIT} openings in ` +
+          `${VIEW_RATE_WINDOW_MS / 60000} minutes. This lecture's count is ` +
+          `short until the window closes.`,
+      )
+    }
+    return res.status(204).end()
+  }
+
+  const project = await ProjectModel.findById(deck.projectId)
+    .setOptions(deck.deletedAt ? withDeleted : {})
+    .catch(() => null)
+
+  try {
+    await DeckViewModel.create({
+      deckId: deck._id,
+      deckName: deck.title,
+      projectId: deck.projectId ?? null,
+      projectName: project?.title,
+      ownerId: acl.ownerId,
+      // Null for a signed-out reader, and nothing invented to stand in for it
+      // (§16). Their openings are counted; they are not identified.
+      viewerId: req.userId ?? null,
+      // An editor opening a lecture they can edit is its author at work, not a
+      // member of its audience — the same line the metered paths draw, drawn
+      // the same way so the two sets of numbers can be read together.
+      actorKind: canEditAcl(acl, req.userId) ? 'owner' : 'audience',
+      // This route is the browser viewer's beacon; an assistant reads a
+      // lecture through MCP without ever opening the viewer.
+      channel: 'app',
+      occurredAt: new Date(),
+    })
+  } catch (error) {
+    // Logged, never raised. Losing a row costs a report some accuracy;
+    // failing here would cost a reader their lecture.
+    console.error(`Failed to record view of deck ${deck._id}:`, error)
+  }
+  res.status(204).end()
+})
+
+/**
  * POST /api/decks/:slug/translation — the deck's slide content in another
  * language (SHARE-2).
  *
@@ -241,7 +376,10 @@ decksRouter.post('/decks/:slug/translation', optionalAuth, async (req, res) => {
   // Switching language inside a lecture already opened is not a second
   // opening, so a tombstoned one is served here without another audit entry
   // — the view that got the admin here logged it.
-  const { deck } = await loadViewableDeck(String(req.params.slug), req.userId)
+  const { deck, acl } = await loadViewableDeck(
+    String(req.params.slug),
+    req.userId,
+  )
   const { filter, options } = asOf(deck.deletedAt)
   const parents = deck.deletedAt ? withDeleted : {}
   const project = await ProjectModel.findById(deck.projectId)
@@ -257,7 +395,6 @@ decksRouter.post('/decks/:slug/translation', optionalAuth, async (req, res) => {
   // Whoever asked, the owner's plan pays (BILL-3) — but an owner or editor
   // preparing the lecture draws on a different allowance than a student
   // reading it, so who triggered this decides the pool before anything else.
-  const acl = await loadDeckAcl(deck, { withDeleted: Boolean(deck.deletedAt) })
   const actor = canEditAcl(acl, req.userId) ? 'author' : 'audience'
   const billing = await translationBillingFor(acl.ownerId, actor)
   // Who pays, who asked, what for, and in which language (BILL-7). The

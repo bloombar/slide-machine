@@ -21,6 +21,7 @@ import { TranscriptSegmentModel } from '../../src/models/transcript-segment'
 import { SessionTelemetryEventModel } from '../../src/models/session-telemetry-event'
 import { VoteModel } from '../../src/models/vote'
 import { CostEventModel } from '../../src/models/cost-event'
+import { DeckViewModel } from '../../src/models/deck-view'
 import { ensureStudyIds } from '../../src/research/study-id'
 import { signAccessToken } from '../../src/auth/tokens'
 
@@ -114,6 +115,7 @@ beforeEach(async () => {
     SessionTelemetryEventModel.deleteMany({}),
     VoteModel.deleteMany({}),
     CostEventModel.deleteMany({}),
+    DeckViewModel.deleteMany({}),
   ])
   const admin = await UserModel.create({
     email: ADMIN_EMAIL,
@@ -153,6 +155,7 @@ describe('the bundle', () => {
     expect([...bundle.keys()].sort()).toEqual([
       'README.md',
       'cost-events.csv',
+      'deck-views.csv',
       'lectures.csv',
       'session-telemetry.csv',
       'slides.csv',
@@ -324,6 +327,42 @@ describe('the bundle', () => {
     expect(bundle.get('README.md')).toContain('read or heard in')
   })
 
+  it('exports lecture openings, naming only the readers who signed in', async () => {
+    const owner = await makeUser()
+    const reader = await makeUser({ email: 'reader@example.com' })
+    const deck = await makeDeck(owner._id)
+    await DeckViewModel.create({
+      deckId: deck._id,
+      deckName: deck.title,
+      ownerId: owner._id,
+      viewerId: reader._id,
+      actorKind: 'audience',
+      channel: 'app',
+      occurredAt: new Date(),
+    })
+    await DeckViewModel.create({
+      deckId: deck._id,
+      deckName: deck.title,
+      ownerId: owner._id,
+      viewerId: null,
+      actorKind: 'audience',
+      channel: 'app',
+      occurredAt: new Date(),
+    })
+
+    const bundle = await getBundle()
+    const viewers = column(bundle.get('deck-views.csv')!, 'viewerStudyId')
+    expect(viewers).toHaveLength(2)
+    // A signed-out reader is a blank cell, which is the honest rendering:
+    // there is no identity here rather than one being withheld (§16).
+    expect(viewers.filter(v => v === '')).toHaveLength(1)
+    const named = viewers.filter(v => v !== '')
+    expect(named).toHaveLength(1)
+    // Pseudonymized like every other identity in the bundle (P-14).
+    expect(named[0]).not.toBe(reader._id.toString())
+    expect(bundle.get('README.md')).toContain('deck-views.csv')
+  })
+
   it('exports tombstoned lectures marked by deletedAt', async () => {
     const owner = await makeUser()
     await makeDeck(owner._id, { deletedAt: new Date() })
@@ -383,6 +422,33 @@ describe('the window', () => {
       `?from=${encodeURIComponent(future.toISOString())}`,
     )
     expect(column(bundle.get('lectures.csv')!, 'deckId')).toEqual([
+      deck._id.toString(),
+    ])
+  })
+
+  it('unions in a lecture whose only in-window activity is being opened', async () => {
+    const owner = await makeUser()
+    const deck = await makeDeck(owner._id)
+    // The lecture predates the window; only the opening falls inside. A
+    // reader who opened an older lecture must still find a row to join to.
+    const future = new Date(Date.now() + 3_600_000)
+    await DeckViewModel.create({
+      deckId: deck._id,
+      deckName: deck.title,
+      ownerId: owner._id,
+      viewerId: null,
+      actorKind: 'audience',
+      channel: 'app',
+      occurredAt: new Date(future.getTime() + 60_000),
+    })
+
+    const bundle = await getBundle(
+      `?from=${encodeURIComponent(future.toISOString())}`,
+    )
+    expect(column(bundle.get('lectures.csv')!, 'deckId')).toEqual([
+      deck._id.toString(),
+    ])
+    expect(column(bundle.get('deck-views.csv')!, 'deckId')).toEqual([
       deck._id.toString(),
     ])
   })

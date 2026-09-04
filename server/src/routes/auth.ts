@@ -106,9 +106,10 @@ const mailLimiter = createRateLimiter({
 export const resetAuthMailRateLimit = (): void => mailLimiter.reset()
 
 /** Refuses once a caller has asked for too many messages in a window. Keyed
- * on the caller's address; behind a proxy that is the proxy's, which makes
- * the limit shared rather than per-visitor — stricter than intended, never
- * looser, which is the right way for a nuisance guard to be wrong. */
+ * on the caller's address, which is the reader's only when `TRUST_PROXY_HOPS`
+ * matches the deployment: left at 0 behind a proxy every caller shares one
+ * key and the limit is deployment-wide, and set above the real hop count the
+ * key is whatever `X-Forwarded-For` says, which the caller chooses. */
 const takeMailAllowance = (req: Request): void => {
   if (!mailLimiter.take(req.ip ?? 'unknown')) {
     throw new HttpError(

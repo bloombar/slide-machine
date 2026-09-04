@@ -390,6 +390,38 @@ const envSchema = z
       .nonnegative()
       .default(90),
     /**
+     * How many proxies sit in front of the app, for `req.ip`.
+     *
+     * 0 — the default — means none: Express reports the socket peer, which is
+     * correct for `npm run dev` and for the docker-compose stack, where port
+     * 3000 is published directly. Anything above 0 makes `req.ip` come from
+     * `X-Forwarded-For`, so setting it when there is no proxy hands every
+     * caller the ability to choose their own address, and with it a free
+     * bypass of every limiter keyed on one — and the ability to spend a
+     * chosen victim's budget.
+     *
+     * Set it to the real hop count in a proxied deployment (1 behind a single
+     * TLS-terminating ingress). It is exact rather than a boolean because
+     * Express counts from the right of the header: the ingress appends the
+     * real client, so trusting exactly the hops that exist reads that entry
+     * and ignores any prefix the client forged. Too high and a forged prefix
+     * wins; too low and every caller shares one key.
+     *
+     * If the count is wrong upwards, limiters get looser and spoofable; if
+     * wrong downwards, they collapse to a single shared budget. Verify it
+     * against the deployment rather than assuming — a sentinel
+     * `X-Forwarded-For` sent to the running app comes back as `req.ip` only
+     * when the count is right.
+     */
+    TRUST_PROXY_HOPS: z.coerce.number().int().nonnegative().default(0),
+    /**
+     * Openings one caller may record per 15 minutes before the beacon stops
+     * writing rows for them (EVAL-7). Configuration so the tests can drive a
+     * flood without sending six hundred requests per case; the default clears
+     * any human by a wide margin and a script passes it in seconds.
+     */
+    DECK_VIEW_RATE_LIMIT: z.coerce.number().int().positive().default(600),
+    /**
      * How long raw cost-ledger events are kept before a complete month is
      * rolled up and its rows removed (BILL-7/P-11). 0 = keep every event
      * forever, which is fine for a small deployment and unwise for a busy one:
@@ -398,6 +430,19 @@ const envSchema = z
      * them and everything older answers from the monthly summaries.
      */
     COST_LEDGER_RETENTION_DAYS: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .default(365),
+    /**
+     * How long lecture openings (EVAL-7) are kept before the daily sweep
+     * deletes them. `0` keeps them forever, which is fine for a small
+     * deployment and unwise for a busy one: this and the cost ledger are the
+     * only two collections that grow with usage rather than content. A year by
+     * default, matching the ledger, so a term's readings and the costs they
+     * caused age out together rather than one outliving the other.
+     */
+    DECK_VIEW_RETENTION_DAYS: z.coerce
       .number()
       .int()
       .nonnegative()

@@ -141,9 +141,9 @@ feedbackRouter.post('/feedback', async (req, res) => {
       'Feedback is not set up on this server',
     )
   }
-  // Keyed on the caller's address. Behind a proxy that is the proxy's, which
-  // makes the limit shared rather than per-visitor — stricter than intended,
-  // never looser, which is the right way for a nuisance guard to be wrong.
+  // Keyed on the caller's address, which is the reader's only when
+  // `TRUST_PROXY_HOPS` matches the deployment: too low and every caller
+  // shares one key, too high and the caller picks their own.
   if (!limiter.take(req.ip ?? 'unknown')) {
     throw new HttpError(
       429,

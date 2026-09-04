@@ -53,6 +53,7 @@ import { strokeVisible, erasureReplays } from '../lib/drawing'
 import { runLayoutFlip } from '../lib/layoutFlip'
 import { apiFetch, ApiError } from '../api/http'
 import { dispatchAction } from '../api/actions'
+import { recordDeckView } from '../api/decks'
 import {
   applySlideImageFromSource,
   editSlideDrawings,
@@ -682,6 +683,38 @@ export default function DeckViewerPage() {
       cancelled = true
     }
   }, [slug, status])
+
+  /**
+   * Records that this lecture was opened (EVAL-7).
+   *
+   * Latched per lecture rather than tied to a fetch, because neither a fetch
+   * nor this effect corresponds to a reading. The deck is re-fetched to poll
+   * for newly retained audio and after a settings change, and the effect above
+   * re-runs when the session finishes restoring or the reader signs in
+   * mid-visit — none of which is somebody opening the lecture a second time.
+   * Navigating to another lecture and back counts again, which is right: that
+   * is a second reading.
+   *
+   * The guard is that the loaded deck is *this* slug's, not merely that some
+   * deck is loaded. The route carries no `key`, so a slug change re-renders
+   * this component rather than unmounting it, and neither `view` nor the ref
+   * is cleared — without the check the beacon would fire for the new lecture
+   * while still holding the old one, counting an opening of something the
+   * reader may then be refused, or whose load failed.
+   *
+   * The cost is one narrow miss: reach a lecture you cannot view and come back
+   * to the one you were reading, and the return is not counted, because the
+   * ref still names it. That is the safer direction to be wrong in — a reading
+   * uncounted rather than one invented — and it needs a link to a forbidden
+   * lecture from inside the viewer, which nothing renders today.
+   */
+  const reportedViewRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!slug || reportedViewRef.current === slug) return
+    if (view?.deck.permalinkSlug !== slug) return
+    reportedViewRef.current = slug
+    void recordDeckView(slug)
+  }, [view, slug])
 
   /**
    * A link from outside naming one slide — `?slide=<slide id>`, which an

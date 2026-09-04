@@ -21,6 +21,7 @@ import { Types } from 'mongoose'
 import { csvRow } from '../audit/csv'
 import { MICROS_PER_UNIT } from '../billing/pricing'
 import { CostEventModel } from '../models/cost-event'
+import { DeckViewModel } from '../models/deck-view'
 import { DeckModel } from '../models/deck'
 import { SessionTelemetryEventModel } from '../models/session-telemetry-event'
 import { SlideModel } from '../models/slide'
@@ -89,6 +90,17 @@ downstream before analysis, as the study protocol (P-7, P-14) requires.
   with one reader in a language singles that pseudonym out, and every other
   row it appears in with it. Suppress small cells before publishing.
 
+- deck-views.csv — one row per time a lecture was opened in the viewer over
+  the window (EVAL-7). A blank viewerStudyId is a signed-out reader: those
+  are counted as openings and deliberately never identified, so distinct
+  readers can be counted for signed-in viewers only. actorKind separates the
+  lecture's own owner from its audience. A reload or a return visit is a new
+  row, so this counts readings rather than people even when signed in.
+  occurredAt is a full-precision timestamp, which makes it a quasi-identifier
+  in a small cohort: a signed-in reader's rows here sit next to their rows in
+  cost-events.csv, and adjacent timestamps reconstruct a reading session for
+  one person. Aggregate before publishing, and suppress small cells here too.
+
 Rows with a deletedAt value were soft-deleted in the application but are
 exported for completeness; exclude them downstream if the analysis calls
 for it.
@@ -102,27 +114,34 @@ export const buildResearchBundle = async (
   // lectures referenced by any in-window activity — telemetry, transcript
   // segments, votes, cost events — so every deckId in the other files has
   // a row here to join against.
-  const [created, segmentDecks, telemetryDecks, voteDecks, costDecks] =
-    await Promise.all([
-      DeckModel.find(windowFilter('createdAt', window))
-        .select('_id')
-        .setOptions(seen),
-      TranscriptSegmentModel.distinct('deckId', {
-        ...windowFilter('createdAt', window),
-      }).setOptions(seen),
-      SessionTelemetryEventModel.distinct('deckId', {
-        deckId: { $ne: null },
-        ...windowFilter('at', window),
-      }),
-      VoteModel.distinct('targetId', {
-        targetType: 'deck',
-        ...windowFilter('createdAt', window),
-      }),
-      CostEventModel.distinct('deckId', {
-        deckId: { $ne: null },
-        ...windowFilter('occurredAt', window),
-      }),
-    ])
+  const [
+    created,
+    segmentDecks,
+    telemetryDecks,
+    voteDecks,
+    costDecks,
+    viewDecks,
+  ] = await Promise.all([
+    DeckModel.find(windowFilter('createdAt', window))
+      .select('_id')
+      .setOptions(seen),
+    TranscriptSegmentModel.distinct('deckId', {
+      ...windowFilter('createdAt', window),
+    }).setOptions(seen),
+    SessionTelemetryEventModel.distinct('deckId', {
+      deckId: { $ne: null },
+      ...windowFilter('at', window),
+    }),
+    VoteModel.distinct('targetId', {
+      targetType: 'deck',
+      ...windowFilter('createdAt', window),
+    }),
+    CostEventModel.distinct('deckId', {
+      deckId: { $ne: null },
+      ...windowFilter('occurredAt', window),
+    }),
+    DeckViewModel.distinct('deckId', windowFilter('occurredAt', window)),
+  ])
   const deckIds = [
     ...new Set(
       [
@@ -131,13 +150,14 @@ export const buildResearchBundle = async (
         ...telemetryDecks,
         ...voteDecks,
         ...costDecks,
+        ...viewDecks,
       ]
         .filter((id): id is Types.ObjectId => id != null)
         .map(id => id.toString()),
     ),
   ].map(id => new Types.ObjectId(id))
 
-  const [decks, slides, segments, sessions, votes, costEvents] =
+  const [decks, slides, segments, sessions, votes, costEvents, deckViews] =
     await Promise.all([
       DeckModel.find({ _id: { $in: deckIds } }).setOptions(seen),
       SlideModel.find({ deckId: { $in: deckIds } })
@@ -151,6 +171,9 @@ export const buildResearchBundle = async (
       CostEventModel.find(windowFilter('occurredAt', window)).sort({
         occurredAt: 1,
       }),
+      DeckViewModel.find(windowFilter('occurredAt', window)).sort({
+        occurredAt: 1,
+      }),
     ])
 
   // Every account any row references, pseudonymized in one pass.
@@ -159,6 +182,8 @@ export const buildResearchBundle = async (
     ...votes.map(v => v.userId),
     ...costEvents.map(e => e.payerId),
     ...costEvents.flatMap(e => (e.actorId ? [e.actorId] : [])),
+    ...deckViews.map(v => v.ownerId),
+    ...deckViews.flatMap(v => (v.viewerId ? [v.viewerId] : [])),
   ])
   /** The pseudonym for a user reference; blank when there is no identity
    * (anonymous actor) or none left (account purged) — blank, not withheld. */
@@ -340,6 +365,34 @@ export const buildResearchBundle = async (
         e.billable,
         (e.costMicros / MICROS_PER_UNIT).toFixed(6),
         e.currency,
+      ]),
+    ),
+  )
+
+  add(
+    'deck-views.csv',
+    csvFile(
+      [
+        'occurredAt',
+        'deckId',
+        'deckName',
+        'projectId',
+        'projectName',
+        'ownerStudyId',
+        'viewerStudyId',
+        'actorKind',
+        'channel',
+      ],
+      deckViews.map(v => [
+        iso(v.occurredAt),
+        v.deckId.toString(),
+        v.deckName,
+        v.projectId?.toString(),
+        v.projectName,
+        sid(v.ownerId),
+        sid(v.viewerId),
+        v.actorKind,
+        v.channel,
       ]),
     ),
   )

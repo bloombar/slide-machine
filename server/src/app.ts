@@ -48,6 +48,24 @@ import './billing/stripe'
 
 export const createApp = (): Express => {
   const app = express()
+  /**
+   * Whose address `req.ip` reports — the reader's, or whatever is in front
+   * of them.
+   *
+   * Left at 0 Express reports the socket peer. Behind a proxy that is the
+   * proxy for every request, so every limiter keyed on the address (the
+   * feedback form, the auth mail paths, the lecture-opening beacon) becomes a
+   * deployment-wide budget one caller can exhaust for everybody — which for
+   * the beacon means silently dropping the openings EVAL-7 exists to count.
+   *
+   * So a proxied deployment sets `TRUST_PROXY_HOPS` to the number of hops it
+   * actually has. It is not defaulted on: turning it on where there is no
+   * proxy is worse than leaving it off, because `X-Forwarded-For` is then
+   * whatever the caller typed, and a limiter keyed on a value the caller
+   * chooses is not a limiter — it also lets them spend a victim's budget by
+   * claiming the victim's address.
+   */
+  if (env.TRUST_PROXY_HOPS > 0) app.set('trust proxy', env.TRUST_PROXY_HOPS)
   // Ahead of the JSON parser, and only for this path: webhook signatures are
   // computed over the exact bytes the provider sent, so the body has to reach
   // the adapter unparsed (BILL-2). Everything else gets JSON as usual.

@@ -11,6 +11,7 @@ import { attachAudioSocket } from './ws/audio-socket'
 import { startAudioRetentionSweep } from './jobs/audio-cleanup'
 import { startSoftDeletePurgeSweep } from './jobs/soft-delete-purge'
 import { startCostRollupSweep } from './jobs/cost-rollup'
+import { startDeckViewPurgeSweep } from './jobs/deck-view-purge'
 import { startTemplateVersionBackfill } from './jobs/pin-template-versions'
 
 const main = async (): Promise<void> => {
@@ -36,6 +37,9 @@ const main = async (): Promise<void> => {
   // Bounds the cost ledger: roll complete old months up, drop the rows behind
   // them (BILL-7/P-11).
   startCostRollupSweep()
+  // Bounds the view records: drop lecture openings past
+  // DECK_VIEW_RETENTION_DAYS (EVAL-7/P-11).
+  startDeckViewPurgeSweep()
   // Pin any lecture that predates template versions, so a template edit stops
   // reaching into it (TMPL-11). No-op once every lecture is pinned.
   startTemplateVersionBackfill()
