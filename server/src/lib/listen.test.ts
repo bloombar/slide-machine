@@ -38,6 +38,33 @@ describe('reportListen on a successful bind', () => {
     expect(error).not.toHaveBeenCalled()
     expect(exit).not.toHaveBeenCalled()
   })
+
+  /**
+   * The proxy setting cannot be read from outside — the health endpoint
+   * deliberately does not publish it — so the boot log is the only place an
+   * operator can confirm it took effect. A deploy that silently ignored the
+   * variable would otherwise look identical to one that applied it.
+   */
+  it('says how many proxy hops it trusts', () => {
+    reportListen(undefined, 3000, 'production', 2)
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('2 proxy hop(s)'))
+  })
+
+  it('warns plainly when it trusts none, since that is a shared budget', () => {
+    reportListen(undefined, 3000, 'production', 0)
+    const said = log.mock.calls.map((c: unknown[]) => String(c[0])).join('\n')
+    expect(said).toContain('Trusting no proxy')
+    expect(said).toContain('one shared budget')
+  })
+
+  // The default matters: a caller that forgets to pass it must not silently
+  // claim a proxy is trusted when none is.
+  it('trusts none when not told otherwise', () => {
+    reportListen(undefined, 3000, 'development')
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining('Trusting no proxy'),
+    )
+  })
 })
 
 describe('reportListen on a failed bind', () => {
