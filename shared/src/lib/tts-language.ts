@@ -13,7 +13,7 @@
  * happen to overlap, and collapsing them would make the next disagreement a
  * silent mistranslation rather than a compile error.
  */
-import type { Locale } from '../types/locale'
+import { LOCALES, type Locale } from '../types/locale'
 
 /** The tag the TTS adapter speaks each locale in. */
 export const TTS_LANGUAGE_TAGS: Record<Locale, string> = {
@@ -31,6 +31,27 @@ export const TTS_LANGUAGE_TAGS: Record<Locale, string> = {
  */
 export const ttsLanguageTag = (language: string): string =>
   TTS_LANGUAGE_TAGS[language as Locale] ?? language
+
+/**
+ * The locale a TTS tag speaks, or undefined when it is not one this app has.
+ *
+ * The inverse of the table above, and it has to be the table rather than the
+ * base subtag: Mandarin's tag is 'cmn-CN', whose subtag is 'cmn', which is not
+ * a `Locale`. Reading the subtag alone therefore says "not supported" for the
+ * one language most of the reason for having this map. Falls back to the
+ * subtag for a tag the table does not list, so 'en-GB' still answers 'en'.
+ *
+ * Undefined rather than a default: a caller recording what was spoken must be
+ * able to say "no language I know" instead of naming the wrong one.
+ */
+export const localeOfTtsTag = (tag: string): Locale | undefined => {
+  const exact = (Object.entries(TTS_LANGUAGE_TAGS) as [Locale, string][]).find(
+    ([, value]) => value.toLowerCase() === tag.toLowerCase(),
+  )
+  if (exact) return exact[0]
+  const base = baseLanguage(tag)
+  return LOCALES.includes(base as Locale) ? (base as Locale) : undefined
+}
 
 /**
  * The base subtag of a language tag or a provider voice name — 'en-US' and

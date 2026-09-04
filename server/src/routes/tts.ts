@@ -40,7 +40,7 @@ import {
   deckSourceLocale,
   findTtsVoice,
   isLocale,
-  baseLanguage,
+  localeOfTtsTag,
   overlaySlideTranslation,
   ttsLanguageTag,
   voiceMatchesLanguage,
@@ -168,14 +168,17 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
    * does not: `deckSourceLocale` ends at English, while synthesis ends at
    * `TTS_LANGUAGE`, so on a deployment that set that to anything else a deck
    * declaring no language was spoken in one language and recorded as another.
-   * The server default is a tag ('fr-FR'), so it is reduced to its base subtag
-   * and only used when that names a language the app actually supports.
+   *
+   * The server default is a tag, so it is read back through the same table
+   * that produced it — not through its base subtag, which would answer 'cmn'
+   * for Mandarin and so fail on the one language this field exists to count.
+   * A tag naming no language this app has leaves the field unset, which the
+   * ledger already means as "no language": better silent than confidently
+   * English about narration that was not.
    */
-  const defaultLocale = baseLanguage(env.TTS_LANGUAGE)
   const spokenLocale =
-    target ??
-    declared ??
-    (isLocale(defaultLocale) ? defaultLocale : sourceLocale)
+    target ?? declared ?? localeOfTtsTag(env.TTS_LANGUAGE) ?? undefined
+
   // Voice cascade: the lecture's own setting wins, then its project's, then the
   // server default (TTS_DEFAULT_VOICE); an unset default leaves `voice`
   // undefined, so the provider uses its own default voice for the language.
