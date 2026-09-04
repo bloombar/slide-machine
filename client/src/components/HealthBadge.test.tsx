@@ -11,6 +11,7 @@ const healthFixture: HealthResponse = {
   environment: 'development',
   version: '2026.07.18+abc1234',
   uptime: 12.3,
+  proxy: { xffEntries: 0 },
   components: {
     mongo: { status: 'ok', detail: 'connected' },
     storage: { status: 'ok', detail: 'local disk' },

@@ -118,14 +118,35 @@ export const computeOverall = (
   return anyProblem ? 'degraded' : 'ok'
 }
 
+/**
+ * Counts the entries in an `X-Forwarded-For` header.
+ *
+ * Entries, not proxies: proxies append, so a caller who sends the header gets
+ * counted alongside them. Only a request that sent none reads the real chain.
+ *
+ * Read off the raw header rather than `req.ips`, which is empty until the app
+ * already trusts a proxy — the setting cannot be used to check itself.
+ *
+ * Counted the way Express will parse it, splitting on the comma alone: a
+ * proxy may write `a,b` with no space, and disagreeing with the parser by one
+ * would put the same error into the setting this is used to choose.
+ */
+export const xffEntryCount = (forwardedFor: string | undefined): number =>
+  forwardedFor
+    ? forwardedFor.split(',').filter(part => part.trim().length > 0).length
+    : 0
+
 /** Builds the full health response (cheap fields fresh, probes cached). */
-export const getHealth = async (): Promise<HealthResponse> => {
+export const getHealth = async (
+  forwardedFor?: string,
+): Promise<HealthResponse> => {
   const components = await getComponents()
   return {
     status: computeOverall(components),
     environment: env.NODE_ENV,
     version: APP_VERSION,
     uptime: process.uptime(),
+    proxy: { xffEntries: xffEntryCount(forwardedFor) },
     components,
   }
 }

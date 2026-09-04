@@ -39,5 +39,22 @@ export interface HealthResponse {
   version: string
   /** Server process uptime in seconds. */
   uptime: number
+  /**
+   * How many entries this request's `X-Forwarded-For` carried on arrival, so
+   * `TRUST_PROXY_HOPS` can be measured against reality rather than assumed.
+   *
+   * Named for what it is rather than for what it is usually used for. It is
+   * **not** a count of proxies: proxies append to the header, so whatever the
+   * caller sent is in here too. It equals the chain length only for a request
+   * that sent no `X-Forwarded-For` of its own, which is a property of how the
+   * measurement is taken and not something this endpoint can check.
+   *
+   * A count, never an address — no address is reported here or anywhere. The
+   * configured hop count is deliberately not reported beside it: an operator
+   * already knows what they set, and publishing it on an endpoint that needs
+   * no credentials would tell everyone else which limiters are currently a
+   * shared bucket, or spoofable.
+   */
+  proxy: { xffEntries: number }
   components: HealthComponents
 }

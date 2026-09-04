@@ -10,6 +10,10 @@ import { getHealth } from '../lib/health'
 
 export const healthRouter = Router()
 
-healthRouter.get('/health', async (_req, res) => {
-  res.json(await getHealth())
+healthRouter.get('/health', async (req, res) => {
+  // The raw header, so what is reported is what actually arrived rather than
+  // what the app was told to believe. Counted, never echoed.
+  res.json(
+    await getHealth(req.headers['x-forwarded-for'] as string | undefined),
+  )
 })

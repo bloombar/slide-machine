@@ -46,7 +46,12 @@ vi.mock('../config/env', () => ({
   },
 }))
 
-import { computeOverall, getHealth, resetHealthCache } from './health'
+import {
+  computeOverall,
+  getHealth,
+  resetHealthCache,
+  xffEntryCount,
+} from './health'
 
 const ok: HealthComponent = { status: 'ok', detail: 'connected' }
 const disabled: HealthComponent = { status: 'disabled', detail: 'off' }
@@ -143,5 +148,36 @@ describe('cache', () => {
     // …until the cache is cleared.
     resetHealthCache()
     expect((await getHealth()).components.mongo.status).toBe('down')
+  })
+})
+
+describe('xffEntryCount', () => {
+  // The count is the whole point: it is what `TRUST_PROXY_HOPS` has to match,
+  // and getting it wrong breaks every rate limit keyed on an address.
+  it('counts the entries named in the header', () => {
+    expect(xffEntryCount('203.0.113.7')).toBe(1)
+    expect(xffEntryCount('203.0.113.7, 198.51.100.2')).toBe(2)
+    expect(xffEntryCount('203.0.113.7, 198.51.100.2, 192.0.2.9')).toBe(3)
+  })
+
+  // Splitting on ', ' rather than ',' passes every other case here and
+  // returns 1 for this one — a legal header several proxies emit, and an
+  // off-by-one that would land straight in TRUST_PROXY_HOPS.
+  it('counts entries a proxy wrote without a space after the comma', () => {
+    expect(xffEntryCount('203.0.113.7,198.51.100.2')).toBe(2)
+    expect(xffEntryCount('203.0.113.7,198.51.100.2,192.0.2.9')).toBe(3)
+  })
+
+  it('reports no hops when nothing forwarded the request', () => {
+    expect(xffEntryCount(undefined)).toBe(0)
+    expect(xffEntryCount('')).toBe(0)
+  })
+
+  // A trailing comma or padding must not invent a hop that is not there —
+  // an off-by-one here is an off-by-one in the setting it is used to choose.
+  it('does not count empty entries', () => {
+    expect(xffEntryCount('203.0.113.7,')).toBe(1)
+    expect(xffEntryCount(' 203.0.113.7 , 198.51.100.2 ')).toBe(2)
+    expect(xffEntryCount('  ')).toBe(0)
   })
 })

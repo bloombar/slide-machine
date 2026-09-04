@@ -22,6 +22,22 @@ services:
     envs:
       - key: NODE_ENV
         value: production
+      # How many proxies sit in front of the app, for `req.ip`. Every rate
+      # limit is keyed on that address, so this must match the real chain:
+      # too low and all callers share one budget, too high and a caller picks
+      # their own address out of X-Forwarded-For.
+      #
+      # Deliberately 0 until measured. GET /api/health reports
+      # `proxy.xffEntries` — how many X-Forwarded-For entries arrived — and
+      # this is set to match. Measure from a request that sends no
+      # X-Forwarded-For of its own: proxies append, so a network whose egress
+      # inserts one reads high, and setting this high is the direction that
+      # hurts. Confirm the reading by sending one extra entry and checking the
+      # number rises by exactly one. Left at 0 every caller shares one budget
+      # — wrong, but wrong in the safe direction; set above the real chain and
+      # a caller chooses their own address, which is not safe at all.
+      - key: TRUST_PROXY_HOPS
+        value: '0'
       - key: MONGODB_URI
         type: SECRET
       # Auth signing secrets — required at boot (min 32 chars each)
