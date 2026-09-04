@@ -119,13 +119,19 @@ export const computeOverall = (
 }
 
 /**
- * Counts the hops named in an `X-Forwarded-For` header.
+ * Counts the entries in an `X-Forwarded-For` header.
+ *
+ * Entries, not proxies: proxies append, so a caller who sends the header gets
+ * counted alongside them. Only a request that sent none reads the real chain.
  *
  * Read off the raw header rather than `req.ips`, which is empty until the app
- * already trusts a proxy — and the whole point is to check that setting from
- * the outside, including when it is wrong or unset.
+ * already trusts a proxy — the setting cannot be used to check itself.
+ *
+ * Counted the way Express will parse it, splitting on the comma alone: a
+ * proxy may write `a,b` with no space, and disagreeing with the parser by one
+ * would put the same error into the setting this is used to choose.
  */
-export const proxyHopsSeen = (forwardedFor: string | undefined): number =>
+export const xffEntryCount = (forwardedFor: string | undefined): number =>
   forwardedFor
     ? forwardedFor.split(',').filter(part => part.trim().length > 0).length
     : 0
@@ -140,10 +146,7 @@ export const getHealth = async (
     environment: env.NODE_ENV,
     version: APP_VERSION,
     uptime: process.uptime(),
-    proxy: {
-      seen: proxyHopsSeen(forwardedFor),
-      trusted: env.TRUST_PROXY_HOPS,
-    },
+    proxy: { xffEntries: xffEntryCount(forwardedFor) },
     components,
   }
 }

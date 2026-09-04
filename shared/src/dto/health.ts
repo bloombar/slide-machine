@@ -40,15 +40,21 @@ export interface HealthResponse {
   /** Server process uptime in seconds. */
   uptime: number
   /**
-   * How the request reached us, so `TRUST_PROXY_HOPS` can be checked against
-   * reality rather than assumed.
+   * How many entries this request's `X-Forwarded-For` carried on arrival, so
+   * `TRUST_PROXY_HOPS` can be measured against reality rather than assumed.
    *
-   * `seen` counts the entries in this request's `X-Forwarded-For`; `trusted`
-   * is what the app is configured to believe. When they disagree, every rate
-   * limit keyed on an address is wrong — too low and all callers share one
-   * budget, too high and a caller picks their own. Counts only: no address is
-   * reported, here or anywhere.
+   * Named for what it is rather than for what it is usually used for. It is
+   * **not** a count of proxies: proxies append to the header, so whatever the
+   * caller sent is in here too. It equals the chain length only for a request
+   * that sent no `X-Forwarded-For` of its own, which is a property of how the
+   * measurement is taken and not something this endpoint can check.
+   *
+   * A count, never an address — no address is reported here or anywhere. The
+   * configured hop count is deliberately not reported beside it: an operator
+   * already knows what they set, and publishing it on an endpoint that needs
+   * no credentials would tell everyone else which limiters are currently a
+   * shared bucket, or spoofable.
    */
-  proxy: { seen: number; trusted: number }
+  proxy: { xffEntries: number }
   components: HealthComponents
 }

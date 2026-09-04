@@ -400,18 +400,23 @@ const envSchema = z
      * bypass of every limiter keyed on one — and the ability to spend a
      * chosen victim's budget.
      *
-     * Set it to the real hop count in a proxied deployment (1 behind a single
-     * TLS-terminating ingress). It is exact rather than a boolean because
-     * Express counts from the right of the header: the ingress appends the
-     * real client, so trusting exactly the hops that exist reads that entry
-     * and ignores any prefix the client forged. Too high and a forged prefix
+     * Set it to the real hop count of the deployment. Count the whole chain:
+     * a CDN in front of a platform ingress is two, and this app's production
+     * deployment is exactly that shape. It is exact rather than a boolean
+     * because Express counts from the right of the header, so trusting
+     * exactly the hops that exist reads the last entry a proxy wrote and
+     * ignores any prefix the client forged. Too high and the forged prefix
      * wins; too low and every caller shares one key.
      *
-     * If the count is wrong upwards, limiters get looser and spoofable; if
-     * wrong downwards, they collapse to a single shared budget. Verify it
-     * against the deployment rather than assuming — a sentinel
-     * `X-Forwarded-For` sent to the running app comes back as `req.ip` only
-     * when the count is right.
+     * **Measure it, and measure it from a request that sends no
+     * `X-Forwarded-For` of its own.** `GET /api/health` reports
+     * `proxy.xffEntries` — how many entries were in that header when the
+     * request arrived. Proxies append, so anything the caller sends is
+     * counted too: measuring from a network whose egress inserts the header
+     * reads high, and setting this from that number is the dangerous
+     * direction. Calibrate rather than trust one reading — send
+     * `-H 'X-Forwarded-For: 0.0.0.0'` and the number must rise by exactly
+     * one; if it does, the clean reading was the real chain.
      */
     TRUST_PROXY_HOPS: z.coerce.number().int().nonnegative().default(0),
     /**
