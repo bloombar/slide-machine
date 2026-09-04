@@ -4752,19 +4752,34 @@ describe('DeckViewerPage sign-in gate (AUTH-8)', () => {
 })
 
 describe('DeckViewerPage full-screen slide viewing (PLAY-5)', () => {
-  it('offers the maximize control at the top right of the deck content, above the first slide', async () => {
+  it('offers the maximize control in the deck toolbar header, above the first slide', async () => {
     renderViewer(200)
     await screen.findByText('Shared Lecture')
 
     const enter = screen.getByRole('button', { name: 'Full screen' })
-    // It belongs to the deck's own content, not the nav action group the
-    // view toggle sits in: nothing in the row that holds it is a view-mode
-    // button (PLAY-5).
-    const row = enter.closest('div.flex')
-    expect(row).not.toBeNull()
-    expect(row?.className).toContain('justify-end')
+    // It belongs to DeckPageHeader's own `<header>` — the `trailing` slot,
+    // alongside the deck toolbar pill's own grip — not the nav action
+    // group the view toggle sits in, which portals into a DIFFERENT
+    // `<header>` (AppShell's, via ShellActions). `closest('header')` finds
+    // whichever one actually contains it, so this fails both ways: if the
+    // icon lost its way into some unrelated subtree (the grip check) and
+    // if it went back into the nav action group instead (the toggle
+    // check) — the regression PLAY-5 round 3 flagged the previous version
+    // of this test as unable to catch, since it scoped to a wrapper
+    // containing only the icon itself. jsdom lays out neither `sticky` nor
+    // an absolutely-positioned sibling, so the actual on-screen alignment
+    // with the pill is proven in e2e (full-screen.spec.ts), not here —
+    // this only guards which subtree the control lives in and its DOM
+    // order.
+    const header = enter.closest('header')
+    expect(header).not.toBeNull()
     expect(
-      within(row as HTMLElement).queryByRole('button', {
+      within(header as HTMLElement).getByRole('button', {
+        name: 'Drag to move the toolbar',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      within(header as HTMLElement).queryByRole('button', {
         name: 'Carousel view',
       }),
     ).toBeNull()

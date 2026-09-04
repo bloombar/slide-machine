@@ -287,6 +287,279 @@ test('a spoken "resume" lifts the whiteboard generation pause', async ({
   await expect(page.getByText('4 / 4')).toBeVisible()
 })
 
+/**
+ * PLAY-5: full screen moves the whiteboard toolbar to sit under the deck
+ * pill, left-aligned with it, rather than where it normally lives (left of
+ * the slide, top-aligned). Leaving full screen restores its prior spot
+ * exactly. `fixed` positioning lays out nowhere in jsdom, so — like the
+ * full-screen suite — this is measured against the built app with real
+ * `boundingBox()`es.
+ */
+test('the whiteboard toolbar moves under the deck pill in full screen, and back on exit (PLAY-5)', async ({
+  page,
+}) => {
+  await buildDeck(page)
+
+  const before = (await page.getByTestId('whiteboard-toolbar').boundingBox())!
+
+  await page.getByRole('button', { name: 'Full screen' }).click()
+  await expect(
+    page.getByRole('button', { name: 'Exit full screen' }),
+  ).toBeVisible()
+
+  const pillBox = (await page.getByTestId('deck-toolbar').boundingBox())!
+  const wbBox = (await page.getByTestId('whiteboard-toolbar').boundingBox())!
+
+  // Left-aligned with the pill...
+  expect(Math.abs(wbBox.x - pillBox.x)).toBeLessThanOrEqual(2)
+  // ...and just below it, not left of / top-aligned with the slide, which
+  // is where it sits outside full screen.
+  expect(wbBox.y).toBeGreaterThan(pillBox.y + pillBox.height)
+  expect(wbBox.y - (pillBox.y + pillBox.height)).toBeLessThanOrEqual(20)
+
+  await page.getByRole('button', { name: 'Exit full screen' }).click()
+  const after = (await page.getByTestId('whiteboard-toolbar').boundingBox())!
+  expect(Math.round(after.x)).toBe(Math.round(before.x))
+  expect(Math.round(after.y)).toBe(Math.round(before.y))
+})
+
+/** Drags an element (identified by its own grip button's accessible name)
+ * to a point, as a real pointer would. Mirrors toolbar-pinned.spec.ts's own
+ * helper — duplicated locally rather than shared, since these two specs
+ * intentionally do not import from each other. */
+const dragGripTo = async (
+  page: Page,
+  gripName: string,
+  x: number,
+  y: number,
+) => {
+  const grip = page.getByRole('button', { name: gripName })
+  const box = (await grip.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(x, y, { steps: 10 })
+  await page.mouse.up()
+}
+
+/**
+ * PLAY-5, round 2: each toolbar keeps TWO remembered positions per lecture
+ * — one for regular mode, one for full screen — and the two never affect
+ * each other. Exercises both toolbars in one session: drag regular, enter
+ * full screen (lands on the full-screen default, not the regular spot),
+ * drag full screen, leave (regular spot restored untouched), re-enter
+ * (full-screen spot restored) — and a reload proves the regular position
+ * is actually remembered, not merely held in a variable for the session.
+ * `fixed` positioning lays out nowhere in jsdom, so this runs against the
+ * built app with real `boundingBox()`es, like the rest of this suite.
+ */
+test('each toolbar remembers independent regular and full-screen positions, surviving a reload (PLAY-5)', async ({
+  page,
+}) => {
+  await buildDeck(page)
+
+  const pillGrip = 'Drag to move the toolbar'
+  const wbGrip = 'Drag to move the whiteboard toolbar'
+
+  // 1. Drag both toolbars in regular mode.
+  await dragGripTo(page, pillGrip, 200, 420)
+  await dragGripTo(page, wbGrip, 850, 420)
+  const pillRegular = (await page.getByTestId('deck-toolbar').boundingBox())!
+  const wbRegular = (await page
+    .getByTestId('whiteboard-toolbar')
+    .boundingBox())!
+
+  // 2. Enter full screen: both toolbars must land on the FULL-SCREEN
+  // default, not the spot just dragged to in regular mode.
+  await page.getByRole('button', { name: 'Full screen' }).click()
+  await expect(
+    page.getByRole('button', { name: 'Exit full screen' }),
+  ).toBeVisible()
+  const pillFsDefault = (await page.getByTestId('deck-toolbar').boundingBox())!
+  const wbFsDefault = (await page
+    .getByTestId('whiteboard-toolbar')
+    .boundingBox())!
+  expect(
+    Math.abs(pillFsDefault.x - pillRegular.x) +
+      Math.abs(pillFsDefault.y - pillRegular.y),
+  ).toBeGreaterThan(20)
+  expect(
+    Math.abs(wbFsDefault.x - wbRegular.x) +
+      Math.abs(wbFsDefault.y - wbRegular.y),
+  ).toBeGreaterThan(20)
+  // The full-screen default is the pill's own fixed spot, and the
+  // whiteboard toolbar's default is left-aligned just below it (already
+  // covered in detail by the spec above; a loose check here is enough to
+  // confirm this is that default and not some other, unrelated spot).
+  expect(Math.abs(wbFsDefault.x - pillFsDefault.x)).toBeLessThanOrEqual(2)
+
+  // 3. Drag both toolbars while full screen, to spots distinct from every
+  // position measured so far.
+  await dragGripTo(page, pillGrip, 500, 250)
+  await dragGripTo(page, wbGrip, 900, 500)
+  const pillFsDragged = (await page.getByTestId('deck-toolbar').boundingBox())!
+  const wbFsDragged = (await page
+    .getByTestId('whiteboard-toolbar')
+    .boundingBox())!
+
+  // 4. Leave full screen: the regular positions come back UNCHANGED by
+  // anything just done full screen.
+  await page.getByRole('button', { name: 'Exit full screen' }).click()
+  const pillAfterExit = (await page.getByTestId('deck-toolbar').boundingBox())!
+  const wbAfterExit = (await page
+    .getByTestId('whiteboard-toolbar')
+    .boundingBox())!
+  expect(Math.round(pillAfterExit.x)).toBe(Math.round(pillRegular.x))
+  expect(Math.round(pillAfterExit.y)).toBe(Math.round(pillRegular.y))
+  expect(Math.round(wbAfterExit.x)).toBe(Math.round(wbRegular.x))
+  expect(Math.round(wbAfterExit.y)).toBe(Math.round(wbRegular.y))
+
+  // 5. Re-enter full screen: back to the full-screen DRAGGED spot, not the
+  // full-screen default and not the regular one.
+  await page.getByRole('button', { name: 'Full screen' }).click()
+  await expect(
+    page.getByRole('button', { name: 'Exit full screen' }),
+  ).toBeVisible()
+  const pillReentered = (await page.getByTestId('deck-toolbar').boundingBox())!
+  const wbReentered = (await page
+    .getByTestId('whiteboard-toolbar')
+    .boundingBox())!
+  expect(Math.round(pillReentered.x)).toBe(Math.round(pillFsDragged.x))
+  expect(Math.round(pillReentered.y)).toBe(Math.round(pillFsDragged.y))
+  expect(Math.round(wbReentered.x)).toBe(Math.round(wbFsDragged.x))
+  expect(Math.round(wbReentered.y)).toBe(Math.round(wbFsDragged.y))
+
+  // 6. The regular position is REMEMBERED, not merely held in a variable
+  // for this session: leave full screen and reload, and it must still be
+  // there (a fresh page load is always in regular mode).
+  await page.getByRole('button', { name: 'Exit full screen' }).click()
+  await page.reload()
+  await expect(page.getByRole('button', { name: pillGrip })).toBeVisible()
+  const pillAfterReload = (await page
+    .getByTestId('deck-toolbar')
+    .boundingBox())!
+  expect(Math.round(pillAfterReload.x)).toBe(Math.round(pillRegular.x))
+  expect(Math.round(pillAfterReload.y)).toBe(Math.round(pillRegular.y))
+})
+
+/**
+ * PLAY-5 round 3: the previous test toggles full screen within one
+ * session, so its steps pass on React state alone — deleting the `:fs`
+ * `writeStored` calls would leave it green, since `fsPos` never has to
+ * survive a reload to satisfy it. This one exercises the `:fs` storage
+ * keys specifically: drag both toolbars full screen, reload (which always
+ * comes back in regular mode — a fresh load never remembers `fullScreen`
+ * itself), and re-enter — the full-screen positions must still be there.
+ */
+test("both toolbars' full-screen positions survive a reload (PLAY-5)", async ({
+  page,
+}) => {
+  await buildDeck(page)
+
+  const pillGrip = 'Drag to move the toolbar'
+  const wbGrip = 'Drag to move the whiteboard toolbar'
+
+  await page.getByRole('button', { name: 'Full screen' }).click()
+  await expect(
+    page.getByRole('button', { name: 'Exit full screen' }),
+  ).toBeVisible()
+
+  await dragGripTo(page, pillGrip, 520, 300)
+  await dragGripTo(page, wbGrip, 850, 550)
+  const pillFsDragged = (await page.getByTestId('deck-toolbar').boundingBox())!
+  const wbFsDragged = (await page
+    .getByTestId('whiteboard-toolbar')
+    .boundingBox())!
+
+  // Leave full screen (a reload while the overlay is up would just reload
+  // into regular mode anyway — leaving first keeps the sequence explicit)
+  // and reload: a fresh page load is always regular mode, by construction
+  // (DeckViewerPage's `fullScreen` state starts false).
+  await page.getByRole('button', { name: 'Exit full screen' }).click()
+  await page.reload()
+  await expect(page.getByRole('button', { name: pillGrip })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Full screen' })).toBeVisible()
+
+  // Re-enter: both toolbars must return to where they were left full
+  // screen, not their full-screen defaults — proving the `:fs` keys were
+  // actually written to (and read back from) storage, not merely held in
+  // memory for the session.
+  await page.getByRole('button', { name: 'Full screen' }).click()
+  await expect(
+    page.getByRole('button', { name: 'Exit full screen' }),
+  ).toBeVisible()
+  const pillReentered = (await page.getByTestId('deck-toolbar').boundingBox())!
+  const wbReentered = (await page
+    .getByTestId('whiteboard-toolbar')
+    .boundingBox())!
+  expect(Math.round(pillReentered.x)).toBe(Math.round(pillFsDragged.x))
+  expect(Math.round(pillReentered.y)).toBe(Math.round(pillFsDragged.y))
+  expect(Math.round(wbReentered.x)).toBe(Math.round(wbFsDragged.x))
+  expect(Math.round(wbReentered.y)).toBe(Math.round(wbFsDragged.y))
+})
+
+/**
+ * PLAY-5 round 3 (investigated, confirmed real): the whiteboard toolbar's
+ * FIRST-EVER full-screen anchor and the deck pill's OWN resize-clamp
+ * correction can land in the very same full-screen toggle. Both
+ * components' `attachPill` ref callbacks fire in one commit, so a
+ * measurement taken there can read the deck pill's stale, pre-correction
+ * box — and, being the toolbar's first anchor, that stale reading would
+ * otherwise be locked in as if it were a real drag, never revisited.
+ * Isolated from the (expected, unfixed) case where the toolbar keeps an
+ * already-anchored spot after a LATER deck-pill drag: this uses a fresh
+ * page mount (whiteboard `fsPos` genuinely null) against a deck pill whose
+ * stored full-screen position already needs clamping to the new viewport.
+ */
+test("the whiteboard toolbar's first full-screen anchor is not lost to the deck pill's own stale-to-clamped correction (PLAY-5)", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 900 })
+  await buildDeck(page)
+
+  const pillGrip = 'Drag to move the toolbar'
+
+  // Drag ONLY the deck pill full screen, on the large viewport, to a spot
+  // that will need an X clamp (not a Y one — see the comment below) once
+  // the viewport shrinks.
+  await page.getByRole('button', { name: 'Full screen' }).click()
+  await expect(
+    page.getByRole('button', { name: 'Exit full screen' }),
+  ).toBeVisible()
+  await dragGripTo(page, pillGrip, 1300, 150)
+  await page.getByRole('button', { name: 'Exit full screen' }).click()
+
+  // A fresh mount: the whiteboard toolbar has never anchored full screen
+  // on this page instance, so its `fsPos` is genuinely null — while the
+  // deck pill's full-screen position loads straight from storage as the
+  // (still large-viewport) point just dragged to.
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Full screen' })).toBeVisible()
+
+  // Shrink the viewport: the deck pill's stored spot now needs its own
+  // clamp correction. The Y coordinate (150) stays comfortably on-screen
+  // either way, so only X needs correcting — leaving room below the pill
+  // for the toolbar, which a Y-clamped pill (pushed to the very bottom of
+  // a short viewport) would not.
+  await page.setViewportSize({ width: 700, height: 500 })
+
+  // Enter full screen for the first time on this fresh mount: the deck
+  // pill's clamp correction and the whiteboard toolbar's first-ever
+  // anchor both fire off this one toggle.
+  await page.getByRole('button', { name: 'Full screen' }).click()
+  await expect(
+    page.getByRole('button', { name: 'Exit full screen' }),
+  ).toBeVisible()
+
+  const pillAfter = (await page.getByTestId('deck-toolbar').boundingBox())!
+  const wbAfter = (await page.getByTestId('whiteboard-toolbar').boundingBox())!
+
+  // Left-aligned with the pill's FINAL, clamped position, not its stale
+  // pre-clamp one.
+  expect(Math.abs(wbAfter.x - pillAfter.x)).toBeLessThanOrEqual(2)
+  expect(wbAfter.y).toBeGreaterThan(pillAfter.y + pillAfter.height)
+  expect(wbAfter.y - (pillAfter.y + pillAfter.height)).toBeLessThanOrEqual(20)
+})
+
 test('opening a slide kebab while drawing exits drawing mode', async ({
   page,
 }) => {

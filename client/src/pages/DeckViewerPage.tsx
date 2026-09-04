@@ -2292,8 +2292,8 @@ export default function DeckViewerPage() {
       {/* View toggle, settings, and share live in the primary nav (header),
           not the floating pill; settings sits after the view buttons, and
           share sits rightmost, to the right of the settings icon. */}
-      {/* Full screen (PLAY-5) is NOT here: its control sits at the top right
-          of the deck's own content, level with the first slide. */}
+      {/* Full screen (PLAY-5) is NOT here: its control is the DeckPageHeader's
+          `trailing` slot, level with the deck toolbar pill. */}
       <ShellActions>
         <ViewModeToggle mode={mode} onChange={setMode} />
         {translationAvailable && view.slides.length > 0 && (
@@ -2331,6 +2331,25 @@ export default function DeckViewerPage() {
       <DeckPageHeader
         deckId={view.deck.id}
         fullScreen={fullScreen}
+        trailing={
+          // The on-slide way into full screen (PLAY-5): a Maximize icon held
+          // in the same horizontal band as the deck toolbar pill, at its
+          // right-hand end — where the eye already is while reading slides.
+          // The keyboard shortcuts (f, Command/Control-Enter) do the same
+          // thing; leaving is the overlay's own "x".
+          view.slides.length > 0 &&
+          !fullScreen && (
+            <Tooltip label={t('deck.fullScreen.enter')} align="end">
+              <button
+                aria-label={t('deck.fullScreen.enter')}
+                onClick={enterFullScreen}
+                className="rounded-md p-2 text-slate-500 hover:text-slate-900"
+              >
+                <Maximize className="h-5 w-5" aria-hidden />
+              </button>
+            </Tooltip>
+          )
+        }
         actions={
           <>
             {ttsEnabled && (
@@ -2494,25 +2513,6 @@ export default function DeckViewerPage() {
         >
           {t('viewer.narrationTranslationFailed')}
         </NotificationPill>
-      )}
-
-      {/* The on-slide way into full screen (PLAY-5): a Maximize icon at the
-          top right of the deck's own content, level with the floating deck
-          toolbar and just above the first slide — where the eye already is
-          while reading slides. The keyboard shortcuts (f, Command/Control-
-          Enter) do the same thing; leaving is the overlay's own "x". */}
-      {view.slides.length > 0 && !fullScreen && (
-        <div className="mb-2 flex justify-end">
-          <Tooltip label={t('deck.fullScreen.enter')} align="end">
-            <button
-              aria-label={t('deck.fullScreen.enter')}
-              onClick={enterFullScreen}
-              className="rounded-md p-2 text-slate-500 hover:text-slate-900"
-            >
-              <Maximize className="h-5 w-5" aria-hidden />
-            </button>
-          </Tooltip>
-        </div>
       )}
 
       {/* Quiet, neutral up/down vote (SOC-1): ▲ up-votes and ▼ down-votes side
