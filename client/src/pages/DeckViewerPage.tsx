@@ -18,6 +18,7 @@ import {
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { Trans, useTranslation } from 'react-i18next'
 import {
+  Maximize,
   Mic,
   Pause,
   Play,
@@ -68,6 +69,7 @@ import { useTimeAgo } from '../hooks/useTimeAgo'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
 import { useSlideTranslation } from '../hooks/useSlideTranslation'
 import { useBracketKeys } from '../hooks/useBracketKeys'
+import { useFullScreenKeys } from '../hooks/useFullScreenKeys'
 import { useSpaceKey } from '../hooks/useSpaceKey'
 import { useUndoRedoKeys } from '../hooks/useUndoRedoKeys'
 import { createSpeechCapture, type PhraseMeta } from '../stt/capture'
@@ -83,6 +85,7 @@ import {
 import SlideView, { type SlideContentPatch } from '../components/SlideView'
 import SlideNavZones from '../components/SlideNavZones'
 import SlideMenu from '../components/SlideMenu'
+import FullScreenStage from '../components/FullScreenStage'
 import { useTtsPlayback, type TtsPlayback } from '../tts/playback'
 import {
   getInterimFlushEnabled,
@@ -242,6 +245,15 @@ export default function DeckViewerPage() {
     setModeState(next)
     writeViewMode(next)
   }
+  // Full-screen slide viewing (PLAY-5): never persisted — "nothing about it
+  // is remembered between visits" — and independent of `mode`, which stays
+  // whatever the user had chosen so it is there again on exit. It only
+  // forces the carousel markup while it is on, via `effectiveMode` below.
+  const [fullScreen, setFullScreen] = useState(false)
+  // What the carousel/list branch below actually renders: full screen has no
+  // use for list view (there is no single slide to scale), so it forces
+  // carousel for as long as it is active without touching `mode` itself.
+  const effectiveMode: ViewMode = fullScreen ? 'carousel' : mode
   // Reading the slides in another language (SHARE-2). The translation is
   // fetched alongside the deck and laid over it at render time — `view.slides`
   // stays the authored text that every edit, narration and save path reads.
@@ -597,8 +609,10 @@ export default function DeckViewerPage() {
   // zones) while the deck is playing skips the TTS to that slide. Held in a ref
   // because the playback controller is created below, from this nav.
   const ttsRef = useRef<TtsPlayback | null>(null)
-  const nav = useSlideNavigation(view?.slides.length ?? 0, mode, index =>
-    ttsRef.current?.skipTo(index),
+  const nav = useSlideNavigation(
+    view?.slides.length ?? 0,
+    effectiveMode,
+    index => ttsRef.current?.skipTo(index),
   )
   const { setCurrent, scrollTo } = nav
   // Always-fresh mirror of the current slide index, so voice commands running
@@ -931,7 +945,9 @@ export default function DeckViewerPage() {
     const layouts = v.template.layouts
     if (layouts.length < 2) return
     const index =
-      mode === 'carousel' ? nav.current : (nav.visibleIndex() ?? nav.current)
+      effectiveMode === 'carousel'
+        ? nav.current
+        : (nav.visibleIndex() ?? nav.current)
     const target = v.slides[index]
     if (!target) return
     const at = layouts.findIndex(l => l.type === target.layoutType)
@@ -943,6 +959,33 @@ export default function DeckViewerPage() {
     () => cycleLayout(-1),
     () => cycleLayout(1),
   )
+  /**
+   * Enters full screen (PLAY-5), carrying the slide the reader is actually
+   * looking at. In list view, `nav.current` only moves on an explicit
+   * navigation (arrow keys, a chevron) — scrolling the list does not touch
+   * it — so a reader who scrolled to slide 7 without navigating there would
+   * otherwise be dropped onto whatever `nav.current` last was (often slide
+   * 1), and leaving full screen would then scroll the list back there too.
+   * `nav.visibleIndex()` is the same fix cycleLayout/activeWhiteboardSlideId/
+   * activePlayIndex already apply for exactly this staleness; syncing
+   * `nav.current` to it here (rather than only reading it) is what also
+   * keeps the list's own scroll position right on the way back out, since
+   * that is driven by `nav.current` too.
+   */
+  const enterFullScreen = () => {
+    if (mode === 'list') {
+      const visible = nav.visibleIndex()
+      if (visible != null && visible !== nav.current) setCurrent(visible)
+    }
+    setFullScreen(true)
+  }
+  // Full-screen toggling (PLAY-5): f/F, Meta/Ctrl+Enter toggle; Escape exits.
+  // Enabled only on this page — full screen is a deck-viewer concept.
+  useFullScreenKeys({
+    active: fullScreen,
+    onToggle: () => (fullScreen ? setFullScreen(false) : enterFullScreen()),
+    onExit: () => setFullScreen(false),
+  })
 
   /** Applies a generation event: new slides append, updates replace —
    * and the view always transitions to the slide that changed. */
@@ -1357,7 +1400,9 @@ export default function DeckViewerPage() {
   })
   /** The slide the deck play button starts from: the active one per mode. */
   const activePlayIndex = (): number =>
-    mode === 'carousel' ? nav.current : (nav.visibleIndex() ?? nav.current)
+    effectiveMode === 'carousel'
+      ? nav.current
+      : (nav.visibleIndex() ?? nav.current)
   /** Whether any narration is speaking — deck playback or a single slide via
    * the kebab's "Speak this slide" — so the toolbar button always reflects
    * (and can pause) what is heard. */
@@ -1460,7 +1505,9 @@ export default function DeckViewerPage() {
    * act on this slide alone (never text or an off-screen slide). */
   const activeWhiteboardSlideId = (): string | undefined => {
     const idx =
-      mode === 'carousel' ? nav.current : (nav.visibleIndex() ?? nav.current)
+      effectiveMode === 'carousel'
+        ? nav.current
+        : (nav.visibleIndex() ?? nav.current)
     return viewRef.current?.slides[idx]?.id
   }
 
@@ -2126,6 +2173,71 @@ export default function DeckViewerPage() {
     }
   }
 
+  /**
+   * The current slide, with everything the carousel view surrounds it with
+   * (prev/next nav zones, its kebab menu, whiteboard drawing) — shared,
+   * unchanged, between the regular carousel and full screen (PLAY-5), so
+   * live generation, slot editing, the slide menu and whiteboard annotation
+   * behave identically in both: this is the one place that markup exists.
+   * Only the slide counter differs between the two call sites (in-flow text
+   * below the carousel; a floating chip over the full-screen stage), so it
+   * is left to each caller rather than folded in here — along with `inset`,
+   * a single prop threaded to SlideNavZones rather than a fork: full screen
+   * passes true so its chevrons draw inside the slide's own edge (there is
+   * nowhere outside it on a 16:9-or-narrower viewport, and the stage stays
+   * the actual largest 16:9 box rather than shrinking to make room —
+   * docs/DECISIONS.md); the in-flow carousel passes nothing, keeping its
+   * existing outside-the-edge chevrons exactly as they were.
+   */
+  const renderCarouselSlide = (inset = false) => (
+    <SlideNavZones
+      hasPrev={nav.hasPrev}
+      hasNext={nav.hasNext}
+      onPrev={nav.goPrev}
+      onNext={nav.goNext}
+      inset={inset}
+    >
+      {/* The displayed slide may carry translated text; every callback
+          below still takes the authored slide, so editing, narration and
+          image work never see a translation. */}
+      <SlideView
+        slide={displaySlide(slide!)}
+        template={view.template}
+        editable={canEdit && !showingTranslation}
+        onEdit={showingTranslation ? undefined : editSlide(slide!.id)}
+        onReplaceImage={replaceSlideImage(slide!.id)}
+        onPickImageCandidate={pickSlideImageCandidate(slide!.id)}
+        onRemoveImage={removeSlideImage(slide!)}
+        imagePending={pendingImages.has(slide!.id)}
+      />
+      <SlideMenu
+        number={nav.current + 1}
+        onSpeak={ttsEnabled ? () => requestSpeakSlide(slide!) : undefined}
+        onChangeLayout={
+          canEdit ? () => setLayoutPickerFor(slide!.id) : undefined
+        }
+        onDuplicate={canEdit ? () => void duplicateSlide(slide!.id) : undefined}
+        onEditTranscript={
+          canEdit ? () => setTranscriptEditorFor(slide!.id) : undefined
+        }
+        onRefine={
+          canEdit && slideRefineEnabled
+            ? () => setRefineSlideFor(slide!.id)
+            : undefined
+        }
+        onPlayOriginalAudio={
+          canEdit && audioSlideIds.has(slide!.id)
+            ? () => void playOriginalAudio(slide!.id)
+            : undefined
+        }
+        onDelete={canEdit ? () => void deleteSlide(slide!.id) : undefined}
+        elevated={whiteboard.tool != null}
+        onOpen={() => whiteboard.setTool(null)}
+      />
+      <DrawingLayer {...drawingLayerProps} />
+    </SlideNavZones>
+  )
+
   return (
     <div
       className="relative mx-auto flex w-full max-w-5xl flex-1 flex-col p-6"
@@ -2180,6 +2292,8 @@ export default function DeckViewerPage() {
       {/* View toggle, settings, and share live in the primary nav (header),
           not the floating pill; settings sits after the view buttons, and
           share sits rightmost, to the right of the settings icon. */}
+      {/* Full screen (PLAY-5) is NOT here: its control sits at the top right
+          of the deck's own content, level with the first slide. */}
       <ShellActions>
         <ViewModeToggle mode={mode} onChange={setMode} />
         {translationAvailable && view.slides.length > 0 && (
@@ -2216,6 +2330,7 @@ export default function DeckViewerPage() {
 
       <DeckPageHeader
         deckId={view.deck.id}
+        fullScreen={fullScreen}
         actions={
           <>
             {ttsEnabled && (
@@ -2325,6 +2440,7 @@ export default function DeckViewerPage() {
           deckId={view.deck.id}
           whiteboard={whiteboard}
           onNewWhiteboardSlide={() => void addWhiteboardSlide()}
+          fullScreen={fullScreen}
         />
       )}
 
@@ -2380,6 +2496,25 @@ export default function DeckViewerPage() {
         </NotificationPill>
       )}
 
+      {/* The on-slide way into full screen (PLAY-5): a Maximize icon at the
+          top right of the deck's own content, level with the floating deck
+          toolbar and just above the first slide — where the eye already is
+          while reading slides. The keyboard shortcuts (f, Command/Control-
+          Enter) do the same thing; leaving is the overlay's own "x". */}
+      {view.slides.length > 0 && !fullScreen && (
+        <div className="mb-2 flex justify-end">
+          <Tooltip label={t('deck.fullScreen.enter')} align="end">
+            <button
+              aria-label={t('deck.fullScreen.enter')}
+              onClick={enterFullScreen}
+              className="rounded-md p-2 text-slate-500 hover:text-slate-900"
+            >
+              <Maximize className="h-5 w-5" aria-hidden />
+            </button>
+          </Tooltip>
+        </div>
+      )}
+
       {/* Quiet, neutral up/down vote (SOC-1): ▲ up-votes and ▼ down-votes side
           by side. In the content flow (right-aligned, under the view toggle),
           so it scrolls with the slides. Shown to signed-in viewers, not the
@@ -2429,65 +2564,32 @@ export default function DeckViewerPage() {
         ) : (
           <p className="text-center text-slate-400">{t('deck.empty.viewer')}</p>
         )
-      ) : mode === 'carousel' ? (
-        <>
-          <div className="w-full flex-1">
-            <SlideNavZones
-              hasPrev={nav.hasPrev}
-              hasNext={nav.hasNext}
-              onPrev={nav.goPrev}
-              onNext={nav.goNext}
-            >
-              {/* The displayed slide may carry translated text; every
-                  callback below still takes the authored slide, so editing,
-                  narration and image work never see a translation. */}
-              <SlideView
-                slide={displaySlide(slide!)}
-                template={view.template}
-                editable={canEdit && !showingTranslation}
-                onEdit={showingTranslation ? undefined : editSlide(slide!.id)}
-                onReplaceImage={replaceSlideImage(slide!.id)}
-                onPickImageCandidate={pickSlideImageCandidate(slide!.id)}
-                onRemoveImage={removeSlideImage(slide!)}
-                imagePending={pendingImages.has(slide!.id)}
-              />
-              <SlideMenu
-                number={nav.current + 1}
-                onSpeak={
-                  ttsEnabled ? () => requestSpeakSlide(slide!) : undefined
-                }
-                onChangeLayout={
-                  canEdit ? () => setLayoutPickerFor(slide!.id) : undefined
-                }
-                onDuplicate={
-                  canEdit ? () => void duplicateSlide(slide!.id) : undefined
-                }
-                onEditTranscript={
-                  canEdit ? () => setTranscriptEditorFor(slide!.id) : undefined
-                }
-                onRefine={
-                  canEdit && slideRefineEnabled
-                    ? () => setRefineSlideFor(slide!.id)
-                    : undefined
-                }
-                onPlayOriginalAudio={
-                  canEdit && audioSlideIds.has(slide!.id)
-                    ? () => void playOriginalAudio(slide!.id)
-                    : undefined
-                }
-                onDelete={
-                  canEdit ? () => void deleteSlide(slide!.id) : undefined
-                }
-                elevated={whiteboard.tool != null}
-                onOpen={() => whiteboard.setTool(null)}
-              />
-              <DrawingLayer {...drawingLayerProps} />
-            </SlideNavZones>
-          </div>
-          <p className="mx-auto mt-4 text-sm text-slate-500">
-            {nav.current + 1} / {view.slides.length}
-          </p>
-        </>
+      ) : effectiveMode === 'carousel' ? (
+        fullScreen ? (
+          // PLAY-5: the letterbox is painted in the template's own
+          // imageBackground — the same fill a letterboxed picture sits on
+          // inside an image slot (slots.tsx) — so the surround belongs to
+          // the design rather than to the app.
+          <FullScreenStage
+            background={themeColors(view.template.theme).imageBackground}
+            onClose={() => setFullScreen(false)}
+          >
+            {renderCarouselSlide(true)}
+            {/* Slide counter: over the stage as a small translucent chip
+                (bottom-centre) rather than in document flow, since full
+                screen has no flow below the stage to put it in. */}
+            <p className="absolute inset-x-0 bottom-4 mx-auto w-fit rounded-full bg-slate-900/70 px-3 py-1 text-xs text-white">
+              {nav.current + 1} / {view.slides.length}
+            </p>
+          </FullScreenStage>
+        ) : (
+          <>
+            <div className="w-full flex-1">{renderCarouselSlide()}</div>
+            <p className="mx-auto mt-4 text-sm text-slate-500">
+              {nav.current + 1} / {view.slides.length}
+            </p>
+          </>
+        )
       ) : (
         <div className="relative w-full">
           <ul className="flex w-full flex-col gap-6">
@@ -2760,7 +2862,24 @@ export default function DeckViewerPage() {
       )}
 
       {canEdit && speaking && (
-        <>
+        // A live session has to keep working full screen (PLAY-5) — the
+        // simulated-speech form, the CAP-3 live caption, and a generation
+        // error are all normal in-flow content with no z-index of their
+        // own, so the full-screen overlay (z-50) would otherwise paint
+        // straight over them. `contents` makes this wrapper invisible to
+        // layout when not full screen (byte-identical to the bare fragment
+        // this replaced); full screen instead pins it at the same chrome
+        // tier as the toolbars (z-[55], docs/DECISIONS.md), bottom-centre
+        // so it never competes with the close control or the slide menu.
+        // jsdom lays out neither `fixed` nor stacking order, so this is
+        // proven in the e2e spec, not a unit test.
+        <div
+          className={
+            fullScreen
+              ? 'fixed inset-x-0 bottom-6 z-[55] mx-auto flex w-full max-w-2xl flex-col items-center gap-2 px-4'
+              : 'contents'
+          }
+        >
           {/* Debug-only: typing phrases instead of speaking them. Hidden unless
               the server sets SIMULATED_SPEECH_ENABLED — real STT is the path
               users take. */}
@@ -2768,7 +2887,7 @@ export default function DeckViewerPage() {
             <form
               onSubmit={onSpeak}
               aria-label={t('deck.liveSession')}
-              className="mt-6 flex w-full gap-2"
+              className={`flex w-full gap-2 ${fullScreen ? '' : 'mt-6'}`}
             >
               <input
                 ref={inputRef}
@@ -2799,11 +2918,14 @@ export default function DeckViewerPage() {
               grows, or clears. */}
           <TranscriptSubtitle text={interim} testId="live-transcript" />
           {speakError && (
-            <p role="alert" className="mt-2 w-full text-sm text-red-600">
+            <p
+              role="alert"
+              className={`w-full text-sm text-red-600 ${fullScreen ? 'text-center' : 'mt-2'}`}
+            >
               {speakError}
             </p>
           )}
-        </>
+        </div>
       )}
     </div>
   )

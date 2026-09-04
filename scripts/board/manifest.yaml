@@ -2126,6 +2126,23 @@
   phase: 3
   status: Backlog
   review: false
+- id: PLAY-5
+  title: Full-screen slide viewing
+  full: "A deck can be viewed full screen: the slides are shown in carousel view
+    (PLAY-1) at the largest proportional scale that fits the browser viewport,
+    centred both vertically and horizontally. Full screen is a way of looking at
+    a lecture, not a separate mode of working on one — it is entered and left
+    without changing anything about the deck, and nothing about it is remembered
+    between visits. Proportional, never cropped or stretched — the slide keeps
+    its 16:9 shape, so one of the two axes is filled exactly and the other has
+    space left over. The leftover space is filled the way a letterboxed
+    picture's is — with the design's own image background colour, the same fill
+    an uncropped picture sits on…"
+  section: §10 Playback, Editing & Sharing
+  family: PLAY
+  phase: 3
+  status: Backlog
+  review: false
 - id: PREP-1
   title: Preflight concept extraction
   full: 'When a project has been seeded (SEED-1/SEED-2), the system can run an
