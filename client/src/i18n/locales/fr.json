@@ -138,9 +138,9 @@
     "legalRegister": "En créant un compte, vous acceptez nos <termsLink>Conditions générales</termsLink> et notre <privacyLink>Politique de confidentialité</privacyLink>.",
     "legalSignIn": "En vous connectant, vous acceptez nos <termsLink>Conditions générales</termsLink> et notre <privacyLink>Politique de confidentialité</privacyLink>.",
     "gate": {
-      "playback": "La lecture nécessite un compte",
+      "playback": "Connectez-vous pour lire le cours",
       "narration": "La narration nécessite un compte",
-      "translation": "La lecture traduite nécessite un compte"
+      "translation": "Connectez-vous pour traduire les diapositives"
     }
   },
   "health": {

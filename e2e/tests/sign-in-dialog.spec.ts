@@ -52,7 +52,9 @@ test('signed-out playback raises the sign-in dialog and returns to the same lect
   // Reaching for the play button signed out raises the dialog instead of
   // playing — it never gets as far as "Pause playback".
   await page.getByRole('button', { name: 'Play deck' }).click()
-  const dialog = page.getByRole('dialog', { name: 'Playback needs an account' })
+  const dialog = page.getByRole('dialog', {
+    name: 'Log in to play back the lecture',
+  })
   await expect(dialog).toBeVisible()
   await expect(
     page.getByRole('button', { name: 'Pause playback' }),
