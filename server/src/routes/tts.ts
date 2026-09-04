@@ -40,6 +40,7 @@ import {
   deckSourceLocale,
   findTtsVoice,
   isLocale,
+  baseLanguage,
   overlaySlideTranslation,
   ttsLanguageTag,
   voiceMatchesLanguage,
@@ -160,6 +161,21 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
   // a server that configured TTS_LANGUAGE=en-GB keeps it).
   const declared = deck.language ?? project?.language
   const languageCode = ttsLanguageTag(target ?? declared ?? env.TTS_LANGUAGE)
+  /**
+   * The language actually spoken, for the ledger (BILL-7).
+   *
+   * It has to follow the same cascade the synthesis above does. `sourceLocale`
+   * does not: `deckSourceLocale` ends at English, while synthesis ends at
+   * `TTS_LANGUAGE`, so on a deployment that set that to anything else a deck
+   * declaring no language was spoken in one language and recorded as another.
+   * The server default is a tag ('fr-FR'), so it is reduced to its base subtag
+   * and only used when that names a language the app actually supports.
+   */
+  const defaultLocale = baseLanguage(env.TTS_LANGUAGE)
+  const spokenLocale =
+    target ??
+    declared ??
+    (isLocale(defaultLocale) ? defaultLocale : sourceLocale)
   // Voice cascade: the lecture's own setting wins, then its project's, then the
   // server default (TTS_DEFAULT_VOICE); an unset default leaves `voice`
   // undefined, so the provider uses its own default voice for the language.
@@ -197,12 +213,11 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
   const attribution = attributionForDeck(acl.ownerId, deck, {
     actorId: req.userId,
     audience: actor === 'audience',
-    // The language actually heard (PLAY-3): the one being read in when the
-    // lecture is translated, otherwise the one it was authored in. Always a
-    // language, unlike the translation side — every playback is in some
-    // language, and recording only the translated ones would leave the
-    // original-language plays as an unlabelled remainder rather than a count.
-    locale: target ?? sourceLocale,
+    // The language actually heard (PLAY-3). Always a language, unlike the
+    // translation side — every playback is in some language, and recording
+    // only the translated ones would leave the original-language plays as an
+    // unlabelled remainder rather than a count.
+    locale: spokenLocale,
   })
   // Translating the narration is translation work, charged to the same owner
   // out of the same two pools as translated reading (BILL-3, SHARE-2).

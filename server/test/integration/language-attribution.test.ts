@@ -299,4 +299,40 @@ describe('work that has no language', () => {
     expect(rows.length).toBeGreaterThan(0)
     expect(rows.every(r => r.locale === null)).toBe(true)
   })
+
+  // The counter-case to the one above: an export that names a language is
+  // language-bearing work, and a blank there would say the opposite. The
+  // dispatcher establishes the usage context but cannot know a locale that
+  // is an argument to the action rather than a fact about the deck.
+  it('records the language when the export names one', async () => {
+    await act(ada, 'export.download', { deckId, format: 'yaml', locale: 'fr' })
+
+    const rows = await CostEventModel.find({
+      metric: 'translationCharacters',
+    }).lean()
+    expect(rows.length).toBeGreaterThan(0)
+    expect(rows.every(r => r.locale === 'fr')).toBe(true)
+  })
+})
+
+describe('the language recorded is the one actually spoken', () => {
+  // `deckSourceLocale` ends at English, but synthesis ends at TTS_LANGUAGE.
+  // On a deployment that set that to anything else, a lecture declaring no
+  // language was spoken in one language and recorded as another — and the
+  // row cannot be recomputed later.
+  it('follows the server default when the lecture declares no language', async () => {
+    const original = env.TTS_LANGUAGE
+    ;(env as { TTS_LANGUAGE: string }).TTS_LANGUAGE = 'fr-FR'
+    try {
+      expect((await speak(byron)).status).toBe(200)
+
+      const rows = await CostEventModel.find({
+        metric: { $regex: '^audienceTts' },
+      }).lean()
+      expect(rows.length).toBeGreaterThan(0)
+      expect(rows.every(r => r.locale === 'fr')).toBe(true)
+    } finally {
+      ;(env as { TTS_LANGUAGE: string }).TTS_LANGUAGE = original
+    }
+  })
 })
