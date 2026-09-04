@@ -415,8 +415,9 @@ decksRouter.post('/decks/:slug/translation', requireAuth, async (req, res) => {
   // about decks and languages but nothing about requests, so the context has
   // to be established here or the row lands with none: charged to the right
   // account, but attributed to the system, on no lecture, in no language.
-  // `audience` is stated rather than inferred because the case this most has
-  // to get right is the student without an account, who has no id to compare.
+  // `audience` is stated rather than inferred: a reader is not the author
+  // merely because they are signed in, and the pool their reading is charged
+  // to has to follow the ACL rather than the presence of a token.
   const attribution = attributionForDeck(acl.ownerId, deck, {
     actorId: req.userId,
     audience: actor === 'audience',

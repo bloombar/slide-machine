@@ -86,6 +86,7 @@ const countingProvider = () => {
 let ada: string
 let adaId: string
 let byron: string
+let curie: string
 let projectId: string
 let deckId: string
 let slug: string
@@ -119,6 +120,8 @@ beforeEach(async () => {
     email: 'ada@example.com',
   }))!._id.toString()
   byron = await registerUser('byron@example.com')
+  // A second reader, so "however many students" below is more than one of them.
+  curie = await registerUser('curie@example.com')
   const project = await act(ada, 'project.create', { title: 'Physics' })
   projectId = project.body.id as string
   const deck = await act(ada, 'deck.create', {
@@ -444,9 +447,13 @@ describe('translation metering', () => {
   })
 
   it('charges one unit per language however many students read it', async () => {
-    await translate(slug, 'fr')
-    await translate(slug, 'fr')
+    // Three readings by two different readers. Both halves matter: charging
+    // per request would make this 3, and charging per distinct reader would
+    // make it 2, so a single reader repeating themselves cannot catch the
+    // second fault on its own.
     await translateAs(byron, slug, 'fr')
+    await translateAs(byron, slug, 'fr')
+    await translateAs(curie, slug, 'fr')
     expect(await spent('audienceLocales')).toBe(1)
   })
 
