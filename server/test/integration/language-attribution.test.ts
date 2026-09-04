@@ -299,4 +299,65 @@ describe('work that has no language', () => {
     expect(rows.length).toBeGreaterThan(0)
     expect(rows.every(r => r.locale === null)).toBe(true)
   })
+
+  // The counter-case to the one above: an export that names a language is
+  // language-bearing work, and a blank there would say the opposite. The
+  // dispatcher establishes the usage context but cannot know a locale that
+  // is an argument to the action rather than a fact about the deck.
+  it('records the language when the export names one', async () => {
+    await act(ada, 'export.download', { deckId, format: 'yaml', locale: 'fr' })
+
+    const rows = await CostEventModel.find({
+      metric: 'translationCharacters',
+    }).lean()
+    expect(rows.length).toBeGreaterThan(0)
+    expect(rows.every(r => r.locale === 'fr')).toBe(true)
+  })
+})
+
+describe('the language recorded is the one actually spoken', () => {
+  /** Narrate one slide with the server default set to `tag`, and report every
+   * language the ledger recorded for it. */
+  const spokenUnder = async (tag: string) => {
+    const original = env.TTS_LANGUAGE
+    ;(env as { TTS_LANGUAGE: string }).TTS_LANGUAGE = tag
+    try {
+      expect((await speak(byron)).status).toBe(200)
+      const rows = await CostEventModel.find({
+        metric: { $regex: '^audienceTts' },
+      }).lean()
+      expect(rows.length).toBeGreaterThan(0)
+      return [...new Set(rows.map(r => r.locale ?? null))]
+    } finally {
+      ;(env as { TTS_LANGUAGE: string }).TTS_LANGUAGE = original
+    }
+  }
+
+  // `deckSourceLocale` ends at English, but synthesis ends at TTS_LANGUAGE.
+  // On a deployment that set that to anything else, a lecture declaring no
+  // language was spoken in one language and recorded as another — and the
+  // row cannot be recomputed later.
+  it('follows the server default when the lecture declares no language', async () => {
+    expect(await spokenUnder('fr-FR')).toEqual(['fr'])
+  })
+
+  // The tag this app itself uses for Mandarin. Its base subtag is 'cmn', which
+  // is not a locale, so reading the subtag alone recorded English narration
+  // that never happened — on the very language the per-language question was
+  // written about.
+  it('reads Mandarin back through the table that produced its tag', async () => {
+    expect(await spokenUnder('cmn-CN')).toEqual(['zh'])
+  })
+
+  // A qualified tag the table does not list still answers by subtag.
+  it('still resolves a regional variant of a language it does have', async () => {
+    expect(await spokenUnder('en-GB')).toEqual(['en'])
+  })
+
+  // Better silent than confidently wrong: the ledger already reads a blank
+  // locale as "this work had no language", which is true here in the only
+  // sense available — none that this app knows.
+  it('records no language rather than the wrong one for a tag it cannot place', async () => {
+    expect(await spokenUnder('pt-BR')).toEqual([null])
+  })
 })

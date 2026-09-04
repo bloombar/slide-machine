@@ -110,14 +110,26 @@ export const entityFromInput = async (
  * `locale` is the language the work is for, and only the language-bearing
  * paths pass one: reading a lecture in translation, and hearing it narrated.
  * Left off, the rows say nothing about language rather than claiming English.
+ *
+ * The options are named one by one rather than spread. Spreading carried
+ * whatever a caller happened to pass straight onto a ledger row, so a field
+ * this function had never heard of would still be written — and a field it
+ * *had* heard of was indistinguishable from one it had not, which is why the
+ * test for `locale` passed against a version that did not declare it.
  */
 export const attributionForDeck = (
   payerId: string,
   deck: { _id: unknown; title?: string; projectId?: unknown },
-  options: { actorId?: string; audience?: boolean; locale?: Locale } = {},
+  {
+    actorId,
+    audience,
+    locale,
+  }: { actorId?: string; audience?: boolean; locale?: Locale } = {},
 ): UsageAttribution => ({
   userId: payerId,
-  ...options,
+  ...(actorId === undefined ? {} : { actorId }),
+  ...(audience === undefined ? {} : { audience }),
+  ...(locale === undefined ? {} : { locale }),
   deckId: String(deck._id),
   deckName: deck.title,
   ...(deck.projectId ? { projectId: String(deck.projectId) } : {}),

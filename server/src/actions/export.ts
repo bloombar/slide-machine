@@ -51,7 +51,11 @@ import {
   type WithGoogle,
 } from './access'
 import { requireExports } from '../billing/meter-hooks'
-import { meterUsage } from '../billing/usage-context'
+import {
+  currentAttribution,
+  meterUsage,
+  runWithUsage,
+} from '../billing/usage-context'
 import { SlideModel } from '../models/slide'
 import { ProjectModel } from '../models/project'
 import { type DeckExportDb, type DeckDb } from '../models/deck'
@@ -126,21 +130,39 @@ export const buildExportDeck = async (
   const project = await ProjectModel.findById(deck.projectId).catch(() => null)
   const source = deckSourceLocale(deck.language, project?.language ?? undefined)
   // Asking for the language the deck is already in is a no-op, not a call.
+  const translate = async (target: Locale) =>
+    translateSlides(
+      deck._id,
+      slideDocs.map(s => ({
+        id: s._id.toString(),
+        title: s.title,
+        body: s.body,
+        bullets: s.bullets,
+        caption: s.caption,
+      })),
+      source,
+      target,
+      await translationBillingFor(deck.ownerId.toString(), 'author'),
+    )
+  /**
+   * The language is added to the surrounding attribution so the ledger row
+   * says which one this was (BILL-7). The dispatcher established the context
+   * but cannot know the locale — it is an argument to this action, not a fact
+   * about the deck — so without this an export translated into French records
+   * a translation with no language, contradicting the rule that a blank locale
+   * means work that had none.
+   *
+   * With no context to extend there is nothing to attribute to, and inventing
+   * one here would be a different change: the call runs as it did before.
+   */
+  const attribution = currentAttribution()
   const translation =
     locale && locale !== source && translationEnabled()
-      ? await translateSlides(
-          deck._id,
-          slideDocs.map(s => ({
-            id: s._id.toString(),
-            title: s.title,
-            body: s.body,
-            bullets: s.bullets,
-            caption: s.caption,
-          })),
-          source,
-          locale,
-          await translationBillingFor(deck.ownerId.toString(), 'author'),
-        )
+      ? attribution
+        ? await runWithUsage({ ...attribution, locale }, () =>
+            translate(locale),
+          )
+        : await translate(locale)
       : {}
   const slides: ExportSlide[] = slideDocs.map(doc => {
     /*
