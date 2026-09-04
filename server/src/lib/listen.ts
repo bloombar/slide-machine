@@ -31,9 +31,23 @@ export const reportListen = (
   error: Error | undefined,
   port: number,
   nodeEnv: string,
+  trustProxyHops = 0,
 ): void => {
   if (!error) {
     console.log(`Slide Machine server listening on port ${port} (${nodeEnv})`)
+    // Said out loud at boot because it cannot be seen from outside and it is
+    // easy to get wrong in a way nothing complains about. Every rate limit is
+    // keyed on `req.ip`, and this decides where that comes from: at 0 behind
+    // a proxy they all share one budget, and above the real chain a caller
+    // picks their own address. The health endpoint reports how many
+    // X-Forwarded-For entries arrive but deliberately not this value, since
+    // it needs no credentials — so the deploy log is where an operator
+    // confirms the two agree.
+    console.log(
+      trustProxyHops > 0
+        ? `Trusting ${trustProxyHops} proxy hop(s) for client addresses (TRUST_PROXY_HOPS)`
+        : 'Trusting no proxy: client addresses are the socket peer. Behind a proxy this makes every rate limit one shared budget — set TRUST_PROXY_HOPS to the real hop count.',
+    )
     return
   }
   const { code } = error as NodeJS.ErrnoException
