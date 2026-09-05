@@ -21,7 +21,7 @@
  * outside it — an earlier version of this file did the latter, and gave up
  * up to 112px of "largest" to buy it back (docs/DECISIONS.md).
  */
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import Portal from './Portal'
@@ -42,7 +42,7 @@ interface Props {
  * that measures the rendered box, are what this actually has to hold up in. */
 export const STAGE_WIDTH_RULE = 'min(100vw, calc(100vh * 16 / 9))'
 
-/** The close control's placement (PLAY-5, round 5): whether it fits in a
+/** The close control's placement (PLAY-5, round 6): whether it fits in a
  * true corner of the letterbox surround, or has to stay parked beside the
  * kebab, is decided by the letterbox bars' actual WIDTH IN PIXELS — not by
  * aspect ratio, which a CSS media query can express but which is the wrong
@@ -54,59 +54,57 @@ export const STAGE_WIDTH_RULE = 'min(100vw, calc(100vh * 16 / 9))'
  * large enough, or promises a corner spot a shorter/narrower window can't
  * actually supply.
  *
- * The exact condition — a bar wide enough to hold a `CORNER_INSET_REM`
- * inset plus the button's own footprint — can't be written as a media
- * query (`vw - f(vh)` isn't an aspect-ratio comparison), so it's read in
- * JS instead: a `resize` listener (plus the initial read) recomputes both
- * bars from `window.innerWidth`/`innerHeight` and picks one of two fixed
- * positions. This is the CONTROL's own sizing only — the STAGE keeps the
- * "no JS measurement, no resize listener" CSS-only sizing the module
- * docstring above describes, because the stage's own rule has no
- * quantity CSS can't express; only this control's threshold does.
+ * Round 5 read the bars off `window.innerWidth`/`innerHeight` and compared
+ * them to a threshold built from a hardcoded `REM_PX = 16`. Both were wrong
+ * in ways that only show up away from the default: `innerWidth` includes a
+ * classic scrollbar the `fixed inset-0` overlay does not get (it is laid
+ * out at `clientWidth`), so a window with a visible scrollbar reports more
+ * room than the overlay actually has; and a page with no root font-size
+ * override still runs at whatever the browser's default is, which is not
+ * always 16px. Both are fixed by measuring the real boxes instead of
+ * inferring them: the overlay and stage elements' own rects give the bars
+ * directly (no scrollbar to mis-subtract), and the close button's own
+ * rendered width already reflects the real root font-size with no
+ * conversion needed — only the corner inset, which is not part of the
+ * button's own box, still needs converting from rem, and that reads the
+ * root element's *actual* computed font-size rather than assuming one.
  */
-const REM_PX = 16 // Tailwind's rem scale — the root font-size this design assumes.
 /** Matches SlideMenu's own kebab inset (`top-3 end-3`), so the corner
  * position sits at the same distance from the edge the kebab does. */
 const CORNER_INSET_REM = 0.75
 export const CORNER_INSET_RULE = `${CORNER_INSET_REM}rem`
-/** The close button's own rendered footprint: `p-2` (0.5rem padding each
- * side) around the `h-4 w-4` (1rem) icon. */
-const BUTTON_SIZE_REM = 2
-/** A bar has to clear the corner inset *and* the button's own size to hold
- * the control there without touching the slide — 0.75rem + 2rem = 2.75rem,
- * i.e. 44px at the root font-size above. Exported so the unit tests (and
- * this file's other constants) derive from the same number rather than
- * repeating "44" as a magic literal in three places. */
-export const CORNER_THRESHOLD_PX = (CORNER_INSET_REM + BUTTON_SIZE_REM) * REM_PX
 /** Parked (non-corner) position: one button-width left of the kebab,
  * tracking the stage edge, so it never overlaps SlideMenu's own end-3
  * corner slot. */
 const PARKED_OFFSET_REM = 3
 export const PARKED_INSET_RULE = `calc((100vw - ${STAGE_WIDTH_RULE}) / 2 + ${PARKED_OFFSET_REM}rem)`
 
-/** The two letterbox bar widths (px) for a given viewport size — half the
- * leftover space on each axis once the largest 16:9 box (the same rule as
- * `STAGE_WIDTH_RULE`) is cut out of it. A pure function of plain numbers,
- * so a unit test can assert it directly without a browser. */
+/** The two letterbox bar widths (px) — half the leftover space on each axis
+ * between the overlay (the full viewport, minus any scrollbar) and the
+ * stage (the largest 16:9 box cut out of it). Takes plain numbers — the
+ * overlay's and stage's own measured rects — rather than measuring anything
+ * itself, so a unit test can assert it directly without a browser or a
+ * ResizeObserver. */
 export const letterboxBars = (
-  viewportWidth: number,
-  viewportHeight: number,
+  overlayWidth: number,
+  overlayHeight: number,
+  stageWidth: number,
+  stageHeight: number,
 ) => ({
-  sideBar:
-    (viewportWidth - Math.min(viewportWidth, (viewportHeight * 16) / 9)) / 2,
-  topBar:
-    (viewportHeight - Math.min(viewportHeight, (viewportWidth * 9) / 16)) / 2,
+  sideBar: (overlayWidth - stageWidth) / 2,
+  topBar: (overlayHeight - stageHeight) / 2,
 })
 
-/** Whether either bar is wide enough to hold the control in the true
- * corner (`CORNER_THRESHOLD_PX`) rather than parked beside the kebab. */
+/** Whether either bar is wide enough to hold the control in the true corner
+ * rather than parked beside the kebab. Takes the threshold as a plain
+ * number too — the component derives it from the button's own measured
+ * footprint, but the boundary itself is just a comparison and is tested as
+ * one, independent of how that number gets produced. */
 export const isCornerPosition = (
-  viewportWidth: number,
-  viewportHeight: number,
-): boolean => {
-  const { sideBar, topBar } = letterboxBars(viewportWidth, viewportHeight)
-  return sideBar >= CORNER_THRESHOLD_PX || topBar >= CORNER_THRESHOLD_PX
-}
+  sideBar: number,
+  topBar: number,
+  thresholdPx: number,
+): boolean => sideBar >= thresholdPx || topBar >= thresholdPx
 
 export default function FullScreenStage({
   background,
@@ -114,22 +112,59 @@ export default function FullScreenStage({
   children,
 }: Props) {
   const { t } = useTranslation()
-  // Read once for the first paint, then again on every resize — the only
-  // way to track a threshold CSS media queries can't express (see
-  // isCornerPosition's own comment). `window` exists whenever this renders
-  // (Portal only mounts client-side, in the browser), so no SSR guard.
-  const [corner, setCorner] = useState(() =>
-    isCornerPosition(window.innerWidth, window.innerHeight),
-  )
-  useEffect(() => {
-    const onResize = () =>
-      setCorner(isCornerPosition(window.innerWidth, window.innerHeight))
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+  const overlayRef = useRef<HTMLDivElement>(null)
+  const stageRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  // Parked is the conservative default — it always fits, tracking the stage
+  // edge rather than claiming a corner that might not be there. It is never
+  // actually painted: useLayoutEffect below measures and corrects it before
+  // the browser's first paint, on every mount (see the effect's own
+  // comment for why a plain useEffect would let this default flash first).
+  const [corner, setCorner] = useState(false)
+  useLayoutEffect(() => {
+    const overlay = overlayRef.current
+    const stage = stageRef.current
+    const button = buttonRef.current
+    if (!overlay || !stage || !button) return
+    const measure = () => {
+      const overlayRect = overlay.getBoundingClientRect()
+      const stageRect = stage.getBoundingClientRect()
+      const buttonRect = button.getBoundingClientRect()
+      // The button's own rect already reflects the real root font-size (its
+      // padding and icon are rem-based too) — only the corner inset still
+      // needs converting from rem, and it reads the root element's actual
+      // computed font-size rather than assuming the Tailwind default.
+      const rootFontSizePx = parseFloat(
+        getComputedStyle(document.documentElement).fontSize,
+      )
+      const thresholdPx = buttonRect.width + CORNER_INSET_REM * rootFontSizePx
+      const { sideBar, topBar } = letterboxBars(
+        overlayRect.width,
+        overlayRect.height,
+        stageRect.width,
+        stageRect.height,
+      )
+      setCorner(isCornerPosition(sideBar, topBar, thresholdPx))
+    }
+    // Measured synchronously here (inside a layout effect, before the
+    // browser paints) rather than waiting on the observer below: a
+    // ResizeObserver's own first notification is queued asynchronously
+    // even for the size an element already has when observation starts, so
+    // relying on it alone would paint the wrong position once on every
+    // mount and correct it a frame later.
+    measure()
+    // The button's own size never changes with `corner` (only the wrapper's
+    // `insetInlineEnd` does, and that is a position, not a size), so
+    // observing it back cannot loop on this state change — it only re-fires
+    // for an actual viewport/overlay resize.
+    const observer = new ResizeObserver(measure)
+    observer.observe(overlay)
+    return () => observer.disconnect()
   }, [])
   return (
     <Portal>
       <div
+        ref={overlayRef}
         className="fixed inset-0 z-50 flex items-center justify-center"
         style={{ backgroundColor: background }}
       >
@@ -139,6 +174,7 @@ export default function FullScreenStage({
             child's own aspect-video ratio — no JS measurement, no resize
             listener. */}
         <div
+          ref={stageRef}
           className="relative"
           data-stage-width={STAGE_WIDTH_RULE}
           style={{ width: STAGE_WIDTH_RULE }}
@@ -171,6 +207,7 @@ export default function FullScreenStage({
               "Full screen" enter button in DeckViewerPage). */}
           <Tooltip label={t('deck.fullScreen.exit')} align="end">
             <button
+              ref={buttonRef}
               aria-label={t('deck.fullScreen.exit')}
               onClick={onClose}
               // Discreet, like the slide's own kebab menu (SlideMenu) rather

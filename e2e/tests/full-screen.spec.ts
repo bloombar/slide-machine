@@ -242,8 +242,15 @@ test('the close control sits in the letterbox, off the slide, on a wider-than-16
     exitBox.x >= slideBox.x + slideBox.width ||
     exitBox.y + exitBox.height <= slideBox.y
   expect(noOverlap).toBe(true)
-  // Still clickable — same proof the default-viewport test uses.
+  // Still clickable — same proof the default-viewport test uses. Guarded
+  // with toHaveCount(0) first: `getByRole('button', { name: 'Full screen' })`
+  // matches "Exit full screen" too (Playwright's accessible-name match is a
+  // substring one), so without the count check this passed whether or not
+  // the overlay actually closed.
   await exit.click()
+  await expect(
+    page.getByRole('button', { name: 'Exit full screen' }),
+  ).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Full screen' })).toBeVisible()
 })
 
@@ -297,8 +304,14 @@ test('the close control sits in the letterbox, off the slide, at 1400x720 — an
     exitBox.x >= slideBox.x + slideBox.width ||
     exitBox.y + exitBox.height <= slideBox.y
   expect(noOverlap).toBe(true)
-  // Still clickable — same proof the other placement tests use.
+  // Still clickable — same proof the other placement tests use. Guarded
+  // with toHaveCount(0) first: `getByRole('button', { name: 'Full screen' })`
+  // matches "Exit full screen" too (a substring match), so without the
+  // count check this passed whether or not the overlay actually closed.
   await exit.click()
+  await expect(
+    page.getByRole('button', { name: 'Exit full screen' }),
+  ).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Full screen' })).toBeVisible()
 })
 
@@ -392,7 +405,14 @@ test('the close control sits in the letterbox, off the slide, on a taller-than-4
     exitBox.x >= slideBox.x + slideBox.width ||
     exitBox.y + exitBox.height <= slideBox.y
   expect(noOverlap).toBe(true)
+  // Still clickable. Guarded with toHaveCount(0) first:
+  // `getByRole('button', { name: 'Full screen' })` matches "Exit full
+  // screen" too (a substring match), so without the count check this
+  // passed whether or not the overlay actually closed.
   await exit.click()
+  await expect(
+    page.getByRole('button', { name: 'Exit full screen' }),
+  ).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Full screen' })).toBeVisible()
 })
 
