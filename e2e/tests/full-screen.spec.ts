@@ -196,6 +196,58 @@ test('the maximize icon aligns with the deck toolbar pill (PLAY-5)', async ({
 })
 
 /**
+ * Regression: the close control is anchored to the overlay (the full
+ * viewport), not the stage, so on any viewport wider than 16:9 it lands in
+ * the letterbox surround rather than over the slide's own content — a
+ * discreet corner control, not a white square superimposed on the design.
+ * The suite's default viewport (1280x720) is exactly 16:9, where the stage
+ * fills the viewport and this can't be told apart from "anchored to the
+ * stage" — a wider viewport is required to tell the two apart.
+ */
+test('the close control sits in the letterbox, off the slide, on a wider-than-16:9 viewport', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 720 })
+  const project = `FullScreenProj-wide-${Date.now()}`
+  await page.goto('/register')
+  await page.getByLabel('Display name').fill('Full Screen Tester')
+  await page
+    .getByLabel('Email')
+    .fill(`fullscreen-wide-${Date.now()}@example.com`)
+  await page.getByLabel('Password').fill('sturdy-passw0rd')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await createProject(page, project)
+  await page
+    .getByRole('button', { name: `Start a new lecture in ${project}` })
+    .click()
+  await expect(page).toHaveURL(/\/d\//)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
+
+  await page
+    .getByLabel('Spoken phrase')
+    .fill('Watermelons are warm season fruits')
+  await page.getByRole('button', { name: 'Speak' }).click()
+  await expect(page.getByTestId('slide')).toBeVisible()
+  await page.getByRole('button', { name: 'Live session' }).click()
+
+  await page.keyboard.press('f')
+  const exit = page.getByRole('button', { name: 'Exit full screen' })
+  await expect(exit).toBeVisible()
+
+  const exitBox = (await exit.boundingBox())!
+  const slideBox = (await page.getByTestId('slide').boundingBox())!
+  // No overlap on either axis: the control's box is entirely to the right
+  // of, or entirely above, the slide's box.
+  const noOverlap =
+    exitBox.x >= slideBox.x + slideBox.width ||
+    exitBox.y + exitBox.height <= slideBox.y
+  expect(noOverlap).toBe(true)
+  // Still clickable — same proof the default-viewport test uses.
+  await exit.click()
+  await expect(page.getByRole('button', { name: 'Full screen' })).toBeVisible()
+})
+
+/**
  * Regression (PLAY-5 round 3): "f" and Cmd/Ctrl-Enter toggle full screen
  * from `window`, with no drag guard of their own — the deck pill's drag
  * threshold is what makes dragging vs. clicking safe, not anything in

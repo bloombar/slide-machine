@@ -42,6 +42,23 @@ interface Props {
  * that measures the rendered box, are what this actually has to hold up in. */
 export const STAGE_WIDTH_RULE = 'min(100vw, calc(100vh * 16 / 9))'
 
+/** The close control's inset from the viewport's corner. It has to collapse
+ * as the side letterbox grows rather than sit at a fixed distance: at 16:9
+ * the stage fills the viewport exactly, so a control parked in the bare
+ * corner would land on top of the slide's own kebab menu (SlideMenu, `top-3
+ * end-3`, z-30) and swallow its clicks. Once the side bar reaches 2.25rem
+ * (one button-width) the corner is clear of the stage, and the control
+ * settles into the true corner of the grayed-out surround instead.
+ * `(100vw - 100vh * 16 / 9) / 2` is the width of one side letterbox bar (0 or
+ * negative when the viewport is 16:9-or-narrower, where the stage fills the
+ * full width); both `max(0px, …)` clamps keep the formula from going
+ * negative on either side of that. Exported (and mirrored onto a
+ * `data-close-inset` attribute below) for the same reason as
+ * STAGE_WIDTH_RULE: jsdom's style setter drops `calc()`/`max()` it can't
+ * parse, so a unit test has to read the rule back off the data attribute. */
+export const CLOSE_INSET_RULE =
+  'calc(0.75rem + max(0px, 2.25rem - max(0px, (100vw - 100vh * 16 / 9) / 2)))'
+
 export default function FullScreenStage({
   background,
   onClose,
@@ -65,33 +82,39 @@ export default function FullScreenStage({
           style={{ width: STAGE_WIDTH_RULE }}
         >
           {children}
-          {/* The `absolute` positioning has to land on a wrapper around the
-              Tooltip, not on the button itself: Tooltip's own root span is
-              `relative`, so an absolutely-positioned button inside it would
-              anchor to that span instead of the stage — and the span, left
-              in normal flow, would add its own height to the stage besides
-              (this is exactly the image slot's own hover-cluster shape in
-              slots.tsx, for the same reason). */}
-          {/* Parked one button-width left of the slide's own kebab menu
-              (SlideMenu, `top-3 end-3`), and above it: at 16:9 the stage
-              fills the viewport exactly, so a close control in the very
-              corner would sit under the kebab and swallow its own clicks.
-              z-40 clears the kebab's raised z-30. */}
-          <div className="absolute top-3 end-12 z-40">
-            <Tooltip label={t('deck.fullScreen.exit')}>
-              <button
-                aria-label={t('deck.fullScreen.exit')}
-                onClick={onClose}
-                // Drawn like the image slot's Remove button (slots.tsx),
-                // minus its red hover: this reverts a view rather than
-                // deleting anything, so the hover stays neutral. Always
-                // visible — a hover-gated control has no touch equivalent.
-                className="rounded-md bg-white/90 p-1.5 text-slate-700 shadow hover:bg-white"
-              >
-                <X className="h-4 w-4" aria-hidden />
-              </button>
-            </Tooltip>
-          </div>
+        </div>
+        {/* The `absolute` positioning has to land on a wrapper around the
+            Tooltip, not on the button itself: Tooltip's own root span is
+            `relative`, so an absolutely-positioned button inside it would
+            anchor to that span instead of the overlay — and the span, left
+            in normal flow, would add its own height besides (this is
+            exactly the image slot's own hover-cluster shape in slots.tsx,
+            for the same reason). Anchored to the overlay root — not the
+            stage — so on any viewport wider or taller than 16:9 it sits in
+            the letterbox surround rather than over the slide's own content;
+            the overlay's `fixed inset-0` makes it the positioning context
+            here just as it would for the stage. z-40 clears the kebab's
+            raised z-30. */}
+        <div
+          className="absolute top-3 z-40"
+          data-close-inset={CLOSE_INSET_RULE}
+          style={{ insetInlineEnd: CLOSE_INSET_RULE }}
+        >
+          <Tooltip label={t('deck.fullScreen.exit')}>
+            <button
+              aria-label={t('deck.fullScreen.exit')}
+              onClick={onClose}
+              // Discreet, like the slide's own kebab menu (SlideMenu) rather
+              // than a high-contrast white square: the letterbox it now
+              // sits in, like the slide content the kebab already sits
+              // over, is the template's own colour and can be light or
+              // dark. Always visible — a hover-gated control has no touch
+              // equivalent.
+              className="rounded-full bg-black/30 p-2 text-white hover:bg-black/50"
+            >
+              <X className="h-4 w-4" aria-hidden />
+            </button>
+          </Tooltip>
         </div>
       </div>
     </Portal>
