@@ -6,14 +6,45 @@
  * SlideNavZones' own `inset` prop and docs/DECISIONS.md) — paints the
  * letterbox in the passed background colour, and its close control works.
  */
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { render, screen, cleanup, act } from '@testing-library/react'
 import FullScreenStage, {
   STAGE_WIDTH_RULE,
-  CLOSE_INSET_RULE,
+  CORNER_THRESHOLD_PX,
+  letterboxBars,
+  isCornerPosition,
 } from './FullScreenStage'
 
+/** Sets the jsdom window to a given size and fires the resize event
+ * FullScreenStage listens for, the same way a real browser would after a
+ * user drags the window's edge. */
+const resizeTo = (width: number, height: number) => {
+  Object.defineProperty(window, 'innerWidth', {
+    configurable: true,
+    value: width,
+  })
+  Object.defineProperty(window, 'innerHeight', {
+    configurable: true,
+    value: height,
+  })
+  // The resize listener sets state outside any event React itself
+  // dispatched, so `act` is what flushes that update before the next
+  // assertion reads the DOM — without it the attribute below reflects
+  // the PREVIOUS render.
+  act(() => {
+    window.dispatchEvent(new Event('resize'))
+  })
+}
+
 describe('FullScreenStage', () => {
+  // Every test that calls resizeTo mutates the shared jsdom `window` —
+  // restore it to jsdom's own default afterwards so an earlier test's
+  // viewport can't leak into a later one.
+  afterEach(() => {
+    cleanup()
+    resizeTo(1024, 768)
+  })
+
   it('renders its children', () => {
     render(
       <FullScreenStage background="#123456" onClose={vi.fn()}>
@@ -77,21 +108,86 @@ describe('FullScreenStage', () => {
     // in the letterbox surround, which only the overlay root's own corner
     // reaches on a wider/taller-than-16:9 viewport.
     expect(stage.contains(close)).toBe(false)
-    // The default-state inset formula collapses as the side letterbox
-    // grows, unlike a fixed offset — see FullScreenStage's own comment on
-    // CLOSE_INSET_RULE. jsdom drops calc() from element.style and does not
-    // evaluate media queries at all, so the only thing worth asserting here
-    // (rather than comparing the constant with itself, which passes for any
-    // formula) is that the formula actually reduces to the viewport-width
-    // term the comment claims, and that the wrapper carries the class the
-    // wide/tall media-query states live on in index.css (proved for real by
-    // the e2e sweep, not by jsdom).
-    expect(CLOSE_INSET_RULE).toBe(
-      'calc((100vw - min(100vw, calc(100vh * 16 / 9))) / 2 + 3rem)',
-    )
-    const wrapper = close.closest('[data-close-inset]') as HTMLElement
-    expect(wrapper).toHaveAttribute('data-close-inset', CLOSE_INSET_RULE)
-    expect(wrapper).toHaveClass('fullscreen-close')
+  })
+
+  // PLAY-5 round 5: the corner/parked step is keyed to the letterbox bars'
+  // actual pixel width, not aspect ratio — a real geometric quantity a
+  // plain function can be tested against directly, unlike the CSS
+  // media-query rule it replaced (jsdom neither parses `calc()` in
+  // `element.style` nor evaluates media queries, so those old assertions
+  // proved a formula equalled a copy of itself and nothing else).
+  describe('letterboxBars / isCornerPosition', () => {
+    it('computes zero bars at exactly 16:9 (nothing to spare on either axis)', () => {
+      expect(letterboxBars(1280, 720)).toEqual({ sideBar: 0, topBar: 0 })
+      expect(isCornerPosition(1280, 720)).toBe(false)
+    })
+
+    it('is a corner at 2152x1080 — a ratio (1.99) most thresholds would call "not wide", but a 116px side bar', () => {
+      const { sideBar } = letterboxBars(2152, 1080)
+      expect(sideBar).toBeCloseTo(116, 0)
+      expect(isCornerPosition(2152, 1080)).toBe(true)
+    })
+
+    it('is a corner at 1400x720 too — a 60px side bar, still an ordinary window, still clears the 44px threshold', () => {
+      const { sideBar } = letterboxBars(1400, 720)
+      expect(sideBar).toBeCloseTo(60, 0)
+      expect(isCornerPosition(1400, 720)).toBe(true)
+    })
+
+    it('stays parked at 1350x720 — a 35px side bar is short of the threshold', () => {
+      const { sideBar } = letterboxBars(1350, 720)
+      expect(sideBar).toBeCloseTo(35, 0)
+      expect(isCornerPosition(1350, 720)).toBe(false)
+    })
+
+    it('sits right at the boundary either side of CORNER_THRESHOLD_PX', () => {
+      // Solve vw for a side bar of exactly the threshold at a fixed height,
+      // then nudge it a pixel either way.
+      const vh = 720
+      const boundaryVw = vh * (16 / 9) + 2 * CORNER_THRESHOLD_PX
+      expect(isCornerPosition(boundaryVw - 1, vh)).toBe(false)
+      expect(isCornerPosition(boundaryVw + 1, vh)).toBe(true)
+    })
+  })
+
+  describe('resize updates the close control’s position', () => {
+    it('parks the control (not the corner) at 1350x720, where the side bar (35px) is short of the threshold', () => {
+      resizeTo(1350, 720)
+      render(
+        <FullScreenStage background="#123456" onClose={vi.fn()}>
+          <div>slide</div>
+        </FullScreenStage>,
+      )
+      const close = screen.getByRole('button', { name: /full screen/i })
+      const wrapper = close.closest('[data-close-position]') as HTMLElement
+      expect(wrapper).toHaveAttribute('data-close-position', 'parked')
+    })
+
+    it('moves the control to the true corner on resize to 1400x720, where the side bar (60px) clears the threshold', () => {
+      resizeTo(1350, 720)
+      render(
+        <FullScreenStage background="#123456" onClose={vi.fn()}>
+          <div>slide</div>
+        </FullScreenStage>,
+      )
+      const close = screen.getByRole('button', { name: /full screen/i })
+      const wrapper = close.closest('[data-close-position]') as HTMLElement
+      expect(wrapper).toHaveAttribute('data-close-position', 'parked')
+      resizeTo(1400, 720)
+      expect(wrapper).toHaveAttribute('data-close-position', 'corner')
+    })
+
+    it('reads the viewport already current at mount, not just on a later resize', () => {
+      resizeTo(2152, 1080)
+      render(
+        <FullScreenStage background="#123456" onClose={vi.fn()}>
+          <div>slide</div>
+        </FullScreenStage>,
+      )
+      const close = screen.getByRole('button', { name: /full screen/i })
+      const wrapper = close.closest('[data-close-position]') as HTMLElement
+      expect(wrapper).toHaveAttribute('data-close-position', 'corner')
+    })
   })
 
   it('renders the close control as a discreet pill, not a high-contrast square', () => {

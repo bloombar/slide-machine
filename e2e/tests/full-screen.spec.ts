@@ -248,6 +248,61 @@ test('the close control sits in the letterbox, off the slide, on a wider-than-16
 })
 
 /**
+ * Regression (PLAY-5 round 5): the corner/parked step used to be keyed to
+ * aspect ratio (a `min-aspect-ratio: 2/1` media query), not to the actual
+ * pixel width of the letterbox bar the control has to fit in — and those
+ * two disagree at ordinary window sizes. 1400x720 has ratio 1.94, below
+ * any 2/1-ish threshold, but a 60px side bar — comfortably more than the
+ * 44px (0.75rem inset + 2rem button) the control needs — so a ratio rule
+ * left it parked ON the slide here even though the screen plainly was
+ * "large enough" (the user's own phrasing for this feature). This test
+ * fails against the ratio-keyed version (round 4, `6d1399b3`) and passes
+ * once the corner/parked step reads the bar width itself.
+ */
+test('the close control sits in the letterbox, off the slide, at 1400x720 — an ordinary window a ratio threshold would still call "parked"', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 720 })
+  const project = `FullScreenProj-roomy-${Date.now()}`
+  await page.goto('/register')
+  await page.getByLabel('Display name').fill('Full Screen Tester')
+  await page
+    .getByLabel('Email')
+    .fill(`fullscreen-roomy-${Date.now()}@example.com`)
+  await page.getByLabel('Password').fill('sturdy-passw0rd')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await createProject(page, project)
+  await page
+    .getByRole('button', { name: `Start a new lecture in ${project}` })
+    .click()
+  await expect(page).toHaveURL(/\/d\//)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
+
+  await page
+    .getByLabel('Spoken phrase')
+    .fill('Watermelons are warm season fruits')
+  await page.getByRole('button', { name: 'Speak' }).click()
+  await expect(page.getByTestId('slide')).toBeVisible()
+  await page.getByRole('button', { name: 'Live session' }).click()
+
+  await page.keyboard.press('f')
+  const exit = page.getByRole('button', { name: 'Exit full screen' })
+  await expect(exit).toBeVisible()
+
+  const exitBox = (await exit.boundingBox())!
+  const slideBox = (await page.getByTestId('slide').boundingBox())!
+  // No overlap on either axis: the control's box is entirely to the right
+  // of, or entirely above, the slide's box.
+  const noOverlap =
+    exitBox.x >= slideBox.x + slideBox.width ||
+    exitBox.y + exitBox.height <= slideBox.y
+  expect(noOverlap).toBe(true)
+  // Still clickable — same proof the other placement tests use.
+  await exit.click()
+  await expect(page.getByRole('button', { name: 'Full screen' })).toBeVisible()
+})
+
+/**
  * Regression (PLAY-5 round 4): the close control's inset used to be a
  * single formula that shrank as the side letterbox grew while the kebab's
  * own inset grew with it — the two are on opposite sides of each other, so

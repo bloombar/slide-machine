@@ -21,7 +21,7 @@
  * outside it — an earlier version of this file did the latter, and gave up
  * up to 112px of "largest" to buy it back (docs/DECISIONS.md).
  */
-import { type ReactNode } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import Portal from './Portal'
@@ -42,35 +42,71 @@ interface Props {
  * that measures the rendered box, are what this actually has to hold up in. */
 export const STAGE_WIDTH_RULE = 'min(100vw, calc(100vh * 16 / 9))'
 
-/** The close control's inset from the viewport's corner. A single formula
- * cannot hold across every aspect ratio: the "beside the kebab" position
- * (mid aspect ratios, where the side letterbox is too thin for a corner
- * control of its own) and the "true corner" position (wide or tall, where
- * the letterbox is thick enough to hold it) sit on OPPOSITE sides of the
- * kebab — sliding continuously between them means crossing straight over
- * it, which is exactly the collision this exists to avoid. So this is a
- * step, not a slide: three CSS states (`.fullscreen-close` in index.css),
- * chosen by `min-`/`max-aspect-ratio` media queries rather than an inline
- * `style` calc (an inline style can't be overridden by a class, so even the
- * default state has to be a class).
+/** The close control's placement (PLAY-5, round 5): whether it fits in a
+ * true corner of the letterbox surround, or has to stay parked beside the
+ * kebab, is decided by the letterbox bars' actual WIDTH IN PIXELS — not by
+ * aspect ratio, which a CSS media query can express but which is the wrong
+ * quantity: a 2152x1080 window has a ratio (1.99) just under any sensible
+ * "wide" threshold, but its side bars are 116px wide, far more than the
+ * control needs. Aspect ratio and bar width only agree with each other at
+ * one height; at every other height they disagree, and a ratio threshold
+ * either strands the control on the slide when the screen genuinely is
+ * large enough, or promises a corner spot a shorter/narrower window can't
+ * actually supply.
  *
- * 1. Default (roughly 4:3–2:1): one button-width left of the kebab,
- *    tracking the stage edge — `(100vw - min(100vw, 100vh*16/9)) / 2 + 3rem`
- *    (half the leftover width, i.e. one side bar, plus 3rem), which reduces
- *    to the old fixed `end-12` at exactly 16:9.
- * 2. Wide (`min-aspect-ratio: 2/1`): the true corner, `end-3` — at 2:1 each
- *    side bar is 0.111 × height (≥79px at 720 tall), comfortably clear of
- *    both the slide and the kebab.
- * 3. Tall (`max-aspect-ratio: 4/3`): also the true corner, `end-3` — it
- *    sits in the top letterbox, above the slide, and the kebab is below it.
- *
- * This constant is the default-state formula, mirrored onto a
- * `data-close-inset` attribute for a unit test the same way STAGE_WIDTH_RULE
- * is (jsdom drops `calc()` it can't parse); the wide/tall states only exist
- * in the built CSS and are proved by the e2e sweep instead (jsdom does not
- * evaluate media queries either). */
-export const CLOSE_INSET_RULE =
-  'calc((100vw - min(100vw, calc(100vh * 16 / 9))) / 2 + 3rem)'
+ * The exact condition — a bar wide enough to hold a `CORNER_INSET_REM`
+ * inset plus the button's own footprint — can't be written as a media
+ * query (`vw - f(vh)` isn't an aspect-ratio comparison), so it's read in
+ * JS instead: a `resize` listener (plus the initial read) recomputes both
+ * bars from `window.innerWidth`/`innerHeight` and picks one of two fixed
+ * positions. This is the CONTROL's own sizing only — the STAGE keeps the
+ * "no JS measurement, no resize listener" CSS-only sizing the module
+ * docstring above describes, because the stage's own rule has no
+ * quantity CSS can't express; only this control's threshold does.
+ */
+const REM_PX = 16 // Tailwind's rem scale — the root font-size this design assumes.
+/** Matches SlideMenu's own kebab inset (`top-3 end-3`), so the corner
+ * position sits at the same distance from the edge the kebab does. */
+const CORNER_INSET_REM = 0.75
+export const CORNER_INSET_RULE = `${CORNER_INSET_REM}rem`
+/** The close button's own rendered footprint: `p-2` (0.5rem padding each
+ * side) around the `h-4 w-4` (1rem) icon. */
+const BUTTON_SIZE_REM = 2
+/** A bar has to clear the corner inset *and* the button's own size to hold
+ * the control there without touching the slide — 0.75rem + 2rem = 2.75rem,
+ * i.e. 44px at the root font-size above. Exported so the unit tests (and
+ * this file's other constants) derive from the same number rather than
+ * repeating "44" as a magic literal in three places. */
+export const CORNER_THRESHOLD_PX = (CORNER_INSET_REM + BUTTON_SIZE_REM) * REM_PX
+/** Parked (non-corner) position: one button-width left of the kebab,
+ * tracking the stage edge, so it never overlaps SlideMenu's own end-3
+ * corner slot. */
+const PARKED_OFFSET_REM = 3
+export const PARKED_INSET_RULE = `calc((100vw - ${STAGE_WIDTH_RULE}) / 2 + ${PARKED_OFFSET_REM}rem)`
+
+/** The two letterbox bar widths (px) for a given viewport size — half the
+ * leftover space on each axis once the largest 16:9 box (the same rule as
+ * `STAGE_WIDTH_RULE`) is cut out of it. A pure function of plain numbers,
+ * so a unit test can assert it directly without a browser. */
+export const letterboxBars = (
+  viewportWidth: number,
+  viewportHeight: number,
+) => ({
+  sideBar:
+    (viewportWidth - Math.min(viewportWidth, (viewportHeight * 16) / 9)) / 2,
+  topBar:
+    (viewportHeight - Math.min(viewportHeight, (viewportWidth * 9) / 16)) / 2,
+})
+
+/** Whether either bar is wide enough to hold the control in the true
+ * corner (`CORNER_THRESHOLD_PX`) rather than parked beside the kebab. */
+export const isCornerPosition = (
+  viewportWidth: number,
+  viewportHeight: number,
+): boolean => {
+  const { sideBar, topBar } = letterboxBars(viewportWidth, viewportHeight)
+  return sideBar >= CORNER_THRESHOLD_PX || topBar >= CORNER_THRESHOLD_PX
+}
 
 export default function FullScreenStage({
   background,
@@ -78,6 +114,19 @@ export default function FullScreenStage({
   children,
 }: Props) {
   const { t } = useTranslation()
+  // Read once for the first paint, then again on every resize — the only
+  // way to track a threshold CSS media queries can't express (see
+  // isCornerPosition's own comment). `window` exists whenever this renders
+  // (Portal only mounts client-side, in the browser), so no SSR guard.
+  const [corner, setCorner] = useState(() =>
+    isCornerPosition(window.innerWidth, window.innerHeight),
+  )
+  useEffect(() => {
+    const onResize = () =>
+      setCorner(isCornerPosition(window.innerWidth, window.innerHeight))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
   return (
     <Portal>
       <div
@@ -109,10 +158,18 @@ export default function FullScreenStage({
             here just as it would for the stage. z-40 clears the kebab's
             raised z-30. */}
         <div
-          className="fullscreen-close absolute top-3 z-40"
-          data-close-inset={CLOSE_INSET_RULE}
+          className="absolute top-3 z-40"
+          data-close-position={corner ? 'corner' : 'parked'}
+          style={{
+            insetInlineEnd: corner ? CORNER_INSET_RULE : PARKED_INSET_RULE,
+          }}
         >
-          <Tooltip label={t('deck.fullScreen.exit')}>
+          {/* align="end": a centred nowrap label at a 12px corner inset
+              overflows the viewport (measured 14-67px clipped across the
+              app's languages) — pin its right edge to the button instead,
+              matching every other right-edge tooltip (e.g. the matching
+              "Full screen" enter button in DeckViewerPage). */}
+          <Tooltip label={t('deck.fullScreen.exit')} align="end">
             <button
               aria-label={t('deck.fullScreen.exit')}
               onClick={onClose}
