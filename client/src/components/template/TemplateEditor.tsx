@@ -18,6 +18,7 @@ import { Redo2, Undo2 } from 'lucide-react'
 import type {
   BoxStyle,
   ContainerSpec,
+  ElementPositions,
   Layout,
   LayoutGuides,
   LayoutNode,
@@ -50,6 +51,25 @@ const renderModeOf = (layouts: Layout[]): TemplateRenderMode =>
   layouts.some(l => Object.keys(l.elementPositions ?? {}).length > 0)
     ? 'positioned'
     : 'components'
+
+/**
+ * Drops any `elementPositions` entry whose slot the layout no longer
+ * declares. A box removed from the tree — deleted, or turned into a
+ * container — takes its `SlotSpec` with it (`deleteBox`, `setContentType`),
+ * but a positioned layout also carries that slot's coordinates in
+ * `elementPositions`. Left behind, the stale key fails server validation as
+ * a position for an undeclared slot (TMPL-4), and the template becomes
+ * unsaveable with no way to fix it from the UI. Called from `setLayout`
+ * itself so any edit that drops a slot is covered, not just today's two.
+ */
+const prunePositions = (layout: Layout): ElementPositions => {
+  const names = new Set(layout.slots.map(s => s.name))
+  return Object.fromEntries(
+    Object.entries(layout.elementPositions ?? {}).filter(([name]) =>
+      names.has(name),
+    ),
+  )
+}
 
 /**
  * A machine name for a box the author just added. Slide content is stored
@@ -298,7 +318,16 @@ export default function TemplateEditor({
 
   const setLayout = (index: number, patch: Partial<Layout>) =>
     setLayouts(prev =>
-      prev.map((l, i) => (i === index ? { ...l, ...patch } : l)),
+      prev.map((l, i) => {
+        if (i !== index) return l
+        const next = { ...l, ...patch }
+        // A patch that changes slots may have dropped one `elementPositions`
+        // still names; reconcile here so nothing that touches slots has to
+        // remember to (TMPL-4, see prunePositions above).
+        return patch.slots
+          ? { ...next, elementPositions: prunePositions(next) }
+          : next
+      }),
     )
 
   const setTree = (tree: LayoutNode) => setLayout(shownIndex, { tree })
