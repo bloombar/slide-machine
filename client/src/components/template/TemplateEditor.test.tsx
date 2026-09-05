@@ -461,6 +461,28 @@ describe('deleting a box from the outline', () => {
     expect(screen.getByLabelText('What is it')).toBeInTheDocument()
   })
 
+  it('drops the elementPositions entry a deleted box left behind', () => {
+    // A positioned template (TMPL-8) carries a slot's coordinates in
+    // elementPositions alongside its SlotSpec. Deleting the box removes the
+    // spec but must also remove the position, or the save is rejected as a
+    // position for a slot the layout no longer declares.
+    const positioned = {
+      ...layout('content', 'Content', ['title', 'body']),
+      elementPositions: {
+        title: { x: 0, y: 0, w: 1, h: 0.2 },
+        body: { x: 0, y: 0.2, w: 1, h: 0.8 },
+      },
+    }
+    const onSave = renderEditor(vi.fn(), {
+      layouts: [positioned, layout('whiteboard', 'Whiteboard', [])],
+    })
+    fireEvent.click(boxDelete('body'))
+    const draft = saved(onSave).layouts[0]!
+    expect(draft.elementPositions).toEqual({
+      title: { x: 0, y: 0, w: 1, h: 0.2 },
+    })
+  })
+
   it('offers nothing to delete on the layout’s own row', () => {
     // The root row is the layout itself; deleting that is the rail's job.
     renderEditor()

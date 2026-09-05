@@ -232,6 +232,44 @@ describe('externalized templates', () => {
     expect(() => loadBuiltinTemplates(dir)).toThrow(/must declare its kind/)
   })
 
+  it('rejects a positioned key naming a slot the layout does not declare', () => {
+    // Client-side regression: TemplateEditor used to drop a box's SlotSpec on
+    // delete without pruning the matching elementPositions entry, leaving a
+    // template unsaveable. The server's job is to keep rejecting that shape
+    // no matter which caller produces it.
+    const dir = mkdtempSync(path.join(tmpdir(), 'tmpl-stale-pos-'))
+    writeFileSync(
+      path.join(dir, 'stale.json'),
+      JSON.stringify({
+        id: 'stale',
+        name: 'Stale',
+        theme: {},
+        layouts: [
+          {
+            type: 'content',
+            label: 'C',
+            purpose: 'p',
+            slots: ['title'],
+            elementPositions: {
+              title: { x: 0, y: 0, w: 1, h: 0.2 },
+              body: { x: 0, y: 0.2, w: 1, h: 0.8 },
+            },
+          },
+          {
+            type: 'whiteboard',
+            label: 'Whiteboard',
+            purpose: 'blank slate',
+            slots: [],
+            elementPositions: {},
+          },
+        ],
+      }),
+    )
+    expect(() => loadBuiltinTemplates(dir)).toThrow(
+      /positioned slot "body" is not declared by this layout/,
+    )
+  })
+
   it('rejects malformed template files loudly', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'tmpl-'))
     writeFileSync(
