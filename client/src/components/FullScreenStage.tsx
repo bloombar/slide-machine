@@ -42,22 +42,35 @@ interface Props {
  * that measures the rendered box, are what this actually has to hold up in. */
 export const STAGE_WIDTH_RULE = 'min(100vw, calc(100vh * 16 / 9))'
 
-/** The close control's inset from the viewport's corner. It has to collapse
- * as the side letterbox grows rather than sit at a fixed distance: at 16:9
- * the stage fills the viewport exactly, so a control parked in the bare
- * corner would land on top of the slide's own kebab menu (SlideMenu, `top-3
- * end-3`, z-30) and swallow its clicks. Once the side bar reaches 2.25rem
- * (one button-width) the corner is clear of the stage, and the control
- * settles into the true corner of the grayed-out surround instead.
- * `(100vw - 100vh * 16 / 9) / 2` is the width of one side letterbox bar (0 or
- * negative when the viewport is 16:9-or-narrower, where the stage fills the
- * full width); both `max(0px, …)` clamps keep the formula from going
- * negative on either side of that. Exported (and mirrored onto a
- * `data-close-inset` attribute below) for the same reason as
- * STAGE_WIDTH_RULE: jsdom's style setter drops `calc()`/`max()` it can't
- * parse, so a unit test has to read the rule back off the data attribute. */
+/** The close control's inset from the viewport's corner. A single formula
+ * cannot hold across every aspect ratio: the "beside the kebab" position
+ * (mid aspect ratios, where the side letterbox is too thin for a corner
+ * control of its own) and the "true corner" position (wide or tall, where
+ * the letterbox is thick enough to hold it) sit on OPPOSITE sides of the
+ * kebab — sliding continuously between them means crossing straight over
+ * it, which is exactly the collision this exists to avoid. So this is a
+ * step, not a slide: three CSS states (`.fullscreen-close` in index.css),
+ * chosen by `min-`/`max-aspect-ratio` media queries rather than an inline
+ * `style` calc (an inline style can't be overridden by a class, so even the
+ * default state has to be a class).
+ *
+ * 1. Default (roughly 4:3–2:1): one button-width left of the kebab,
+ *    tracking the stage edge — `(100vw - min(100vw, 100vh*16/9)) / 2 + 3rem`
+ *    (half the leftover width, i.e. one side bar, plus 3rem), which reduces
+ *    to the old fixed `end-12` at exactly 16:9.
+ * 2. Wide (`min-aspect-ratio: 2/1`): the true corner, `end-3` — at 2:1 each
+ *    side bar is 0.111 × height (≥79px at 720 tall), comfortably clear of
+ *    both the slide and the kebab.
+ * 3. Tall (`max-aspect-ratio: 4/3`): also the true corner, `end-3` — it
+ *    sits in the top letterbox, above the slide, and the kebab is below it.
+ *
+ * This constant is the default-state formula, mirrored onto a
+ * `data-close-inset` attribute for a unit test the same way STAGE_WIDTH_RULE
+ * is (jsdom drops `calc()` it can't parse); the wide/tall states only exist
+ * in the built CSS and are proved by the e2e sweep instead (jsdom does not
+ * evaluate media queries either). */
 export const CLOSE_INSET_RULE =
-  'calc(0.75rem + max(0px, 2.25rem - max(0px, (100vw - 100vh * 16 / 9) / 2)))'
+  'calc((100vw - min(100vw, calc(100vh * 16 / 9))) / 2 + 3rem)'
 
 export default function FullScreenStage({
   background,
@@ -96,9 +109,8 @@ export default function FullScreenStage({
             here just as it would for the stage. z-40 clears the kebab's
             raised z-30. */}
         <div
-          className="absolute top-3 z-40"
+          className="fullscreen-close absolute top-3 z-40"
           data-close-inset={CLOSE_INSET_RULE}
-          style={{ insetInlineEnd: CLOSE_INSET_RULE }}
         >
           <Tooltip label={t('deck.fullScreen.exit')}>
             <button
@@ -109,8 +121,12 @@ export default function FullScreenStage({
               // sits in, like the slide content the kebab already sits
               // over, is the template's own colour and can be light or
               // dark. Always visible — a hover-gated control has no touch
-              // equivalent.
-              className="rounded-full bg-black/30 p-2 text-white hover:bg-black/50"
+              // equivalent. bg-black/50 (not /30): over a light letterbox
+              // (a template's imageBackground, or the app's own default
+              // white) a white glyph on /30 measures ~2.3:1, short of WCAG
+              // 1.4.11's 3:1 for a UI control; /50 lands at ~4.3:1 there
+              // while staying a quiet pill rather than a white square.
+              className="rounded-full bg-black/50 p-2 text-white hover:bg-black/70"
             >
               <X className="h-4 w-4" aria-hidden />
             </button>

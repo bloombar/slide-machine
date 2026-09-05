@@ -111,3 +111,28 @@ span.slot-blank:hover,
 .slide-math .katex-display {
   margin: 0;
 }
+
+/*
+ * PLAY-5: FullScreenStage's close control. Three aspect-ratio states, not
+ * one sliding formula — a "beside the kebab" position (mid ratios, where
+ * the side letterbox is too thin for a corner control) and a "true corner"
+ * position (wide/tall, where it isn't) sit on OPPOSITE sides of the kebab
+ * (SlideMenu, `top-3 end-3`), so any continuous formula between them has to
+ * cross straight over it. A step needs a media query, and an inline `style`
+ * can't be overridden by a class — so even the default state lives here
+ * rather than as inline `calc()` (see FullScreenStage's CLOSE_INSET_RULE
+ * comment for the arithmetic each branch below is doing).
+ */
+.fullscreen-close {
+  inset-inline-end: calc((100vw - min(100vw, calc(100vh * 16 / 9))) / 2 + 3rem);
+}
+@media (min-aspect-ratio: 2/1) {
+  .fullscreen-close {
+    inset-inline-end: 0.75rem;
+  }
+}
+@media (max-aspect-ratio: 4/3) {
+  .fullscreen-close {
+    inset-inline-end: 0.75rem;
+  }
+}

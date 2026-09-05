@@ -77,11 +77,35 @@ describe('FullScreenStage', () => {
     // in the letterbox surround, which only the overlay root's own corner
     // reaches on a wider/taller-than-16:9 viewport.
     expect(stage.contains(close)).toBe(false)
-    // The inset rule collapses as the side letterbox grows, unlike a fixed
-    // offset — see FullScreenStage's own comment on CLOSE_INSET_RULE. jsdom
-    // drops calc()/max() from element.style, so read it off the mirrored
-    // data attribute (same reason as STAGE_WIDTH_RULE above).
+    // The default-state inset formula collapses as the side letterbox
+    // grows, unlike a fixed offset — see FullScreenStage's own comment on
+    // CLOSE_INSET_RULE. jsdom drops calc() from element.style and does not
+    // evaluate media queries at all, so the only thing worth asserting here
+    // (rather than comparing the constant with itself, which passes for any
+    // formula) is that the formula actually reduces to the viewport-width
+    // term the comment claims, and that the wrapper carries the class the
+    // wide/tall media-query states live on in index.css (proved for real by
+    // the e2e sweep, not by jsdom).
+    expect(CLOSE_INSET_RULE).toBe(
+      'calc((100vw - min(100vw, calc(100vh * 16 / 9))) / 2 + 3rem)',
+    )
     const wrapper = close.closest('[data-close-inset]') as HTMLElement
     expect(wrapper).toHaveAttribute('data-close-inset', CLOSE_INSET_RULE)
+    expect(wrapper).toHaveClass('fullscreen-close')
+  })
+
+  it('renders the close control as a discreet pill, not a high-contrast square', () => {
+    render(
+      <FullScreenStage background="#123456" onClose={vi.fn()}>
+        <div>slide</div>
+      </FullScreenStage>,
+    )
+    const close = screen.getByRole('button', { name: /full screen/i })
+    // Round (a pill, matching the slide's own kebab menu) and a dark scrim
+    // dark enough to hold WCAG 1.4.11's 3:1 contrast for the white glyph
+    // over a light letterbox (bg-black/30 measured ~2.3:1 there; /50 is the
+    // fix — see the button's own className comment for the measured ratio).
+    expect(close).toHaveClass('rounded-full')
+    expect(close).toHaveClass('bg-black/50')
   })
 })

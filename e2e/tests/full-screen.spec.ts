@@ -248,6 +248,100 @@ test('the close control sits in the letterbox, off the slide, on a wider-than-16
 })
 
 /**
+ * Regression (PLAY-5 round 4): the close control's inset used to be a
+ * single formula that shrank as the side letterbox grew while the kebab's
+ * own inset grew with it — the two are on opposite sides of each other, so
+ * a viewport in between put them at the SAME x and had the close control,
+ * painted above the kebab at z-40, swallow its clicks. ~1316x720 is where
+ * the two used to land pixel-identical; this is the band the two-endpoint
+ * suite (1280x720, 1600x720) never sampled. Actionability is the proof: a
+ * click that lands on a covered element times out instead of opening the
+ * menu.
+ */
+test('the slide kebab menu still opens in full screen at a width in the former collision band (PLAY-5)', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1316, height: 720 })
+  const project = `FullScreenProj-collision-${Date.now()}`
+  await page.goto('/register')
+  await page.getByLabel('Display name').fill('Full Screen Tester')
+  await page
+    .getByLabel('Email')
+    .fill(`fullscreen-collision-${Date.now()}@example.com`)
+  await page.getByLabel('Password').fill('sturdy-passw0rd')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await createProject(page, project)
+  await page
+    .getByRole('button', { name: `Start a new lecture in ${project}` })
+    .click()
+  await expect(page).toHaveURL(/\/d\//)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
+
+  await page
+    .getByLabel('Spoken phrase')
+    .fill('Watermelons are warm season fruits')
+  await page.getByRole('button', { name: 'Speak' }).click()
+  await expect(page.getByTestId('slide')).toBeVisible()
+  await page.getByRole('button', { name: 'Live session' }).click()
+
+  await page.keyboard.press('f')
+  await expect(
+    page.getByRole('button', { name: 'Exit full screen' }),
+  ).toBeVisible()
+
+  await page.getByRole('button', { name: 'Options for slide 1' }).click()
+  await expect(
+    page.getByRole('menuitem', { name: 'Duplicate slide' }),
+  ).toBeVisible()
+})
+
+/**
+ * Regression: the same "corner" placement as the wide-viewport test above,
+ * for the OTHER letterbox axis — a viewport well short of 4:3, where the
+ * top bar (not the side bars) is what clears the close control of the
+ * slide. Same no-overlap proof, plus clickability.
+ */
+test('the close control sits in the letterbox, off the slide, on a taller-than-4:3 viewport', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  const project = `FullScreenProj-tall-${Date.now()}`
+  await page.goto('/register')
+  await page.getByLabel('Display name').fill('Full Screen Tester')
+  await page
+    .getByLabel('Email')
+    .fill(`fullscreen-tall-${Date.now()}@example.com`)
+  await page.getByLabel('Password').fill('sturdy-passw0rd')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await createProject(page, project)
+  await page
+    .getByRole('button', { name: `Start a new lecture in ${project}` })
+    .click()
+  await expect(page).toHaveURL(/\/d\//)
+  await page.getByRole('button', { name: 'Start lecture' }).click()
+
+  await page
+    .getByLabel('Spoken phrase')
+    .fill('Watermelons are warm season fruits')
+  await page.getByRole('button', { name: 'Speak' }).click()
+  await expect(page.getByTestId('slide')).toBeVisible()
+  await page.getByRole('button', { name: 'Live session' }).click()
+
+  await page.keyboard.press('f')
+  const exit = page.getByRole('button', { name: 'Exit full screen' })
+  await expect(exit).toBeVisible()
+
+  const exitBox = (await exit.boundingBox())!
+  const slideBox = (await page.getByTestId('slide').boundingBox())!
+  const noOverlap =
+    exitBox.x >= slideBox.x + slideBox.width ||
+    exitBox.y + exitBox.height <= slideBox.y
+  expect(noOverlap).toBe(true)
+  await exit.click()
+  await expect(page.getByRole('button', { name: 'Full screen' })).toBeVisible()
+})
+
+/**
  * Regression (PLAY-5 round 3): "f" and Cmd/Ctrl-Enter toggle full screen
  * from `window`, with no drag guard of their own — the deck pill's drag
  * threshold is what makes dragging vs. clicking safe, not anything in
