@@ -1026,7 +1026,7 @@
     "remove": "Remove access",
     "onlyYou": "Only you have access so far.",
     "invited": "Invited",
-    "invitedHint": "Invited — access starts when they sign up with this address.",
+    "invitedHint": "Invited — access starts when they confirm this address.",
     "pendingFor": "Invitation for {name}",
     "withdraw": "Withdraw invitation",
     "verifyFirst": {

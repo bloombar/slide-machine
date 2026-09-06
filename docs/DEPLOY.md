@@ -254,6 +254,14 @@ refused until the address is confirmed. So on a server with no relay, plan to
 confirm addresses another way — an operator can set `emailVerified` directly —
 or accept that everything stays private and shared by name.
 
+Sharing is the one AUTH-3 gate that lifts itself here. Normally it needs the
+sharer's address confirmed (SHARE-3), but with no relay nobody could ever
+confirm one, so the check is skipped and sharing works as it did before that
+rule. Recipients still cannot be *told* — no message goes out — and an
+address that has never been confirmed is still invited rather than granted,
+which on a relay-less server means the operator has to confirm it directly
+before that person gets in.
+
 With `MAIL_PROVIDER=log` (the dev and e2e default) the whole flow works
 end to end: the message, link and all, goes to the server's own output, and
 the link can be pasted into a browser.

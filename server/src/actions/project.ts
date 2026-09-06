@@ -34,7 +34,11 @@ import {
   type ProjectDb,
 } from '../models/project'
 import { UserModel } from '../models/user'
-import { emailVerified, requireVerifiedEmail } from '../auth/verified'
+import {
+  emailVerified,
+  requireVerifiedEmail,
+  requireVerifiedEmailWhenMailable,
+} from '../auth/verified'
 import { canEditAcl, canViewAcl, isAclMember } from '../lib/access'
 import {
   adminViewer,
@@ -437,8 +441,9 @@ export const projectShare = defineAction<
     role: z.enum(['viewer', 'editor']),
   }),
   execute: async (ctx, input, access) => {
-    // Confirm your own address first — see deck.share (SHARE-3).
-    if (ctx.userId) await requireVerifiedEmail(ctx.userId)
+    // Confirm your own address first — see deck.share (SHARE-3). Waived
+    // where the deployment cannot send mail at all.
+    if (ctx.userId) await requireVerifiedEmailWhenMailable(ctx.userId)
     return withProjectSettingsAudit(access, async doc => {
       const email = normalizeEmail(input.email)
       const user = await UserModel.findOne({ email })
@@ -465,12 +470,18 @@ export const projectShare = defineAction<
         // An address that could never claim it — banned, or a deleted
         // account whose row still holds the address — is refused rather
         // than invited into a share it can never reach.
-        if (!user && !(await invitable(email))) {
+        if (!(await invitable(email))) {
           throw new ActionValidationError('project.share', [
             'email: that address cannot be invited',
           ])
         }
-        // Held until the address is proven (SHARE-3).
+        // Held until the address is proven (SHARE-3). Any access the account
+        // already holds is withdrawn with it — see deck.share.
+        if (user) {
+          const userId = user._id.toString()
+          doc.viewers = doc.viewers.filter(id => id !== userId)
+          doc.editors = doc.editors.filter(id => id !== userId)
+        }
         doc.invites = upsertInvite(doc.invites, email, input.role)
       }
       await doc.save()

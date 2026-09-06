@@ -5,7 +5,10 @@
  * arrives from the typed Speak bar or a streamed STT transport.
  */
 import { z } from 'zod'
-import { requireVerifiedEmail } from '../auth/verified'
+import {
+  requireVerifiedEmail,
+  requireVerifiedEmailWhenMailable,
+} from '../auth/verified'
 import type {
   Deck,
   DeckCreateInput,
@@ -1743,8 +1746,9 @@ export const deckSetAccess = defineAction<
     visibility: z.enum(['restricted', 'public']),
   }),
   execute: async (ctx, input, access) => {
-    // Same gate as a project's (AUTH-3): an unconfirmed account may share a
-    // lecture with named people, but not with everyone.
+    // Publishing to everyone needs a confirmed address (AUTH-3), whatever
+    // the deployment can or cannot mail — unlike sharing, this refusal is
+    // about reaching the public, not about sending mail.
     if (input.visibility === 'public' && ctx.userId) {
       await requireVerifiedEmail(ctx.userId)
     }
@@ -1796,7 +1800,9 @@ export const deckShare = defineAction<
     // (SHARE-3). Sharing puts a stranger's address into an outgoing message
     // and grants them access on the strength of an account nobody has
     // proved; the client says so and offers a fresh confirmation link.
-    if (ctx.userId) await requireVerifiedEmail(ctx.userId)
+    // Waived where the deployment cannot send mail at all, since confirming
+    // would then be impossible — see auth/verified.ts.
+    if (ctx.userId) await requireVerifiedEmailWhenMailable(ctx.userId)
     return withDeckSettingsAudit(access, async (deck, acl) => {
       const email = normalizeEmail(input.email)
       const user = await UserModel.findOne({ email })
@@ -1830,13 +1836,21 @@ export const deckShare = defineAction<
         // An address that could never claim it — banned, or a deleted
         // account whose row still holds the address — is refused rather
         // than invited into a share it can never reach.
-        if (!user && !(await invitable(email))) {
+        if (!(await invitable(email))) {
           throw new ActionValidationError('deck.share', [
             'email: that address cannot be invited',
           ])
         }
         // Held until the address is proven (SHARE-3), whether that means
-        // registering with it or confirming an account that never did.
+        // registering with it or confirming an account that never did. Any
+        // access the account already holds is withdrawn with it: legacy data
+        // predating this rule must not leave a grant standing behind an
+        // invitation for the same person.
+        if (user) {
+          const userId = user._id.toString()
+          override.viewers = override.viewers.filter(id => id !== userId)
+          override.editors = override.editors.filter(id => id !== userId)
+        }
         override.invites = upsertInvite(override.invites, email, input.role)
       }
       deck.markModified('accessOverride')

@@ -1026,7 +1026,7 @@
     "remove": "撤销访问权限",
     "onlyYou": "目前只有你拥有访问权限。",
     "invited": "已邀请",
-    "invitedHint": "已邀请 — 对方用此邮箱注册后即可访问。",
+    "invitedHint": "已邀请 — 对方确认此邮箱后即可访问。",
     "pendingFor": "给 {name} 的邀请",
     "withdraw": "撤回邀请",
     "verifyFirst": {

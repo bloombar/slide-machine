@@ -1026,7 +1026,7 @@
     "remove": "Quitar el acceso",
     "onlyYou": "De momento solo tú tienes acceso.",
     "invited": "Invitado",
-    "invitedHint": "Invitado: el acceso comienza cuando se registre con esta dirección.",
+    "invitedHint": "Invitado: el acceso comienza cuando confirme esta dirección.",
     "pendingFor": "Invitación para {name}",
     "withdraw": "Retirar la invitación",
     "verifyFirst": {
