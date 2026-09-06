@@ -47,7 +47,11 @@ const verificationTokenFor = async (email: string): Promise<string> => {
       sent.some(m => m.to === email && m.text.includes('verify-email')),
     ).toBe(true),
   )
-  const mail = sent.filter(m => m.to === email).at(-1)!
+  // The verification message specifically: a share notification to the same
+  // address may well have arrived after it.
+  const mail = sent
+    .filter(m => m.to === email && m.text.includes('verify-email'))
+    .at(-1)!
   return decodeURIComponent(mail.text.match(/verify-email\?token=(\S+)/)![1]!)
 }
 
@@ -187,6 +191,55 @@ describe('sharing with someone who has an account', () => {
     expect(mail).toHaveLength(1)
     expect(mail[0]!.text).toContain(`/app/projects/${projectId}`)
     expect(mail[0]!.text).toContain('You can view and edit this project.')
+  })
+})
+
+describe('sharing with an account that has not confirmed its address', () => {
+  // Registering with an address proves nothing about holding it, so a share
+  // to an unconfirmed account waits exactly as one to a stranger does —
+  // otherwise registering a colleague's address first would collect their
+  // shares (SHARE-3).
+  it('waits rather than granting, and grants on confirmation', async () => {
+    const mary = await registerUnverified('mary@example.com')
+    await act(ada, 'deck.share', {
+      deckId,
+      email: 'mary@example.com',
+      role: 'viewer',
+    })
+    expect((await getDeck(slug, mary)).status).toBe(404)
+    const shares = await act(ada, 'deck.shares', { deckId })
+    expect(shares.body).toEqual([
+      expect.objectContaining({ email: 'mary@example.com', pending: true }),
+    ])
+
+    await request(server)
+      .post('/api/auth/verify-email')
+      .send({ token: await verificationTokenFor('mary@example.com') })
+    expect((await getDeck(slug, mary)).status).toBe(200)
+  })
+
+  it('tells them the confirmation is what opens it', async () => {
+    await registerUnverified('mary@example.com')
+    sent = []
+    await act(ada, 'deck.share', {
+      deckId,
+      email: 'mary@example.com',
+      role: 'viewer',
+    })
+    const mail = shareMail()
+    expect(mail).toHaveLength(1)
+    expect(mail[0]!.text).toContain('has not been confirmed yet')
+    // They do have an account, so they are not told to create one
+    expect(mail[0]!.text).not.toContain('do not have a Slide Machine account')
+  })
+
+  it('still refuses the owner by their own address', async () => {
+    const res = await act(ada, 'deck.share', {
+      deckId,
+      email: 'ada@example.com',
+      role: 'viewer',
+    })
+    expect(res.status).toBe(400)
   })
 })
 

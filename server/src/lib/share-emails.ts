@@ -53,6 +53,9 @@ export interface ShareNotification {
   role: ShareRole
   /** False when the address has no account yet, which changes the ending. */
   hasAccount: boolean
+  /** True when an account exists but has never confirmed this address, so
+   * the share is waiting on that confirmation (SHARE-3). */
+  awaitingConfirmation?: boolean
 }
 
 /** What the role lets them do, said plainly rather than named. */
@@ -73,6 +76,15 @@ export const shareEmailText = (notice: ShareNotification): string =>
     notice.link,
     '',
     roleLine(notice.role, notice.kind),
+    ...(notice.hasAccount && notice.awaitingConfirmation
+      ? [
+          '',
+          'This address has not been confirmed yet. Confirm it from the email',
+          `we sent when the account was created — that is what opens the`,
+          `${notice.kind} to you. You can ask for another confirmation link`,
+          'from your account settings.',
+        ]
+      : []),
     ...(notice.hasAccount
       ? []
       : [
@@ -143,6 +155,7 @@ export const notifyShare = async (
     path: string
     role: ShareRole
     hasAccount: boolean
+    awaitingConfirmation?: boolean
   },
 ): Promise<boolean> => {
   if (!ctx.origin || !mailerAvailable() || !ctx.userId) return false

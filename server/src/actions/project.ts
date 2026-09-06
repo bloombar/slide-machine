@@ -440,13 +440,17 @@ export const projectShare = defineAction<
     withProjectSettingsAudit(access, async doc => {
       const email = normalizeEmail(input.email)
       const user = await UserModel.findOne({ email })
-      if (user) {
+      if (user && user._id.toString() === doc.ownerId.toString()) {
+        throw new ActionValidationError('project.share', [
+          'email: that user owns this project',
+        ])
+      }
+      // An unconfirmed account proves nothing about who holds the address
+      // (SHARE-3), so the share waits as an invitation just as one to a
+      // stranger does — see deck.share.
+      const proven = Boolean(user?.emailVerified)
+      if (user && proven) {
         const userId = user._id.toString()
-        if (userId === doc.ownerId.toString()) {
-          throw new ActionValidationError('project.share', [
-            'email: that user owns this project',
-          ])
-        }
         const list = input.role === 'editor' ? doc.editors : doc.viewers
         if (!list.includes(userId)) list.push(userId)
         // One role per user: granting one revokes the other
@@ -456,15 +460,15 @@ export const projectShare = defineAction<
         // The address may have been invited before it had an account.
         doc.invites = removeInvite(doc.invites, email)
       } else {
-        // An address that could never register — banned, or a deleted
+        // An address that could never claim it — banned, or a deleted
         // account whose row still holds the address — is refused rather
         // than invited into a share it can never reach.
-        if (!(await invitable(email))) {
+        if (!user && !(await invitable(email))) {
           throw new ActionValidationError('project.share', [
             'email: that address cannot be invited',
           ])
         }
-        // No account yet (SHARE-3): held as an invitation until there is one.
+        // Held until the address is proven (SHARE-3).
         doc.invites = upsertInvite(doc.invites, email, input.role)
       }
       await doc.save()
@@ -476,6 +480,7 @@ export const projectShare = defineAction<
         path: `/app/projects/${doc._id.toString()}`,
         role: input.role,
         hasAccount: Boolean(user),
+        awaitingConfirmation: Boolean(user) && !proven,
       })
       return sharesOfAcl(projectAcl(doc))
     }),
