@@ -148,9 +148,12 @@ export interface ProjectShareInput {
   role: ShareRole
 }
 
+/** Revokes a granted share, or withdraws a pending invitation (SHARE-3).
+ * Exactly one of `userId` and `email`. */
 export interface ProjectUnshareInput {
   projectId: string
-  userId: string
+  userId?: string
+  email?: string
   role: ShareRole
 }
 
@@ -167,26 +170,37 @@ export interface ProjectTransferOwnershipInput {
 /** The role a shared user holds on a deck. */
 export type ShareRole = 'viewer' | 'editor'
 
-/** Grants a user (found by account email) view or edit access. */
+/** Grants view or edit access to an account email. An address with no
+ * account yet is held as a pending invitation (SHARE-3) and granted when
+ * someone registers with it. */
 export interface DeckShareInput {
   deckId: string
   email: string
   role: ShareRole
 }
 
-/** Revokes a previously granted share. */
+/** Revokes a previously granted share, or withdraws a pending invitation.
+ * Exactly one of `userId` (a granted share) and `email` (an invitation).
+ * An address holds one invitation whatever its role, so withdrawing by
+ * `email` removes it regardless of the `role` given. */
 export interface DeckUnshareInput {
   deckId: string
-  userId: string
+  userId?: string
+  email?: string
   role: ShareRole
 }
 
-/** One granted share, as listed to the deck owner. */
+/** One granted share or pending invitation, as listed to the deck owner. */
 export interface DeckShare {
+  /** The account holding the share; empty for a pending invitation, which
+   * nobody holds yet. */
   userId: string
   displayName: string
   email: string
   role: ShareRole
+  /** True when the address has no account: the role is waiting for whoever
+   * registers with it (SHARE-3). */
+  pending?: boolean
 }
 
 export interface DeckSharesInput {

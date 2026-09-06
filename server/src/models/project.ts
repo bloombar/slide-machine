@@ -9,6 +9,7 @@ import { LOCALES } from '@slide-machine/shared'
 import type { ResolvedAcl } from '../lib/access'
 import { env } from '../config/env'
 import { softDeletePlugin } from './plugins/soft-delete'
+import { shareInviteSchema, type ShareInviteDb } from './share-invite'
 import { defaultTemplateId } from '../templates/builtin'
 
 export interface ProjectDb extends Omit<
@@ -18,6 +19,9 @@ export interface ProjectDb extends Omit<
   ownerId: Types.ObjectId
   viewers: string[]
   editors: string[]
+  /** Shares offered to addresses with no account yet (SHARE-3); they confer
+   * no access until claimed. Server-only, not in the Project DTO. */
+  invites?: ShareInviteDb[]
   // Last-used quiz generation options, remembered so a new quiz in this
   // project pre-fills them (QUIZ-2). Server-only; not in the Project DTO.
   quizDefaults?: QuizGenerationOptions
@@ -66,6 +70,7 @@ const projectSchema = new Schema<ProjectDb>(
     ttsVoice: { type: String, default: undefined },
     viewers: { type: [String], default: [] },
     editors: { type: [String], default: [] },
+    invites: { type: [shareInviteSchema], default: [] },
     settings: {
       type: { manualSlideAdvance: Boolean, animatedTransitions: Boolean },
       default: undefined,
@@ -92,13 +97,17 @@ export const ProjectModel = defineModel<ProjectDb>('Project', projectSchema)
 
 /** A project's ACL is always its own (never inherited). */
 export const projectAcl = (
-  doc: Pick<ProjectDb, 'ownerId' | 'visibility' | 'viewers' | 'editors'>,
+  doc: Pick<
+    ProjectDb,
+    'ownerId' | 'visibility' | 'viewers' | 'editors' | 'invites'
+  >,
 ): ResolvedAcl => ({
   ownerId: doc.ownerId.toString(),
   visibility: doc.visibility,
   viewers: doc.viewers,
   editors: doc.editors,
   inherited: false,
+  invites: doc.invites ?? [],
 })
 
 export const toProjectDto = (doc: HydratedDocument<ProjectDb>): Project => ({

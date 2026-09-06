@@ -4,6 +4,10 @@
  * server's OAuth start route, which redirects on to Google's consent
  * screen. Renders nothing until Google sign-in is configured
  * (config.googleAuthEnabled), so no dead button ever shows.
+ *
+ * It is the primary way in, so it sits above the email fields on every
+ * form that offers both, and carries the "or" divider below it separating
+ * it from the email alternative.
  */
 import { useTranslation } from 'react-i18next'
 import { config } from '../config'
@@ -44,11 +48,6 @@ export default function GoogleSignInButton({ action }: Props) {
   if (!config.googleAuthEnabled) return null
   return (
     <>
-      <div className="flex items-center gap-3 text-xs text-slate-400">
-        <span className="h-px flex-1 bg-slate-200" />
-        {t('common.or')}
-        <span className="h-px flex-1 bg-slate-200" />
-      </div>
       <a
         href={`${config.apiBaseUrl}/api/auth/google/start`}
         // The OAuth callback always lands on /app, and this navigation takes
@@ -63,6 +62,11 @@ export default function GoogleSignInButton({ action }: Props) {
         <GoogleGlyph />
         {t('auth.continueWithGoogle', { action })}
       </a>
+      <div className="flex items-center gap-3 text-xs text-slate-400">
+        <span className="h-px flex-1 bg-slate-200" />
+        {t('common.or')}
+        <span className="h-px flex-1 bg-slate-200" />
+      </div>
     </>
   )
 }

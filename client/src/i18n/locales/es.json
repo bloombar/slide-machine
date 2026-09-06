@@ -1025,6 +1025,10 @@
     "transfer": "Transferir la propiedad",
     "remove": "Quitar el acceso",
     "onlyYou": "De momento solo tú tienes acceso.",
+    "invited": "Invitado",
+    "invitedHint": "Invitado: el acceso comienza cuando se registre con esta dirección.",
+    "pendingFor": "Invitación para {name}",
+    "withdraw": "Retirar la invitación",
     "inherited": "Heredado del proyecto: cualquier cambio aquí desvincula esta clase.",
     "overridden": "Redefinido para esta clase.",
     "useProject": "Usar los ajustes del proyecto",
@@ -1049,7 +1053,7 @@
       "action": "Transferir"
     },
     "errors": {
-      "noAccount": "No hay ninguna cuenta con ese correo",
+      "share": "No se pudo compartir con esa dirección: inténtalo de nuevo",
       "setAccess": "No se pudo cambiar quién puede verlo: inténtalo de nuevo"
     }
   },

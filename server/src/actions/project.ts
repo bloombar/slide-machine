@@ -58,6 +58,13 @@ import { recordSettingsChange } from '../audit/settings-log'
 import { projectSettingsSnapshot } from '../lib/settings-snapshot'
 import { ttsVoiceIdSchema } from '../lib/tts-voice'
 import { sharesOfAcl } from '../lib/shares'
+import { notifyShare } from '../lib/share-emails'
+import {
+  invitable,
+  normalizeEmail,
+  removeInvite,
+  upsertInvite,
+} from '../lib/share-invites'
 import { templateExists } from '../templates/resolve'
 import type { HydratedDocument, Types } from 'mongoose'
 import { DeckModel, loadDeckAcls } from '../models/deck'
@@ -431,27 +438,45 @@ export const projectShare = defineAction<
   }),
   execute: (ctx, input, access) =>
     withProjectSettingsAudit(access, async doc => {
-      const user = await UserModel.findOne({
-        email: input.email.toLowerCase().trim(),
-      })
-      if (!user) {
-        throw new ActionValidationError('project.share', [
-          'email: no account with that email',
-        ])
+      const email = normalizeEmail(input.email)
+      const user = await UserModel.findOne({ email })
+      if (user) {
+        const userId = user._id.toString()
+        if (userId === doc.ownerId.toString()) {
+          throw new ActionValidationError('project.share', [
+            'email: that user owns this project',
+          ])
+        }
+        const list = input.role === 'editor' ? doc.editors : doc.viewers
+        if (!list.includes(userId)) list.push(userId)
+        // One role per user: granting one revokes the other
+        const other = input.role === 'editor' ? doc.viewers : doc.editors
+        const index = other.indexOf(userId)
+        if (index >= 0) other.splice(index, 1)
+        // The address may have been invited before it had an account.
+        doc.invites = removeInvite(doc.invites, email)
+      } else {
+        // An address that could never register — banned, or a deleted
+        // account whose row still holds the address — is refused rather
+        // than invited into a share it can never reach.
+        if (!(await invitable(email))) {
+          throw new ActionValidationError('project.share', [
+            'email: that address cannot be invited',
+          ])
+        }
+        // No account yet (SHARE-3): held as an invitation until there is one.
+        doc.invites = upsertInvite(doc.invites, email, input.role)
       }
-      const userId = user._id.toString()
-      if (userId === doc.ownerId.toString()) {
-        throw new ActionValidationError('project.share', [
-          'email: that user owns this project',
-        ])
-      }
-      const list = input.role === 'editor' ? doc.editors : doc.viewers
-      if (!list.includes(userId)) list.push(userId)
-      // One role per user: granting one revokes the other
-      const other = input.role === 'editor' ? doc.viewers : doc.editors
-      const index = other.indexOf(userId)
-      if (index >= 0) other.splice(index, 1)
       await doc.save()
+      await notifyShare(ctx, {
+        to: email,
+        recipientName: user?.displayName,
+        kind: 'project',
+        title: doc.title,
+        path: `/app/projects/${doc._id.toString()}`,
+        role: input.role,
+        hasAccount: Boolean(user),
+      })
       return sharesOfAcl(projectAcl(doc))
     }),
 })
@@ -463,18 +488,32 @@ export const projectUnshare = defineAction<
 >({
   name: 'project.unshare',
   access: settingsOf,
-  input: z.object({
-    projectId: z.string().min(1),
-    userId: z.string().min(1),
-    role: z.enum(['viewer', 'editor']),
-  }),
+  input: z
+    .object({
+      projectId: z.string().min(1),
+      userId: z.string().min(1).optional(),
+      email: z.email().optional(),
+      role: z.enum(['viewer', 'editor']),
+    })
+    // A granted share is revoked by user id, a pending invitation by
+    // address (SHARE-3) — one or the other, never both.
+    .refine(
+      input => Boolean(input.userId) !== Boolean(input.email),
+      'give exactly one of userId and email',
+    ),
   execute: (ctx, input, access) =>
     withProjectSettingsAudit(access, async doc => {
-      const list = input.role === 'editor' ? doc.editors : doc.viewers
-      const index = list.indexOf(input.userId)
-      if (index >= 0) {
-        list.splice(index, 1)
-        await doc.save()
+      if (input.email) {
+        const before = (doc.invites ?? []).length
+        doc.invites = removeInvite(doc.invites, input.email)
+        if (doc.invites.length !== before) await doc.save()
+      } else {
+        const list = input.role === 'editor' ? doc.editors : doc.viewers
+        const index = list.indexOf(input.userId!)
+        if (index >= 0) {
+          list.splice(index, 1)
+          await doc.save()
+        }
       }
       return sharesOfAcl(projectAcl(doc))
     }),

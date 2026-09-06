@@ -14,6 +14,7 @@ import type { GoogleProfile } from './google'
 import { hashPassword, verifyPassword } from './password'
 import { consumeAuthToken, revokeAuthTokens } from './one-time-tokens'
 import { sendPasswordResetEmail, sendVerificationEmail } from './emails'
+import { claimShareInvites } from '../lib/share-invites'
 import { signAccessToken } from './tokens'
 import {
   issueRefreshToken,
@@ -26,6 +27,33 @@ export interface AuthResult {
   user: SafeUser
   accessToken: string
   refreshRaw: string
+}
+
+/**
+ * Claims pending share invitations (SHARE-3) for an account whose address is
+ * now **proven** — confirmed by AUTH-3's link, proven by completing a
+ * password reset sent to it, or verified by Google.
+ *
+ * Proof is the point. Anyone can register any address, so claiming at
+ * registration would hand a lecture invited to a colleague's work address to
+ * whoever typed it into the sign-up form first. Every place that decides an
+ * address is proven calls this; miss one and the invitation is stranded
+ * forever, since the invited person has no way to ask again.
+ *
+ * Safe to call when there is nothing to claim, and safe to call twice — it
+ * matches on the invitations still stored. Failures are swallowed: the
+ * account is proven either way, and an unclaimed invitation stays on the
+ * lecture for the next attempt.
+ */
+const claimInvitesQuietly = async (
+  userId: string,
+  email: string,
+): Promise<void> => {
+  try {
+    await claimShareInvites(userId, email)
+  } catch (error) {
+    console.warn('Could not claim pending share invitations:', error)
+  }
 }
 
 const bannedError = () =>
@@ -148,7 +176,12 @@ export const loginWithGoogle = async (
       existing.googleId = profile.googleId
       if (!existing.avatarUrl && profile.picture)
         existing.avatarUrl = profile.picture
+      // Google has verified this address, so an account that never confirmed
+      // it is confirmed by signing in this way — and its invitations are
+      // claimed like any other proven address (AUTH-1, SHARE-3).
+      existing.emailVerified = true
       user = await existing.save()
+      await claimInvitesQuietly(user._id.toString(), user.email)
     } else {
       user = await UserModel.create({
         email,
@@ -158,6 +191,10 @@ export const loginWithGoogle = async (
         emailVerified: true,
         avatarUrl: profile.picture,
       })
+      // Google returns only verified addresses (checked above), so this
+      // account has already proved the one thing an invitation waits for —
+      // no confirmation step to route through (SHARE-3).
+      await claimInvitesQuietly(user._id.toString(), user.email)
     }
   }
 
@@ -216,6 +253,10 @@ export const verifyEmail = async (token: string): Promise<SafeUser> => {
     user.emailVerified = true
     await user.save()
   }
+  // Outside the branch above on purpose: an address can be proven elsewhere
+  // (a completed password reset) and an invitation arrive afterwards, so
+  // this must claim for an already-confirmed account too (SHARE-3).
+  await claimInvitesQuietly(user._id.toString(), user.email)
   return toUserDto(user)
 }
 
@@ -298,6 +339,10 @@ export const resetPassword = async (
   // link does, so a reset settles verification too (AUTH-3).
   user.emailVerified = true
   await user.save()
+  // Proven, so anything invited to this address is claimed here as well —
+  // otherwise a recovery would leave the invitation stranded with no link
+  // left to click (SHARE-3).
+  await claimInvitesQuietly(userId, user.email)
   await revokeAllSessions(userId)
   await revokeAuthTokens(userId, 'verify-email')
 }

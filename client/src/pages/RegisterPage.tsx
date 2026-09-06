@@ -45,6 +45,7 @@ export default function RegisterPage() {
         className="flex w-80 flex-col gap-4 rounded-lg border border-slate-200 p-8"
       >
         <h1 className="text-2xl font-bold">{t('auth.createAccount')}</h1>
+        <GoogleSignInButton action={t('auth.signUp')} />
         <label className="flex flex-col gap-1 text-sm text-slate-700">
           {t('auth.displayName')}
           <input
@@ -87,7 +88,6 @@ export default function RegisterPage() {
         >
           {submitting ? t('auth.creatingAccount') : t('auth.createAccount')}
         </button>
-        <GoogleSignInButton action={t('auth.signUp')} />
         <LegalConsentNotice action="register" />
         <p className="text-sm text-slate-500">
           {t('auth.alreadyRegistered')}{' '}

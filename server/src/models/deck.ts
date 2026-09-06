@@ -23,12 +23,16 @@ import { LOCALES } from '@slide-machine/shared'
 import type { ResolvedAcl } from '../lib/access'
 import { ProjectModel, projectAcl, type ProjectDb } from './project'
 import { softDeletePlugin } from './plugins/soft-delete'
+import { shareInviteSchema, type ShareInviteDb } from './share-invite'
 
 /** A lecture's own privacy settings, present only when overridden. */
 export interface DeckAccessOverride {
   visibility: Visibility
   viewers: string[]
   editors: string[]
+  /** Shares offered to addresses with no account yet (SHARE-3). They confer
+   * no access until claimed, so nothing in the resolved ACL reads them. */
+  invites?: ShareInviteDb[]
 }
 
 /**
@@ -215,6 +219,7 @@ const deckSchema = new Schema<DeckDb>(
         },
         viewers: { type: [String], default: [] },
         editors: { type: [String], default: [] },
+        invites: { type: [shareInviteSchema], default: [] },
       },
       default: undefined,
       _id: false,
@@ -280,7 +285,7 @@ export const resolveDeckAcl = (
   deck: DeckLike,
   project: Pick<
     ProjectDb,
-    'ownerId' | 'visibility' | 'viewers' | 'editors'
+    'ownerId' | 'visibility' | 'viewers' | 'editors' | 'invites'
   > | null,
 ): ResolvedAcl => {
   if (deck.accessOverride) {
@@ -290,18 +295,27 @@ export const resolveDeckAcl = (
       viewers: deck.accessOverride.viewers,
       editors: deck.accessOverride.editors,
       inherited: false,
+      invites: deck.accessOverride.invites ?? [],
     }
   }
   // A dangling project reads as restricted-to-owner, never public
   const base = project
     ? projectAcl(project)
-    : { visibility: 'restricted' as Visibility, viewers: [], editors: [] }
+    : {
+        visibility: 'restricted' as Visibility,
+        viewers: [],
+        editors: [],
+        invites: [],
+      }
   return {
     ownerId: deck.ownerId.toString(),
     visibility: base.visibility,
     viewers: base.viewers,
     editors: base.editors,
     inherited: true,
+    // Inherited like the people: the project's invitations are shown on the
+    // lecture, and claiming one there grants access here through the project.
+    invites: base.invites ?? [],
   }
 }
 
@@ -370,6 +384,10 @@ export const ensureDeckOverride = (
     visibility: acl.visibility,
     viewers: [...acl.viewers],
     editors: [...acl.editors],
+    // Invitations the project holds come across with the people it holds
+    // (SHARE-3): a lecture that pins its own access between an invitation
+    // and its claim must not quietly drop the promise.
+    invites: (acl.invites ?? []).map(invite => ({ ...invite })),
   }
 }
 
