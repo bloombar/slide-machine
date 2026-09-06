@@ -264,16 +264,19 @@ describe('deck edit access', () => {
     expect(shares.body[0].role).toBe('editor')
   })
 
-  it('rejects unknown emails and self-shares', async () => {
-    expect(
-      (
-        await act(ada, 'deck.share', {
-          deckId,
-          email: 'nobody@example.com',
-          role: 'viewer',
-        })
-      ).status,
-    ).toBe(400)
+  // An address with no account is invited rather than refused (SHARE-3);
+  // the invitation itself is covered by share-notify.test.ts. What stays
+  // refused is sharing with yourself, which no invitation can express.
+  it('invites unknown emails and rejects self-shares', async () => {
+    const invited = await act(ada, 'deck.share', {
+      deckId,
+      email: 'nobody@example.com',
+      role: 'viewer',
+    })
+    expect(invited.status).toBe(200)
+    expect(invited.body).toEqual([
+      expect.objectContaining({ email: 'nobody@example.com', pending: true }),
+    ])
     expect(
       (
         await act(ada, 'deck.share', {

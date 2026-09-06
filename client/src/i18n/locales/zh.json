@@ -1025,6 +1025,10 @@
     "transfer": "转让所有权",
     "remove": "撤销访问权限",
     "onlyYou": "目前只有你拥有访问权限。",
+    "invited": "已邀请",
+    "invitedHint": "已邀请 — 对方用此邮箱注册后即可访问。",
+    "pendingFor": "给 {name} 的邀请",
+    "withdraw": "撤回邀请",
     "inherited": "继承自项目——在此修改会使该课程脱离继承。",
     "overridden": "已为该课程单独设置。",
     "useProject": "使用项目设置",
@@ -1049,7 +1053,7 @@
       "action": "转让"
     },
     "errors": {
-      "noAccount": "没有使用该邮箱的账户",
+      "share": "无法分享给该邮箱，请重试",
       "setAccess": "无法更改可见范围——请重试"
     }
   },

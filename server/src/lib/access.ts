@@ -7,6 +7,7 @@
  * every inheriting lecture automatically.
  */
 import type { Visibility } from '@slide-machine/shared'
+import type { ShareInviteDb } from '../models/share-invite'
 
 /** One resolved access-control list; decisions never look elsewhere. */
 export interface ResolvedAcl {
@@ -16,6 +17,17 @@ export interface ResolvedAcl {
   editors: string[]
   /** True when this ACL was inherited (a lecture without an override). */
   inherited: boolean
+  /**
+   * Shares offered to addresses with no account yet (SHARE-3), resolved the
+   * same way the people are — a lecture's own when it has an override, its
+   * project's when it inherits.
+   *
+   * Deliberately unused by every function below: an invitation is a promise
+   * of access, not access, so no decision may read it. It rides here only so
+   * the people-with-access list can show it beside the shares it will one
+   * day become.
+   */
+  invites?: ShareInviteDb[]
 }
 
 /** True when `userId` may edit: the owner, or a listed editor. */

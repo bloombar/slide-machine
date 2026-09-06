@@ -16,6 +16,15 @@ const share = {
   role: 'viewer' as const,
 }
 
+/** A share offered to an address with no account yet (SHARE-3). */
+const invite = {
+  userId: '',
+  displayName: '',
+  email: 'mary@example.com',
+  role: 'viewer' as const,
+  pending: true,
+}
+
 const subject = (overrides: Partial<AccessSubject> = {}): AccessSubject => ({
   id: 'x1',
   name: 'Waves',
@@ -151,6 +160,39 @@ describe('AccessSettings', () => {
     })
     fireEvent.click(await screen.findByRole('button', { name: 'Transfer' }))
     await vi.waitFor(() => expect(sent).toEqual({ deckId: 'x1', userId: 'u2' }))
+  })
+
+  // A pending invitation has no account behind it, so there is no name to
+  // show, nobody to hand ownership to, and no user id to revoke by.
+  it('marks a pending invitation and withdraws it by address', async () => {
+    let sent: unknown
+    mockFetchRoutes({
+      '/api/actions/deck.shares': () => ({ status: 200, body: [invite] }),
+      '/api/actions/deck.unshare': init => {
+        sent = JSON.parse(String(init?.body))
+        return { status: 200, body: [] }
+      },
+    })
+    render(
+      <AccessSettings
+        entity="deck"
+        subject={subject()}
+        isOwner
+        onChange={vi.fn()}
+      />,
+    )
+    const menu = await screen.findByLabelText('Invitation for mary@example.com')
+    expect(screen.getByText('Invited')).toBeInTheDocument()
+    expect(menu).not.toHaveTextContent('Transfer ownership')
+    expect(menu).toHaveTextContent('Withdraw invitation')
+    fireEvent.change(menu, { target: { value: 'remove' } })
+    await vi.waitFor(() =>
+      expect(sent).toEqual({
+        deckId: 'x1',
+        email: 'mary@example.com',
+        role: 'viewer',
+      }),
+    )
   })
 
   it('hides Transfer ownership from non-owners', async () => {

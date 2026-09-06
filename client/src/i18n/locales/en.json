@@ -1025,6 +1025,10 @@
     "transfer": "Transfer ownership",
     "remove": "Remove access",
     "onlyYou": "Only you have access so far.",
+    "invited": "Invited",
+    "invitedHint": "Invited — access starts when they sign up with this address.",
+    "pendingFor": "Invitation for {name}",
+    "withdraw": "Withdraw invitation",
     "inherited": "Inherited from the project — changes here detach this lecture.",
     "overridden": "Overridden for this lecture.",
     "useProject": "Use project settings",
@@ -1049,7 +1053,7 @@
       "action": "Transfer"
     },
     "errors": {
-      "noAccount": "No account with that email",
+      "share": "Could not share with that address — try again",
       "setAccess": "Could not change who can see this — try again"
     }
   },

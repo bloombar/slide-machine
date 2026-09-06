@@ -1117,6 +1117,18 @@ When viewing a saved deck, **signed-in** students and instructors can switch the
 - **It can be heard as well as read** — narration playback speaks the deck in the language it is being displayed in ([PLAY-3](#play-3-narration-in-the-translated-language)).
 - **A translated view is read-only**, for editors as well as viewers: in-place editing ([EDIT-1](#edit-1-full-content-editing)), annotation ([EDIT-4](#edit-4-whiteboard-annotation)) and speaking new slides into the lecture ([GEN-1](#gen-1-speech-to-slide-generation)) all wait until the reader returns to the original. Edits made against machine-translated words would be saved into the authored deck, and a live session already running ends when a translation is chosen. The notice on screen says so and offers the way back.
 
+#### SHARE-3 Share notifications & invitations
+
+Sharing a lecture or project **emails the person it was shared with**, and the message carries the **link to the thing shared** — a share nobody is told about is a share nobody uses.
+
+- **Everyone shared with is notified**, whether or not they already have an account. The message names who shared what, links to it ([SHARE-1](#share-1-saved-deck-viewer--permalink)), and says whether they may view or also edit.
+- **An address with no account is invited, not refused.** The role is held as a pending invitation on the lecture or project and becomes real access when someone **proves that address** — by confirming it ([AUTH-3](#auth-3-email-verification)), or by signing in with Google, which has already verified it. Proof rather than registration, because anyone can type any address into a sign-up form: claiming at registration would hand a share meant for a colleague to whoever registered their address first. Until it is claimed the invitation grants nothing — an invitation is not access, and no ACL decision reads one.
+- **An address that could never claim it is refused** rather than invited: a banned address, or one still held by a deleted account ([P-10](#16-privacy-security--compliance)), cannot register, so inviting it would strand the share and mail someone who asked to be forgotten.
+- **Only a confirmed account can cause a notification**, and it is rate-limited. Sharing itself stays open to an unconfirmed account ([AUTH-3](#auth-3-email-verification)); what is gated is making the server send mail carrying text the sender chose — their name and their lecture's title.
+- **The owner sees invitations in the people list**, marked as invited and withdrawable, alongside the shares already granted. A lecture that pins its own access carries its project's invitations across with its people.
+- **Best-effort delivery.** A deployment with no mail relay configured ([TECH-4](#tech-4-server-configuration)) still shares and still invites; it simply cannot announce it. A relay failure is logged and never fails the share.
+- Notifications are correspondence about the recipient's own access, not marketing ([§16](#16-privacy-security--compliance)); nothing about the lecture's content travels in the message beyond its title.
+
 ### 11. Export/Import, Voting & Social
 
 #### EXP-1 Deck export

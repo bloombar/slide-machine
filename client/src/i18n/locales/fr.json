@@ -1025,6 +1025,10 @@
     "transfer": "Transférer la propriété",
     "remove": "Retirer l'accès",
     "onlyYou": "Vous seul avez accès pour l'instant.",
+    "invited": "Invité",
+    "invitedHint": "Invité — l'accès commence dès son inscription avec cette adresse.",
+    "pendingFor": "Invitation pour {name}",
+    "withdraw": "Retirer l'invitation",
     "inherited": "Hérité du projet — toute modification ici détache ce cours.",
     "overridden": "Redéfini pour ce cours.",
     "useProject": "Utiliser les paramètres du projet",
@@ -1049,7 +1053,7 @@
       "action": "Transférer"
     },
     "errors": {
-      "noAccount": "Aucun compte avec cette adresse e-mail",
+      "share": "Impossible de partager avec cette adresse — réessayez",
       "setAccess": "Impossible de modifier qui peut le voir — réessayez"
     }
   },

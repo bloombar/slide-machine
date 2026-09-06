@@ -89,6 +89,13 @@ import {
 } from '../lib/access'
 import { ttsVoiceIdSchema } from '../lib/tts-voice'
 import { sharesOfAcl } from '../lib/shares'
+import { notifyShare } from '../lib/share-emails'
+import {
+  invitable,
+  normalizeEmail,
+  removeInvite,
+  upsertInvite,
+} from '../lib/share-invites'
 import {
   clampToBudget,
   refitOverflows,
@@ -1751,7 +1758,10 @@ export const deckSetAccess = defineAction<
   },
 })
 
-/** Drops the lecture's override so it follows its project again. */
+/** Drops the lecture's override so it follows its project again. This
+ * discards the lecture's own pending invitations along with its own share
+ * list (SHARE-3) — both were part of the override — and the lecture then
+ * shows whatever its project holds. */
 export const deckResetAccess = defineAction<
   DeckResetAccessInput,
   Deck,
@@ -1783,31 +1793,52 @@ export const deckShare = defineAction<
   }),
   execute: (ctx, input, access) =>
     withDeckSettingsAudit(access, async (deck, acl) => {
-      const user = await UserModel.findOne({
-        email: input.email.toLowerCase().trim(),
-      })
-      if (!user) {
-        throw new ActionValidationError('deck.share', [
-          'email: no account with that email',
-        ])
-      }
-      const userId = user._id.toString()
-      if (userId === deck.ownerId.toString()) {
-        throw new ActionValidationError('deck.share', [
-          'email: that user owns this lecture',
-        ])
-      }
+      const email = normalizeEmail(input.email)
+      const user = await UserModel.findOne({ email })
       ensureDeckOverride(deck, acl)
       const override = deck.accessOverride!
-      const list = input.role === 'editor' ? override.editors : override.viewers
-      if (!list.includes(userId)) list.push(userId)
-      // One role per user: granting one revokes the other
-      const other =
-        input.role === 'editor' ? override.viewers : override.editors
-      const index = other.indexOf(userId)
-      if (index >= 0) other.splice(index, 1)
+      if (user) {
+        const userId = user._id.toString()
+        if (userId === deck.ownerId.toString()) {
+          throw new ActionValidationError('deck.share', [
+            'email: that user owns this lecture',
+          ])
+        }
+        const list =
+          input.role === 'editor' ? override.editors : override.viewers
+        if (!list.includes(userId)) list.push(userId)
+        // One role per user: granting one revokes the other
+        const other =
+          input.role === 'editor' ? override.viewers : override.editors
+        const index = other.indexOf(userId)
+        if (index >= 0) other.splice(index, 1)
+        // An address can be invited and then registered between the two, so
+        // clear any invitation the grant has just made redundant.
+        override.invites = removeInvite(override.invites, email)
+      } else {
+        // An address that could never register — banned, or a deleted
+        // account whose row still holds the address — is refused rather
+        // than invited into a share it can never reach.
+        if (!(await invitable(email))) {
+          throw new ActionValidationError('deck.share', [
+            'email: that address cannot be invited',
+          ])
+        }
+        // No account yet (SHARE-3): the grant is held until one exists, and
+        // the message says how to claim it.
+        override.invites = upsertInvite(override.invites, email, input.role)
+      }
       deck.markModified('accessOverride')
       await deck.save()
+      await notifyShare(ctx, {
+        to: email,
+        recipientName: user?.displayName,
+        kind: 'lecture',
+        title: deck.title,
+        path: `/d/${deck.permalinkSlug}`,
+        role: input.role,
+        hasAccount: Boolean(user),
+      })
       return sharesOf(resolveDeckAcl(deck, null))
     }),
 })
@@ -1819,18 +1850,32 @@ export const deckUnshare = defineAction<
 >({
   name: 'deck.unshare',
   access: settingsOf,
-  input: z.object({
-    deckId: z.string().min(1),
-    userId: z.string().min(1),
-    role: z.enum(['viewer', 'editor']),
-  }),
+  input: z
+    .object({
+      deckId: z.string().min(1),
+      userId: z.string().min(1).optional(),
+      email: z.email().optional(),
+      role: z.enum(['viewer', 'editor']),
+    })
+    // A granted share is revoked by user id and a pending invitation by
+    // address (SHARE-3); one or the other, never both, since they name
+    // different things to remove.
+    .refine(
+      input => Boolean(input.userId) !== Boolean(input.email),
+      'give exactly one of userId and email',
+    ),
   execute: (ctx, input, access) =>
     withDeckSettingsAudit(access, async (deck, acl) => {
       ensureDeckOverride(deck, acl)
       const override = deck.accessOverride!
-      const list = input.role === 'editor' ? override.editors : override.viewers
-      const index = list.indexOf(input.userId)
-      if (index >= 0) list.splice(index, 1)
+      if (input.email) {
+        override.invites = removeInvite(override.invites, input.email)
+      } else {
+        const list =
+          input.role === 'editor' ? override.editors : override.viewers
+        const index = list.indexOf(input.userId!)
+        if (index >= 0) list.splice(index, 1)
+      }
       deck.markModified('accessOverride')
       await deck.save()
       return sharesOf(resolveDeckAcl(deck, null))
