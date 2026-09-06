@@ -1,7 +1,8 @@
 /**
- * The sign-in form itself: email/password fields, the Google option, the
- * legal notice, and the forgot-password / create-account links. Server-side
- * validation is authoritative; errors from the API render inline.
+ * The sign-in form itself: the Google option first, then the email/password
+ * fields, the legal notice, and the forgot-password / create-account links.
+ * Server-side validation is authoritative; errors from the API render
+ * inline.
  *
  * Extracted so `/login` and the sign-in dialog (AUTH-8) render the exact
  * same form rather than two copies that drift — the dialog is a Modal
@@ -62,6 +63,7 @@ export default function SignInForm({
       data-testid="sign-in-form"
       className="flex flex-col gap-4"
     >
+      <GoogleSignInButton action={t('auth.signIn')} />
       <label className="flex flex-col gap-1 text-sm text-slate-700">
         {t('auth.email')}
         <input
@@ -95,7 +97,6 @@ export default function SignInForm({
       >
         {submitting ? t('auth.signingIn') : t('auth.signIn')}
       </button>
-      <GoogleSignInButton action={t('auth.signIn')} />
       <LegalConsentNotice action="signIn" />
       <p className="text-sm">
         <Link to="/forgot-password" className="text-indigo-600">

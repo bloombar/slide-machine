@@ -42,6 +42,19 @@ describe('GoogleSignInButton', () => {
     expect(takeReturnPath()).toBe('/d/shared-abc123?slide=s2')
   })
 
+  // Google is the primary way in, so the button leads and the "or" divider
+  // sits below it, separating it from the email alternative underneath.
+  it('puts the divider below the button, not above it', () => {
+    const { container } = render(<GoogleSignInButton action="Sign in" />)
+    const link = screen.getByRole('link', { name: /sign in with google/i })
+    const divider = container.querySelector('div')
+    expect(divider).toHaveTextContent(/or/i)
+    expect(
+      link.compareDocumentPosition(divider as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
   it('renders nothing until Google sign-in is configured', () => {
     ;(config as { googleAuthEnabled: boolean }).googleAuthEnabled = false
     const { container } = render(<GoogleSignInButton action="Sign in" />)
