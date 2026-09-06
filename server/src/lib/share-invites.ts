@@ -22,22 +22,26 @@ export const normalizeEmail = (email: string): string =>
   email.toLowerCase().trim()
 
 /**
- * Whether an address with no live account could ever claim an invitation.
+ * Whether an address could ever claim an invitation.
  *
- * Two addresses look free and are not. A deleted account keeps its row and
- * its unique email index (P-10 tombstones rather than removes), and a banned
- * one is refused at registration — so both would take the invitation branch,
- * be mailed "create an account with this address", and then be unable to.
- * Inviting them would strand the share and mail someone who asked to be
- * forgotten, so the share actions refuse instead.
+ * Two addresses look claimable and are not. A deleted account keeps its row
+ * and its unique email index (P-10 tombstones rather than removes), so
+ * nobody can register it again; and a banned address is refused at
+ * registration and at sign-in. Inviting either would strand the share and
+ * mail someone who may have asked to be forgotten, so the share actions
+ * refuse instead.
+ *
+ * A live account that has simply never confirmed its address is perfectly
+ * claimable — confirming is exactly what it has left to do — so only the
+ * tombstone counts here, not the mere existence of a row.
  */
 export const invitable = async (email: string): Promise<boolean> => {
   const address = normalizeEmail(email)
   if (await isEmailBanned(address)) return false
-  const tombstoned = await UserModel.findOne({ email: address })
+  const existing = await UserModel.findOne({ email: address })
     .setOptions({ withDeleted: true })
     .catch(() => null)
-  return !tombstoned
+  return !existing?.deletedAt
 }
 
 /**

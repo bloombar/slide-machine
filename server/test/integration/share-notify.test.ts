@@ -136,10 +136,10 @@ beforeEach(async () => {
   await act(ada, 'deck.setAccess', { deckId, visibility: 'restricted' })
 })
 
-describe('who may cause a notification', () => {
-  // AUTH-3 lets an unconfirmed account share; what it may not do is make
-  // the server send mail carrying text it chose.
-  it('shares without mailing when the sharer is unconfirmed', async () => {
+describe('who may share', () => {
+  // Confirming your own address is the price of putting a stranger's
+  // address into an outgoing message and granting them access (SHARE-3).
+  it('refuses an unconfirmed sharer, distinguishably', async () => {
     const mallory = await registerUnverified('mallory@example.com')
     const project = await act(mallory, 'project.create', { title: 'Theirs' })
     const deck = await act(mallory, 'deck.create', {
@@ -153,10 +153,51 @@ describe('who may cause a notification', () => {
       email: 'target@example.com',
       role: 'viewer',
     })
-    // The share is saved — only the announcement is withheld
-    expect(res.status).toBe(200)
-    expect(res.body).toHaveLength(1)
+    // Its own code, so the client can offer a confirmation link rather
+    // than reporting a flat refusal.
+    expect(res.status).toBe(403)
+    expect(res.body.error.code).toBe('email_unverified')
     expect(shareMail()).toHaveLength(0)
+    // Nothing was granted or invited either
+    const shares = await act(mallory, 'deck.shares', { deckId: deck.body.id })
+    expect(shares.body).toEqual([])
+  })
+
+  // The gate exists to stop an unproven account making this server send
+  // mail. Where it can send none, confirming is impossible too, so the gate
+  // would be a permanent refusal — see auth/verified.ts.
+  it('waives the gate where the server cannot send mail at all', async () => {
+    const mallory = await registerUnverified('mallory@example.com')
+    const project = await act(mallory, 'project.create', { title: 'Theirs' })
+    const deck = await act(mallory, 'deck.create', {
+      projectId: project.body.id,
+      title: 'Theirs',
+      templateId: 'classic',
+    })
+    vi.spyOn(mailer, 'mailerAvailable').mockReturnValue(false)
+    const res = await act(mallory, 'deck.share', {
+      deckId: deck.body.id,
+      email: 'target@example.com',
+      role: 'viewer',
+    })
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual([
+      expect.objectContaining({ email: 'target@example.com', pending: true }),
+    ])
+    // Nothing could be sent, which is the whole reason the gate lifted
+    expect(shareMail()).toHaveLength(0)
+  })
+
+  it('refuses an unconfirmed sharer on a project too', async () => {
+    const mallory = await registerUnverified('mallory@example.com')
+    const project = await act(mallory, 'project.create', { title: 'Theirs' })
+    const res = await act(mallory, 'project.share', {
+      projectId: project.body.id,
+      email: 'target@example.com',
+      role: 'viewer',
+    })
+    expect(res.status).toBe(403)
+    expect(res.body.error.code).toBe('email_unverified')
   })
 })
 
@@ -216,6 +257,31 @@ describe('sharing with an account that has not confirmed its address', () => {
       .post('/api/auth/verify-email')
       .send({ token: await verificationTokenFor('mary@example.com') })
     expect((await getDeck(slug, mary)).status).toBe(200)
+  })
+
+  // Legacy data only: an account granted access before this rule existed
+  // must not end up holding a grant and an invitation at once.
+  it('withdraws access it already held rather than doubling up', async () => {
+    const mary = await registerUnverified('mary@example.com')
+    const maryId = (await UserModel.findOne({
+      email: 'mary@example.com',
+    }))!._id.toString()
+    // Stand in for a grant made before the rule
+    await DeckModel.updateOne(
+      { _id: deckId },
+      { $addToSet: { 'accessOverride.viewers': maryId } },
+    )
+    expect((await getDeck(slug, mary)).status).toBe(200)
+
+    await act(ada, 'deck.share', {
+      deckId,
+      email: 'mary@example.com',
+      role: 'editor',
+    })
+    const deck = await DeckModel.findById(deckId)
+    expect(deck!.accessOverride!.viewers).not.toContain(maryId)
+    expect(deck!.accessOverride!.editors).not.toContain(maryId)
+    expect((await getDeck(slug, mary)).status).toBe(404)
   })
 
   it('tells them the confirmation is what opens it', async () => {
@@ -399,6 +465,25 @@ describe('sharing with an address that has no account', () => {
       email: 'banned@example.com',
       bannedBy: adaId,
     })
+    const res = await act(ada, 'deck.share', {
+      deckId,
+      email: 'banned@example.com',
+      role: 'viewer',
+    })
+    expect(res.status).toBe(400)
+    expect(shareMail()).toHaveLength(0)
+  })
+
+  // A banned address is unreachable whether or not it managed to register
+  // before the ban: an invitation to it could never be claimed.
+  it('refuses a banned address that has an unconfirmed account', async () => {
+    await registerUnverified('banned@example.com')
+    const adaId = (await UserModel.findOne({ email: 'ada@example.com' }))!._id
+    await BannedEmailModel.create({
+      email: 'banned@example.com',
+      bannedBy: adaId,
+    })
+    sent = []
     const res = await act(ada, 'deck.share', {
       deckId,
       email: 'banned@example.com',

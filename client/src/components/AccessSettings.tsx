@@ -5,9 +5,14 @@
  * per-person role, revocation, and (owner-only) ownership transfer.
  * "General access": Public or Restricted.
  *
- * An address with no account yet is listed as invited (SHARE-3): the role
- * is held for it, the person is emailed the link, and the grant becomes
- * real access when they sign up with that address.
+ * An address that has not been confirmed yet is listed as invited
+ * (SHARE-3): the role is held for it, the person is emailed the link, and
+ * the grant becomes real access when they confirm that address.
+ *
+ * Sharing needs the *sharer's* own address to be confirmed too. The server
+ * refuses otherwise, and this catches that refusal and says so in a dialog
+ * with a fresh confirmation link, rather than showing the flat error a
+ * misspelled address gets.
  *
  * Lectures additionally surface inheritance: by default they follow
  * their project's settings (nothing stored on the lecture); the first
@@ -18,7 +23,11 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { DeckShare, ShareRole, Visibility } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
+import { ApiError } from '../api/http'
+import { useAuth } from '../auth/AuthContext'
 import ConfirmDialog from './ConfirmDialog'
+import EmailVerificationNotice from './EmailVerificationNotice'
+import Modal from './Modal'
 import { apiErrorMessage } from '../i18n/apiError'
 
 /** The general-access choices, in order. Each value keys its own label
@@ -52,7 +61,11 @@ export default function AccessSettings({
   onChange,
 }: Props) {
   const { t } = useTranslation()
+  const { user } = useAuth()
   const [shares, setShares] = useState<DeckShare[]>([])
+  // Set when the server refuses because this account has not confirmed its
+  // own address (AUTH-3) — the one share failure the user can fix here.
+  const [needsVerification, setNeedsVerification] = useState(false)
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<ShareRole>('viewer')
   const [shareError, setShareError] = useState<string | null>(null)
@@ -105,6 +118,11 @@ export default function AccessSettings({
       })
   }
 
+  /** True when the refusal was "confirm your own address first" (AUTH-3),
+   * which has its own code so it is distinguishable from a bad address. */
+  const isUnverified = (err: unknown): boolean =>
+    err instanceof ApiError && err.code === 'email_unverified'
+
   const grant = (grantEmail: string, grantRole: ShareRole) =>
     dispatchAction<DeckShare[]>(action('share'), {
       ...idInput,
@@ -120,10 +138,12 @@ export default function AccessSettings({
     try {
       setShares(await grant(email.trim(), role))
       setEmail('')
-    } catch {
-      // An address with no account is no longer an error — it is invited
-      // (SHARE-3) — so what is left here is a genuine failure.
-      setShareError(t('access.errors.share'))
+    } catch (err) {
+      // An address that cannot be shared with is no longer an error — it is
+      // invited (SHARE-3) — so what is left here is a genuine failure, or
+      // the one the sharer can fix themselves.
+      if (isUnverified(err)) setNeedsVerification(true)
+      else setShareError(t('access.errors.share'))
     } finally {
       setBusy(false)
     }
@@ -170,8 +190,10 @@ export default function AccessSettings({
     if (nextRole === entry.role) return
     grant(entry.email, nextRole)
       .then(setShares)
-      .catch(() => {
-        // Quiet failure: the row keeps its saved role
+      .catch(err => {
+        // Quiet failure: the row keeps its saved role — except the one the
+        // user can act on, which says so.
+        if (isUnverified(err)) setNeedsVerification(true)
       })
   }
 
@@ -321,6 +343,33 @@ export default function AccessSettings({
           )}
         </fieldset>
       </div>
+
+      {needsVerification && user && (
+        <Modal
+          ariaLabel={t('access.verifyFirst.title')}
+          onClose={() => setNeedsVerification(false)}
+        >
+          <h3 className="text-lg font-semibold">
+            {t('access.verifyFirst.title')}
+          </h3>
+          <p className="mt-2 text-sm text-slate-600">
+            {t('access.verifyFirst.body')}
+          </p>
+          <div className="mt-4">
+            <EmailVerificationNotice
+              email={user.email}
+              verified={user.emailVerified}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setNeedsVerification(false)}
+            className="mt-6 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            {t('common.close')}
+          </button>
+        </Modal>
+      )}
 
       {confirmingTransfer && (
         <ConfirmDialog
