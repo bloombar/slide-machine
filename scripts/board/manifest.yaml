@@ -586,8 +586,16 @@
   note: administration & moderation
 - id: AUTH-3
   title: Email verification
-  full: Registration sends a verification link; unverified accounts have limited
-    capability (e.g., cannot publish publicly) until verified.
+  full: "Registration sends a verification link; unverified accounts have limited
+    capability until verified. Two things are gated: publishing publicly, and
+    sharing with another person (SHARE-3) — sharing sends mail on the account's
+    behalf and hands someone else access, so the account is asked to prove its
+    own address first. The sharing gate is waived where the deployment cannot
+    send mail at all, since confirming is then impossible; the publishing gate
+    is not, because it is about reaching the public rather than about sending
+    mail. Both refusals are distinguishable from a flat \"you may not\", so the
+    client can offer a fresh confirmation link at the moment it bites rather
+    than sending the user hunting…"
   section: §4 Accounts & Authentication
   family: AUTH
   phase: 2
@@ -2209,6 +2217,23 @@
   family: PREP
   phase: 3
   status: Backlog
+  review: false
+- id: SHARE-3
+  title: Share notifications & invitations
+  full: Sharing a lecture or project emails the person it was shared with, and the
+    message carries the link to the thing shared — a share nobody is told about
+    is a share nobody uses. Everyone shared with is notified, whether or not
+    they already have an account. The message names who shared what, links to it
+    (SHARE-1), and says whether they may view or also edit. An address that has
+    not been proven is invited, not granted. This covers an address with no
+    account and one whose account has never confirmed it — registering with an
+    address is not evidence of holding it, so a share to an unconfirmed account
+    waits exactly as one to a stranger does, or registering a colleague's
+    address first would collect…
+  section: §10 Playback, Editing & Sharing
+  family: SHARE
+  phase: 3
+  status: Done
   review: false
 - id: TECH-14
   title: Declarative action authorization
