@@ -2412,10 +2412,10 @@
     that has pinned its own access…"
   section: §6 Slide Projects & Seeding
   family: PROJ
-  phase: null
+  phase: 2
   status: Backlog
-  review: true
-  note: no phase found in roadmap
+  review: false
+  note: shipped during the Phase 2 window; the roadmap scope lists never named it
 - id: TMPL-12
   title: Every shipped design holds what it says it holds
   full: "A built-in design states what each of its boxes can hold — on the slot,
@@ -2447,7 +2447,7 @@
     new lecture copies its…"
   section: §7 Style Template Library
   family: TMPL
-  phase: null
+  phase: 2
   status: Backlog
-  review: true
-  note: no phase found in roadmap
+  review: false
+  note: shipped during the Phase 2 window; the roadmap scope lists never named it
