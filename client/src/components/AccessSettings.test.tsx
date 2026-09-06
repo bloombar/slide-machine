@@ -5,9 +5,26 @@
  * in a dialog.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import AccessSettings, { type AccessSubject } from './AccessSettings'
 import { mockFetchRoutes } from '../test/fetch-mock'
+
+// The component reads the signed-in account to offer a confirmation link
+// when the server says the address is unconfirmed (SHARE-3). Mocked rather
+// than wrapped in a provider: these tests are about the access surface, not
+// about session loading.
+const currentUser = {
+  id: 'u1',
+  email: 'ada@example.com',
+  displayName: 'Ada',
+  emailVerified: false,
+}
+vi.mock('../auth/AuthContext', () => ({
+  useAuth: () => ({ user: currentUser }),
+}))
+
+// The confirmation link is only offered where the server can send mail.
+vi.mock('../runtime-config', () => ({ getMailEnabled: () => true }))
 
 const share = {
   userId: 'u2',
@@ -193,6 +210,41 @@ describe('AccessSettings', () => {
         role: 'viewer',
       }),
     )
+  })
+
+  // Sharing needs the sharer's own address confirmed (SHARE-3); that
+  // refusal has its own code, so it opens a dialog offering a fresh link
+  // rather than reading like a mistyped address.
+  it('offers a confirmation link when the account is unconfirmed', async () => {
+    mockFetchRoutes({
+      '/api/actions/deck.shares': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.share': () => ({
+        status: 403,
+        body: {
+          error: { code: 'email_unverified', message: 'Confirm your address' },
+        },
+      }),
+    })
+    render(
+      <AccessSettings
+        entity="deck"
+        subject={subject()}
+        isOwner
+        onChange={vi.fn()}
+      />,
+    )
+    fireEvent.change(await screen.findByLabelText('Add people by email'), {
+      target: { value: 'byron@example.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Confirm your email address first',
+    })
+    expect(
+      within(dialog).getByRole('button', { name: 'Send another link' }),
+    ).toBeInTheDocument()
+    // And not the generic failure copy a bad address would get
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('hides Transfer ownership from non-owners', async () => {

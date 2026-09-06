@@ -136,10 +136,10 @@ beforeEach(async () => {
   await act(ada, 'deck.setAccess', { deckId, visibility: 'restricted' })
 })
 
-describe('who may cause a notification', () => {
-  // AUTH-3 lets an unconfirmed account share; what it may not do is make
-  // the server send mail carrying text it chose.
-  it('shares without mailing when the sharer is unconfirmed', async () => {
+describe('who may share', () => {
+  // Confirming your own address is the price of putting a stranger's
+  // address into an outgoing message and granting them access (SHARE-3).
+  it('refuses an unconfirmed sharer, distinguishably', async () => {
     const mallory = await registerUnverified('mallory@example.com')
     const project = await act(mallory, 'project.create', { title: 'Theirs' })
     const deck = await act(mallory, 'deck.create', {
@@ -153,10 +153,26 @@ describe('who may cause a notification', () => {
       email: 'target@example.com',
       role: 'viewer',
     })
-    // The share is saved — only the announcement is withheld
-    expect(res.status).toBe(200)
-    expect(res.body).toHaveLength(1)
+    // Its own code, so the client can offer a confirmation link rather
+    // than reporting a flat refusal.
+    expect(res.status).toBe(403)
+    expect(res.body.error.code).toBe('email_unverified')
     expect(shareMail()).toHaveLength(0)
+    // Nothing was granted or invited either
+    const shares = await act(mallory, 'deck.shares', { deckId: deck.body.id })
+    expect(shares.body).toEqual([])
+  })
+
+  it('refuses an unconfirmed sharer on a project too', async () => {
+    const mallory = await registerUnverified('mallory@example.com')
+    const project = await act(mallory, 'project.create', { title: 'Theirs' })
+    const res = await act(mallory, 'project.share', {
+      projectId: project.body.id,
+      email: 'target@example.com',
+      role: 'viewer',
+    })
+    expect(res.status).toBe(403)
+    expect(res.body.error.code).toBe('email_unverified')
   })
 })
 

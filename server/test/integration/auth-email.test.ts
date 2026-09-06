@@ -237,17 +237,41 @@ describe('what an unconfirmed account may not do (AUTH-3)', () => {
     expect(project.body.visibility).toBe('public')
   })
 
-  it('still lets it work privately, and share with named people', async () => {
+  it('still lets it work privately', async () => {
     const registered = await register('ada@example.com')
     const token = registered.body.accessToken as string
     const project = await act(token, 'project.create', { title: 'Bio' })
-    // Everything short of publishing is untouched
+    // Everything short of publishing and sharing is untouched
     const restricted = await act(token, 'project.setAccess', {
       projectId: project.body.id,
       visibility: 'restricted',
     })
     expect(restricted.status).toBe(200)
+  })
+
+  // Sharing joined publishing on the wrong side of this gate (SHARE-3): it
+  // mails an address of the caller's choosing text the caller wrote, and
+  // hands someone else access. Both refusals carry the same code, so the
+  // client can offer a confirmation link at the moment either bites.
+  it('refuses to share until the address is confirmed', async () => {
+    const registered = await register('ada@example.com')
+    const token = registered.body.accessToken as string
+    // Ada's own link, read before bob's registration adds a message of its
+    // own — `tokenFromMail` reads the most recent one.
+    const adaLink = tokenFromMail()
+    const project = await act(token, 'project.create', { title: 'Bio' })
     await register('bob@example.com')
+    const refused = await act(token, 'project.share', {
+      projectId: project.body.id,
+      email: 'bob@example.com',
+      role: 'viewer',
+    })
+    expect(refused.status).toBe(403)
+    expect(refused.body.error.code).toBe('email_unverified')
+
+    await request(server)
+      .post('/api/auth/verify-email')
+      .send({ token: adaLink })
     const shared = await act(token, 'project.share', {
       projectId: project.body.id,
       email: 'bob@example.com',

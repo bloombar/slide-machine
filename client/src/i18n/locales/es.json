@@ -1029,6 +1029,10 @@
     "invitedHint": "Invitado: el acceso comienza cuando se registre con esta dirección.",
     "pendingFor": "Invitación para {name}",
     "withdraw": "Retirar la invitación",
+    "verifyFirst": {
+      "title": "Confirma primero tu dirección de correo",
+      "body": "Compartir envía un correo en tu nombre y da acceso a otra persona, así que confirma tu propia dirección antes de compartir."
+    },
     "inherited": "Heredado del proyecto: cualquier cambio aquí desvincula esta clase.",
     "overridden": "Redefinido para esta clase.",
     "useProject": "Usar los ajustes del proyecto",

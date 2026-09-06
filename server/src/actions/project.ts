@@ -436,8 +436,10 @@ export const projectShare = defineAction<
     email: z.email(),
     role: z.enum(['viewer', 'editor']),
   }),
-  execute: (ctx, input, access) =>
-    withProjectSettingsAudit(access, async doc => {
+  execute: async (ctx, input, access) => {
+    // Confirm your own address first — see deck.share (SHARE-3).
+    if (ctx.userId) await requireVerifiedEmail(ctx.userId)
+    return withProjectSettingsAudit(access, async doc => {
       const email = normalizeEmail(input.email)
       const user = await UserModel.findOne({ email })
       if (user && user._id.toString() === doc.ownerId.toString()) {
@@ -483,7 +485,8 @@ export const projectShare = defineAction<
         awaitingConfirmation: Boolean(user) && !proven,
       })
       return sharesOfAcl(projectAcl(doc))
-    }),
+    })
+  },
 })
 
 export const projectUnshare = defineAction<

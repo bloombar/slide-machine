@@ -1791,8 +1791,13 @@ export const deckShare = defineAction<
     email: z.email(),
     role: z.enum(['viewer', 'editor']),
   }),
-  execute: (ctx, input, access) =>
-    withDeckSettingsAudit(access, async (deck, acl) => {
+  execute: async (ctx, input, access) => {
+    // Confirm your own address before handing a lecture to anyone else
+    // (SHARE-3). Sharing puts a stranger's address into an outgoing message
+    // and grants them access on the strength of an account nobody has
+    // proved; the client says so and offers a fresh confirmation link.
+    if (ctx.userId) await requireVerifiedEmail(ctx.userId)
+    return withDeckSettingsAudit(access, async (deck, acl) => {
       const email = normalizeEmail(input.email)
       const user = await UserModel.findOne({ email })
       if (user && user._id.toString() === deck.ownerId.toString()) {
@@ -1847,7 +1852,8 @@ export const deckShare = defineAction<
         awaitingConfirmation: Boolean(user) && !proven,
       })
       return sharesOf(resolveDeckAcl(deck, null))
-    }),
+    })
+  },
 })
 
 export const deckUnshare = defineAction<

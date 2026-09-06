@@ -1029,6 +1029,10 @@
     "invitedHint": "Invited — access starts when they sign up with this address.",
     "pendingFor": "Invitation for {name}",
     "withdraw": "Withdraw invitation",
+    "verifyFirst": {
+      "title": "Confirm your email address first",
+      "body": "Sharing sends an email on your behalf and gives someone else access, so we ask you to confirm your own address before you can share this with anyone."
+    },
     "inherited": "Inherited from the project — changes here detach this lecture.",
     "overridden": "Overridden for this lecture.",
     "useProject": "Use project settings",

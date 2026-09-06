@@ -1029,6 +1029,10 @@
     "invitedHint": "Invité — l'accès commence dès son inscription avec cette adresse.",
     "pendingFor": "Invitation pour {name}",
     "withdraw": "Retirer l'invitation",
+    "verifyFirst": {
+      "title": "Confirmez d'abord votre adresse e-mail",
+      "body": "Le partage envoie un e-mail en votre nom et donne accès à quelqu'un d'autre : confirmez votre propre adresse avant de partager."
+    },
     "inherited": "Hérité du projet — toute modification ici détache ce cours.",
     "overridden": "Redéfini pour ce cours.",
     "useProject": "Utiliser les paramètres du projet",

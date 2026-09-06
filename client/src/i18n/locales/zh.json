@@ -1029,6 +1029,10 @@
     "invitedHint": "已邀请 — 对方用此邮箱注册后即可访问。",
     "pendingFor": "给 {name} 的邀请",
     "withdraw": "撤回邀请",
+    "verifyFirst": {
+      "title": "请先确认你的邮箱地址",
+      "body": "分享会以你的名义发送邮件并让他人获得访问权限，因此请先确认自己的邮箱地址。"
+    },
     "inherited": "继承自项目——在此修改会使该课程脱离继承。",
     "overridden": "已为该课程单独设置。",
     "useProject": "使用项目设置",
