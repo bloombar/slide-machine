@@ -1795,15 +1795,21 @@ export const deckShare = defineAction<
     withDeckSettingsAudit(access, async (deck, acl) => {
       const email = normalizeEmail(input.email)
       const user = await UserModel.findOne({ email })
+      if (user && user._id.toString() === deck.ownerId.toString()) {
+        throw new ActionValidationError('deck.share', [
+          'email: that user owns this lecture',
+        ])
+      }
+      // An account that has never confirmed its address is not evidence
+      // that the person behind the address is the one holding it — anyone
+      // can register any address (SHARE-3). Such a share waits as an
+      // invitation exactly as one to a stranger does, and is granted when
+      // the address is confirmed.
+      const proven = Boolean(user?.emailVerified)
       ensureDeckOverride(deck, acl)
       const override = deck.accessOverride!
-      if (user) {
+      if (user && proven) {
         const userId = user._id.toString()
-        if (userId === deck.ownerId.toString()) {
-          throw new ActionValidationError('deck.share', [
-            'email: that user owns this lecture',
-          ])
-        }
         const list =
           input.role === 'editor' ? override.editors : override.viewers
         if (!list.includes(userId)) list.push(userId)
@@ -1816,16 +1822,16 @@ export const deckShare = defineAction<
         // clear any invitation the grant has just made redundant.
         override.invites = removeInvite(override.invites, email)
       } else {
-        // An address that could never register — banned, or a deleted
+        // An address that could never claim it — banned, or a deleted
         // account whose row still holds the address — is refused rather
         // than invited into a share it can never reach.
-        if (!(await invitable(email))) {
+        if (!user && !(await invitable(email))) {
           throw new ActionValidationError('deck.share', [
             'email: that address cannot be invited',
           ])
         }
-        // No account yet (SHARE-3): the grant is held until one exists, and
-        // the message says how to claim it.
+        // Held until the address is proven (SHARE-3), whether that means
+        // registering with it or confirming an account that never did.
         override.invites = upsertInvite(override.invites, email, input.role)
       }
       deck.markModified('accessOverride')
@@ -1838,6 +1844,7 @@ export const deckShare = defineAction<
         path: `/d/${deck.permalinkSlug}`,
         role: input.role,
         hasAccount: Boolean(user),
+        awaitingConfirmation: Boolean(user) && !proven,
       })
       return sharesOf(resolveDeckAcl(deck, null))
     }),

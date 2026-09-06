@@ -6,7 +6,7 @@
  * owner).
  */
 import { test, expect, type Browser, type Page } from './fixtures'
-import { createProject } from './helpers'
+import { createProject, verifyEmail } from './helpers'
 
 const stamp = Date.now()
 const alice = { email: `alice-${stamp}@example.com`, name: 'Alice' }
@@ -25,6 +25,10 @@ const newUserPage = async (
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page).toHaveURL(/\/app$/)
+  // A share to an address that has never been confirmed waits as an
+  // invitation rather than granting (SHARE-3), and ownership cannot pass to
+  // someone who does not hold the lecture yet.
+  await verifyEmail(page, user.email)
   return page
 }
 

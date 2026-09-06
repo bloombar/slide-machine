@@ -36,6 +36,11 @@ const registerUser = async (email: string): Promise<string> => {
       `registration failed: ${res.status} ${JSON.stringify(res.body)}`,
     )
   }
+  // Confirmed, like any ordinary user of a running app: a share to an
+  // address that has never been confirmed waits as an invitation rather
+  // than granting access (SHARE-3), and these tests are about what a
+  // collaborator can do once they have it.
+  await UserModel.updateOne({ email }, { emailVerified: true })
   return res.body.accessToken as string
 }
 
