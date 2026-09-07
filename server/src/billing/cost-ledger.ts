@@ -106,6 +106,11 @@ export const recordCostEvent = async ({
       projectName: sameParty ? context?.projectName : undefined,
       deckId: sameParty ? (context?.deckId ?? null) : null,
       deckName: sameParty ? context?.deckName : undefined,
+      // Inside the `sameParty` guard, like `deckId` and `projectId` above and
+      // unlike `channel`/`locale`: a slide is an entity reference belonging to
+      // one account, not a fact about the request itself, so it must not
+      // leak across a party boundary onto another account's report.
+      slideId: sameParty ? (context?.slideId ?? null) : null,
       metric,
       quantity,
       billable,

@@ -6,8 +6,28 @@
  * than calling the resolver directly: the question is whether an ordinary
  * action ends up attributed, not whether a helper works in isolation.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  vi,
+} from 'vitest'
 import request from 'supertest'
+
+// Force the mock TTS adapter (no paid API), the way tts-metering.test.ts
+// does — needed by the narration cases below, which are the one path here
+// that spends real synthesis rather than an already-mocked action.
+vi.mock('../../src/config/env', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../src/config/env')>()
+  return {
+    ...actual,
+    env: { ...actual.env, TTS_PROVIDER: 'mock' },
+  }
+})
+
 import { env } from '../../src/config/env'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
 import { createApp } from '../../src/app'
@@ -28,9 +48,25 @@ const act = (token: string, name: string, input: object = {}) =>
     .set('Authorization', `Bearer ${token}`)
     .send(input)
 
+/** Play a slide's narration. */
+const speak = (token: string, slideId: string) =>
+  request(server)
+    .post(`/api/slides/${slideId}/tts`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({ mode: 'content' })
+
+/** Ask for a lecture's translation, the way a reader's client would. */
+const translate = (token: string, slug: string, locale: string) =>
+  request(server)
+    .post(`/api/decks/${slug}/translation`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({ locale })
+
 let ada: string
+let adaId: string
 let projectId: string
 let deckId: string
+let slug: string
 
 beforeAll(async () => {
   await connectMongo(env.MONGODB_URI)
@@ -59,6 +95,9 @@ beforeEach(async () => {
     { email: 'ada@example.com' },
     { emailVerified: true },
   )
+  adaId = (await UserModel.findOne({
+    email: 'ada@example.com',
+  }))!._id.toString()
 
   const project = await act(ada, 'project.create', { title: 'Physics 101' })
   projectId = project.body.id as string
@@ -68,6 +107,7 @@ beforeEach(async () => {
     templateId: 'classic',
   })
   deckId = deck.body.id as string
+  slug = deck.body.permalinkSlug as string
   await CostEventModel.deleteMany({}) // ignore setup's own metering
 })
 
@@ -104,6 +144,38 @@ describe('an action names what it worked on', () => {
     await act(ada, 'export.download', { deckId, format: 'yaml' })
     const rows = await CostEventModel.find({}).lean()
     expect(rows.every(r => r.deckId?.toString() === deckId)).toBe(true)
+  })
+
+  it('attributes to the slide named in the input, as well as the deck it resolves to', async () => {
+    // `entityFromInput` is the database-backed half of attribution and needs
+    // real documents to resolve (see attribution-resolve.test.ts) — exercised
+    // directly here, the way the agent-channel case below exercises the
+    // ledger writer directly, rather than hunting for an action whose input
+    // happens to name a slide and whose provider happens to meter under a
+    // mock.
+    const slide = await SlideModel.create({
+      deckId,
+      index: 0,
+      layoutType: 'content',
+      title: 'Nodes',
+    })
+    const { entityFromInput } =
+      await import('../../src/billing/attribution-resolve')
+
+    // The slide is kept alongside the deck it identifies, not instead of it —
+    // BILL-7's per-lecture totals still need the deck.
+    const entity = await entityFromInput({ slideId: slide._id.toString() })
+    expect(entity.slideId).toBe(slide._id.toString())
+    expect(entity.deckId).toBe(deckId)
+  })
+
+  it('leaves the slide blank for an action that names only a deck', async () => {
+    // A whole-lecture action, like exporting the deck, has no one slide to
+    // name — blank means "not slide-specific", not "unknown".
+    await act(ada, 'export.download', { deckId, format: 'yaml' })
+    const row = await lastEvent()
+    expect(row?.slideId).toBeFalsy()
+    expect(row?.deckId?.toString()).toBe(deckId)
   })
 
   it('marks an owner’s own work as theirs', async () => {
@@ -151,6 +223,140 @@ describe('how the request arrived', () => {
     // The channel says how it arrived; actorKind still says who, and the two
     // must not have collapsed into one another.
     expect(row?.actorKind).toBe('owner')
+  })
+})
+
+describe('narration is for one slide', () => {
+  // Unique per call: the audio cache lives on disk and outlives the
+  // database, so a fixed body would make the first call of a re-run a hit.
+  const makeSlide = async (): Promise<string> => {
+    const nonce = Math.random().toString(36).slice(2)
+    const slide = await SlideModel.create({
+      deckId,
+      index: 0,
+      layoutType: 'content',
+      title: 'Nodes',
+      body: `Waves interfere ${nonce}`,
+    })
+    return slide._id.toString()
+  }
+
+  it('records the slide a synthesis was for, on a cache miss', async () => {
+    const slideId = await makeSlide()
+    const res = await speak(ada, slideId)
+    expect(res.status).toBe(200)
+
+    const row = await CostEventModel.findOne({
+      metric: 'ttsCharacters',
+    }).lean()
+    expect(row?.slideId?.toString()).toBe(slideId)
+    expect(row?.deckId?.toString()).toBe(deckId)
+    expect(row?.billable).toBe(true)
+  })
+
+  it('records the slide a synthesis was for, on a cache hit too', async () => {
+    // The path the study depends on most: almost every play in a real class
+    // is a hit against audio a first listener already paid to produce.
+    const slideId = await makeSlide()
+    await speak(ada, slideId) // fills the cache
+    await CostEventModel.deleteMany({}) // ignore the miss's own row
+
+    const res = await speak(ada, slideId) // served from the cache
+    expect(res.status).toBe(200)
+
+    const row = await CostEventModel.findOne({
+      metric: 'ttsCharacters',
+    }).lean()
+    expect(row?.slideId?.toString()).toBe(slideId)
+    expect(row?.billable).toBe(false)
+  })
+})
+
+describe('translating a whole lecture is not for one slide', () => {
+  it('writes no slideId for a whole-deck translation', async () => {
+    await SlideModel.create({
+      deckId,
+      index: 0,
+      layoutType: 'content',
+      title: 'Nodes',
+      body: 'A wave that stays in place.',
+    })
+    const res = await translate(ada, slug, 'es')
+    expect(res.status).toBe(200)
+
+    const row = await CostEventModel.findOne({
+      metric: 'translationCharacters',
+    }).lean()
+    expect(row).toBeTruthy()
+    expect(row?.deckId?.toString()).toBe(deckId)
+    // Blank means "not slide-specific" — a deck translation touches every
+    // slide, so no single one names the work.
+    expect(row?.slideId).toBeFalsy()
+  })
+})
+
+describe('the sameParty guard', () => {
+  it('drops the slide, like the deck and project, when the payer differs from the ambient context', async () => {
+    const slide = await SlideModel.create({
+      deckId,
+      index: 0,
+      layoutType: 'content',
+      title: 'Nodes',
+    })
+    const { runWithUsage } = await import('../../src/billing/usage-attribution')
+    const { recordCostEvent } = await import('../../src/billing/cost-ledger')
+    const { Types } = await import('mongoose')
+    const otherPayer = new Types.ObjectId().toString()
+
+    // The outer context belongs to Ada and names her deck and slide; the
+    // nested call spends on a different account entirely. That account's row
+    // must not inherit Ada's entity references.
+    await runWithUsage(
+      {
+        userId: adaId,
+        actorId: adaId,
+        deckId,
+        deckName: 'Standing waves',
+        slideId: slide._id.toString(),
+      },
+      () =>
+        recordCostEvent({
+          payerId: otherPayer,
+          metric: 'exports',
+          quantity: 1,
+        }),
+    )
+
+    const row = await lastEvent()
+    expect(row?.payerId.toString()).toBe(otherPayer)
+    expect(row?.deckId).toBeNull()
+    expect(row?.slideId).toBeNull()
+  })
+})
+
+describe('pricing is unchanged by this slice', () => {
+  it('prices a narration event exactly as it would have before slideId existed', async () => {
+    const { costMicrosFor } = await import('../../src/billing/pricing')
+    const slide = await SlideModel.create({
+      deckId,
+      index: 0,
+      layoutType: 'content',
+      title: 'Nodes',
+      body: `Waves interfere ${Math.random().toString(36).slice(2)}`,
+    })
+    const res = await speak(ada, slide._id.toString())
+    expect(res.status).toBe(200)
+
+    const row = await CostEventModel.findOne({
+      metric: 'ttsCharacters',
+    }).lean()
+    expect(row).toBeTruthy()
+    expect(row!.billable).toBe(true)
+    expect(row!.quantity).toBeGreaterThan(0)
+    // The figure the pricing table produces for this quantity, independent
+    // of anything this slice touched — recording which slide the work was
+    // for must not move what it cost.
+    expect(row!.costMicros).toBe(costMicrosFor('ttsCharacters', row!.quantity))
   })
 })
 
