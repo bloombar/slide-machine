@@ -327,6 +327,48 @@ describe('the bundle', () => {
     expect(bundle.get('README.md')).toContain('read or heard in')
   })
 
+  it('exports the channel a cost event arrived through', async () => {
+    const owner = await makeUser()
+    const deck = await makeDeck(owner._id)
+    // One request from the product's own front end, one from an external
+    // assistant over MCP — the whole point is that an analyst can tell
+    // them apart in the export, not just in the database.
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorKind: 'owner',
+      channel: 'app',
+      deckId: deck._id,
+      deckName: deck.title,
+      metric: 'sttMinutes',
+      quantity: 1,
+      billable: true,
+      costMicros: 500_000,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorKind: 'owner',
+      channel: 'agent',
+      deckId: deck._id,
+      deckName: deck.title,
+      metric: 'sttMinutes',
+      quantity: 1,
+      billable: true,
+      costMicros: 500_000,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+
+    const bundle = await getBundle()
+    const csv = bundle.get('cost-events.csv')!
+    // Pin the header itself, so a future column reorder can't silently
+    // shift which value 'channel' reads out as.
+    const [header] = csv.trim().split('\r\n')
+    expect(header!.split(',')).toContain('channel')
+    expect(column(csv, 'channel').sort()).toEqual(['agent', 'app'])
+  })
+
   it('exports lecture openings, naming only the readers who signed in', async () => {
     const owner = await makeUser()
     const reader = await makeUser({ email: 'reader@example.com' })
