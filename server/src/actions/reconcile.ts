@@ -1044,6 +1044,15 @@ export const deckRefine = defineAction<
     const job = await RefineJobModel.create({
       deckId: deck._id,
       status: 'running',
+      // GEN-4: record what was asked for, not only what happened — the
+      // research export needs both to tell a light run from a heavy one.
+      request: {
+        identifySpeakers: input.identifySpeakers,
+        slidesLevel: input.refineSlides?.level,
+        slidesParts: input.refineSlides?.parts,
+        allowSplit: input.refineSlides?.allowSplit,
+        transcriptLevel: input.refineTranscript?.level,
+      },
     })
     // Fire-and-forget: the job runs in the background; the client polls status.
     void runRefine(job._id.toString(), deck._id.toString(), input)

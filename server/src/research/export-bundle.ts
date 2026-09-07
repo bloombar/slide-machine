@@ -23,6 +23,7 @@ import { MICROS_PER_UNIT } from '../billing/pricing'
 import { CostEventModel } from '../models/cost-event'
 import { DeckViewModel } from '../models/deck-view'
 import { DeckModel } from '../models/deck'
+import { RefineJobModel } from '../models/refine-job'
 import { SessionTelemetryEventModel } from '../models/session-telemetry-event'
 import { SlideModel } from '../models/slide'
 import { TranscriptSegmentModel } from '../models/transcript-segment'
@@ -92,6 +93,15 @@ downstream before analysis, as the study protocol (P-7, P-14) requires.
   with one reader in a language singles that pseudonym out, and every other
   row it appears in with it. Suppress small cells before publishing.
 
+- refine-jobs.csv — one row per post-lecture refinement run (GEN-4) started
+  in the window. Failed and soft-deleted runs are included: a run that
+  errored is a fact about the machine, and leaving it out would make
+  refinement look more reliable than it was. The identifySpeakers,
+  slidesLevel, slidesParts, transcriptLevel and allowSplit columns are what
+  the run was asked to do; reframed, slidesRefined, slidesSplit and
+  transcriptsUpdated are what it actually changed — a run that touched two
+  slides at strength 1 and one that touched two at strength 5 are different
+  observations, and the outcome counts alone cannot tell them apart.
 - deck-views.csv — one row per time a lecture was opened in the viewer over
   the window (EVAL-7). A blank viewerStudyId is a signed-out reader: those
   are counted as openings and deliberately never identified, so distinct
@@ -122,6 +132,7 @@ export const buildResearchBundle = async (
     telemetryDecks,
     voteDecks,
     costDecks,
+    refineDecks,
     viewDecks,
   ] = await Promise.all([
     DeckModel.find(windowFilter('createdAt', window))
@@ -142,6 +153,9 @@ export const buildResearchBundle = async (
       deckId: { $ne: null },
       ...windowFilter('occurredAt', window),
     }),
+    RefineJobModel.distinct('deckId', {
+      ...windowFilter('createdAt', window),
+    }).setOptions(seen),
     DeckViewModel.distinct('deckId', windowFilter('occurredAt', window)),
   ])
   const deckIds = [
@@ -152,6 +166,7 @@ export const buildResearchBundle = async (
         ...telemetryDecks,
         ...voteDecks,
         ...costDecks,
+        ...refineDecks,
         ...viewDecks,
       ]
         .filter((id): id is Types.ObjectId => id != null)
@@ -159,24 +174,35 @@ export const buildResearchBundle = async (
     ),
   ].map(id => new Types.ObjectId(id))
 
-  const [decks, slides, segments, sessions, votes, costEvents, deckViews] =
-    await Promise.all([
-      DeckModel.find({ _id: { $in: deckIds } }).setOptions(seen),
-      SlideModel.find({ deckId: { $in: deckIds } })
-        .sort({ deckId: 1, index: 1 })
-        .setOptions(seen),
-      TranscriptSegmentModel.find(windowFilter('createdAt', window))
-        .sort({ createdAt: 1 })
-        .setOptions(seen),
-      sessionSummaries({}, window),
-      VoteModel.find(windowFilter('createdAt', window)).sort({ createdAt: 1 }),
-      CostEventModel.find(windowFilter('occurredAt', window)).sort({
-        occurredAt: 1,
-      }),
-      DeckViewModel.find(windowFilter('occurredAt', window)).sort({
-        occurredAt: 1,
-      }),
-    ])
+  const [
+    decks,
+    slides,
+    segments,
+    sessions,
+    votes,
+    costEvents,
+    refineJobs,
+    deckViews,
+  ] = await Promise.all([
+    DeckModel.find({ _id: { $in: deckIds } }).setOptions(seen),
+    SlideModel.find({ deckId: { $in: deckIds } })
+      .sort({ deckId: 1, index: 1 })
+      .setOptions(seen),
+    TranscriptSegmentModel.find(windowFilter('createdAt', window))
+      .sort({ createdAt: 1 })
+      .setOptions(seen),
+    sessionSummaries({}, window),
+    VoteModel.find(windowFilter('createdAt', window)).sort({ createdAt: 1 }),
+    CostEventModel.find(windowFilter('occurredAt', window)).sort({
+      occurredAt: 1,
+    }),
+    RefineJobModel.find(windowFilter('createdAt', window))
+      .sort({ createdAt: 1 })
+      .setOptions(seen),
+    DeckViewModel.find(windowFilter('occurredAt', window)).sort({
+      occurredAt: 1,
+    }),
+  ])
 
   // Every account any row references, pseudonymized in one pass.
   const studyIds = await ensureStudyIds([
@@ -367,6 +393,48 @@ export const buildResearchBundle = async (
         e.billable,
         (e.costMicros / MICROS_PER_UNIT).toFixed(6),
         e.currency,
+      ]),
+    ),
+  )
+
+  add(
+    'refine-jobs.csv',
+    csvFile(
+      [
+        'jobId',
+        'deckId',
+        'status',
+        'identifySpeakers',
+        'slidesLevel',
+        'slidesParts',
+        'transcriptLevel',
+        'allowSplit',
+        'reframed',
+        'slidesRefined',
+        'slidesSplit',
+        'transcriptsUpdated',
+        'error',
+        'createdAt',
+        'updatedAt',
+        'deletedAt',
+      ],
+      refineJobs.map(j => [
+        j._id.toString(),
+        j.deckId.toString(),
+        j.status,
+        j.request?.identifySpeakers,
+        j.request?.slidesLevel,
+        json(j.request?.slidesParts),
+        j.request?.transcriptLevel,
+        j.request?.allowSplit,
+        j.summary?.reframed,
+        j.summary?.slidesRefined,
+        j.summary?.slidesSplit,
+        j.summary?.transcriptsUpdated,
+        j.error,
+        iso(j.createdAt),
+        iso(j.updatedAt ?? j.createdAt),
+        iso(j.deletedAt),
       ]),
     ),
   )

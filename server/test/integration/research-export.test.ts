@@ -22,6 +22,7 @@ import { SessionTelemetryEventModel } from '../../src/models/session-telemetry-e
 import { VoteModel } from '../../src/models/vote'
 import { CostEventModel } from '../../src/models/cost-event'
 import { DeckViewModel } from '../../src/models/deck-view'
+import { RefineJobModel } from '../../src/models/refine-job'
 import { ensureStudyIds } from '../../src/research/study-id'
 import { signAccessToken } from '../../src/auth/tokens'
 
@@ -116,6 +117,7 @@ beforeEach(async () => {
     VoteModel.deleteMany({}),
     CostEventModel.deleteMany({}),
     DeckViewModel.deleteMany({}),
+    RefineJobModel.deleteMany({}),
   ])
   const admin = await UserModel.create({
     email: ADMIN_EMAIL,
@@ -157,6 +159,7 @@ describe('the bundle', () => {
       'cost-events.csv',
       'deck-views.csv',
       'lectures.csv',
+      'refine-jobs.csv',
       'session-telemetry.csv',
       'slides.csv',
       'transcript-segments.csv',
@@ -370,6 +373,114 @@ describe('the bundle', () => {
     const deleted = column(bundle.get('lectures.csv')!, 'deletedAt')
     expect(deleted).toHaveLength(1)
     expect(deleted[0]).not.toBe('')
+  })
+})
+
+describe('refine jobs', () => {
+  it('records what a run was asked to do alongside what it changed', async () => {
+    const owner = await makeUser()
+    const deck = await makeDeck(owner._id)
+    await RefineJobModel.create({
+      deckId: deck._id,
+      status: 'done',
+      // What was asked for — a single-key `parts` keeps the JSON cell
+      // comma-free so this fixture can assert it with the same naive
+      // column() splitter as the rest of this file.
+      request: {
+        identifySpeakers: true,
+        slidesLevel: 3,
+        slidesParts: { text: true },
+        allowSplit: true,
+        transcriptLevel: 2,
+      },
+      // What actually happened — deliberately different numbers, so a
+      // test that only checked one side could not pass by accident.
+      summary: {
+        reframed: 1,
+        slidesRefined: 2,
+        slidesSplit: 1,
+        transcriptsUpdated: 4,
+      },
+    })
+
+    const bundle = await getBundle()
+    const csv = bundle.get('refine-jobs.csv')!
+    expect(column(csv, 'deckId')).toEqual([deck._id.toString()])
+    expect(column(csv, 'status')).toEqual(['done'])
+    expect(column(csv, 'identifySpeakers')).toEqual(['true'])
+    expect(column(csv, 'slidesLevel')).toEqual(['3'])
+    expect(column(csv, 'allowSplit')).toEqual(['true'])
+    expect(column(csv, 'transcriptLevel')).toEqual(['2'])
+    // The cell is CSV-quoted (it contains commas/quotes), so its embedded
+    // quotes are doubled per RFC 4180 — hence the doubled quotes here too.
+    expect(csv).toContain('""text"":true')
+    expect(column(csv, 'reframed')).toEqual(['1'])
+    expect(column(csv, 'slidesRefined')).toEqual(['2'])
+    expect(column(csv, 'slidesSplit')).toEqual(['1'])
+    expect(column(csv, 'transcriptsUpdated')).toEqual(['4'])
+  })
+
+  it('includes a failed run, with its error and status', async () => {
+    const owner = await makeUser()
+    const deck = await makeDeck(owner._id)
+    await RefineJobModel.create({
+      deckId: deck._id,
+      status: 'error',
+      request: { transcriptLevel: 1 },
+      error: 'Deck no longer exists',
+    })
+
+    const bundle = await getBundle()
+    const csv = bundle.get('refine-jobs.csv')!
+    expect(column(csv, 'status')).toEqual(['error'])
+    expect(column(csv, 'error')).toEqual(['Deck no longer exists'])
+  })
+
+  it('includes a soft-deleted run, marked by deletedAt', async () => {
+    const owner = await makeUser()
+    const deck = await makeDeck(owner._id)
+    await RefineJobModel.create({
+      deckId: deck._id,
+      status: 'done',
+      summary: {
+        reframed: 0,
+        slidesRefined: 0,
+        slidesSplit: 0,
+        transcriptsUpdated: 0,
+      },
+      deletedAt: new Date(),
+    })
+
+    const bundle = await getBundle()
+    const deleted = column(bundle.get('refine-jobs.csv')!, 'deletedAt')
+    expect(deleted).toHaveLength(1)
+    expect(deleted[0]).not.toBe('')
+  })
+
+  it('unions in a lecture whose only in-window activity is a refine job', async () => {
+    const owner = await makeUser()
+    const deck = await makeDeck(owner._id)
+    // The lecture predates the window; only the refine job falls inside. A
+    // refine-only lecture must still find a row to join to.
+    const future = new Date(Date.now() + 3_600_000)
+    await RefineJobModel.create({
+      deckId: deck._id,
+      status: 'running',
+    })
+    await RefineJobModel.collection.updateOne(
+      { deckId: deck._id },
+      { $set: { createdAt: new Date(future.getTime() + 60_000) } },
+    )
+
+    const bundle = await getBundle(
+      `?from=${encodeURIComponent(future.toISOString())}`,
+    )
+    expect(column(bundle.get('lectures.csv')!, 'deckId')).toEqual([
+      deck._id.toString(),
+    ])
+    expect(column(bundle.get('refine-jobs.csv')!, 'deckId')).toEqual([
+      deck._id.toString(),
+    ])
   })
 })
 
