@@ -15,10 +15,12 @@
  */
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import type { HydratedDocument } from 'mongoose'
+import { randomBytes } from 'node:crypto'
 import {
   deckSourceLocale,
   isLocale,
   type DeckTranslationResponse,
+  type DeckViewBeaconResponse,
   type DeckViewResponse,
 } from '@slide-machine/shared'
 import { createRateLimiter } from '../lib/rate-limit'
@@ -235,10 +237,13 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
  * viewer knows which fetch was somebody opening the lecture, so only the
  * viewer says so.
  *
- * Answers 204 whatever happens. A reader whose lecture failed to be counted
- * has still read it, and failing their request to protect a statistic would
- * be the wrong way round — the same discipline the cost ledger and the audit
- * log use.
+ * Answers 204 whatever happens, except the one case that has something to
+ * hand back: a recorded opening answers 200 with a single-use
+ * `completionKey` (EVAL-7 depth) for `/decks/:slug/view/complete` to spend
+ * later, reporting how far this reader got. A reader whose lecture failed to
+ * be counted has still read it, and failing their request to protect a
+ * statistic would be the wrong way round — the same discipline the cost
+ * ledger and the audit log use.
  */
 /**
  * Openings recorded per caller address per window.
@@ -288,10 +293,13 @@ const dropNotice = createRateLimiter({
   windowMs: VIEW_RATE_WINDOW_MS,
 })
 
-/** Test seam: each case starts with a fresh window. */
+/** Test seam: each case starts with a fresh window. Resets the completion
+ * route's guard too — declared further down, but the same closure reaches it
+ * once the module has finished loading, which is all a test needs. */
 export const resetDeckViewRateLimit = (): void => {
   viewLimiter.reset()
   dropNotice.reset()
+  completeLimiter.reset()
 }
 
 decksRouter.post('/decks/:slug/view', optionalAuth, async (req, res) => {
@@ -324,6 +332,12 @@ decksRouter.post('/decks/:slug/view', optionalAuth, async (req, res) => {
     .setOptions(deck.deletedAt ? withDeleted : {})
     .catch(() => null)
 
+  // This opening's single-use credential for reporting depth later (EVAL-7
+  // depth decision 6): crypto-random and long enough that guessing one is not
+  // a practical attack, scoped to this row alone, and never derived from
+  // anything about the reader.
+  const completionKey = randomBytes(32).toString('hex')
+
   try {
     await DeckViewModel.create({
       deckId: deck._id,
@@ -342,14 +356,113 @@ decksRouter.post('/decks/:slug/view', optionalAuth, async (req, res) => {
       // lecture through MCP without ever opening the viewer.
       channel: 'app',
       occurredAt: new Date(),
+      completionKey,
     })
   } catch (error) {
     // Logged, never raised. Losing a row costs a report some accuracy;
-    // failing here would cost a reader their lecture.
+    // failing here would cost a reader their lecture. No row means no key to
+    // hand back either — a depth report would have nowhere to land.
     console.error(`Failed to record view of deck ${deck._id}:`, error)
+    return res.status(204).end()
   }
-  res.status(204).end()
+  const body: DeckViewBeaconResponse = { completionKey }
+  res.status(200).json(body)
 })
+
+/**
+ * Reading-depth validation ceilings (EVAL-7 depth). Generous on purpose: the
+ * point is to refuse values that could not have come from an honest reader —
+ * a beacon fired for a slide count the deck does not have, or visible time
+ * beyond anything a lecture could take — not to second-guess a real one.
+ */
+const isFiniteNonNegative = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0
+
+/** A day of genuinely visible time is far beyond any real lecture; past this
+ * a value is refused as absurd rather than trusted as a floor. */
+const MAX_ACTIVE_MS = 24 * 60 * 60 * 1000
+
+/** Same shape of guard as `viewLimiter`, kept separate so a flood against
+ * completion cannot spend a signed-in reader's opening budget, and vice
+ * versa. */
+const completeLimiter = createRateLimiter({
+  limit: VIEW_RATE_LIMIT,
+  windowMs: VIEW_RATE_WINDOW_MS,
+})
+
+/**
+ * POST /api/decks/:slug/view/complete — reports how far a reader got in an
+ * opening `/view` already recorded (EVAL-7 depth).
+ *
+ * The only credential this route checks is `completionKey`, and that is
+ * deliberate: completing an opening's row has to identify *that opening*,
+ * never the reader, so this asks for nothing about who is reporting and
+ * gates on nothing but the key. That also makes it reachable from
+ * `navigator.sendBeacon`, which cannot carry an Authorization header — the
+ * same anonymity the beacon needs is what lets it fire on tab close.
+ *
+ * `slidesReached` and `activeMs` only ever grow (Mongo's `$max`, which also
+ * handles "no report yet" since null sorts below every number), and the
+ * update unsets `completionKey` in the same write: once matched, the key is
+ * spent, so a replay of the same beacon — the periodic flush resending after
+ * a beacon that already landed — finds no row and changes nothing rather
+ * than erroring. Malformed or out-of-range values are refused before they
+ * ever reach the database. Either way this answers 204: a failed depth
+ * report must cost the report, never the reader, the same discipline `/view`
+ * follows.
+ */
+decksRouter.post(
+  '/decks/:slug/view/complete',
+  optionalAuth,
+  async (req, res) => {
+    // Existence only, not the view ACL: the completion key was already
+    // gated behind that ACL when `/view` issued it, and re-checking it here
+    // would refuse a signed-in reader's own private lecture the moment the
+    // report arrives with no Authorization header, which sendBeacon cannot
+    // send. A slug naming nothing has no slide count to validate against.
+    const deck = await DeckModel.findOne({ permalinkSlug: req.params.slug })
+      .setOptions(withDeleted)
+      .catch(() => null)
+    if (!deck) throw new HttpError(404, 'not_found', 'Deck not found')
+
+    // Keyed the same way as `/view`'s guard, and independently: a caller with
+    // no account falls back to their address, which a lecture hall can share.
+    const caller = req.userId ?? req.ip ?? 'unknown'
+    if (!completeLimiter.take(caller)) return res.status(204).end()
+
+    const { completionKey, slidesReached, activeMs } = (req.body ?? {}) as {
+      completionKey?: unknown
+      slidesReached?: unknown
+      activeMs?: unknown
+    }
+    const slideCount = await SlideModel.countDocuments({ deckId: deck._id })
+    const validKey = typeof completionKey === 'string' && completionKey !== ''
+    const validSlides =
+      isFiniteNonNegative(slidesReached) &&
+      Number.isInteger(slidesReached) &&
+      slidesReached <= slideCount
+    const validActive =
+      isFiniteNonNegative(activeMs) && activeMs <= MAX_ACTIVE_MS
+
+    if (validKey && validSlides && validActive) {
+      try {
+        // Scoped to this deck too, belt-and-braces alongside the key itself:
+        // a match requires both, though the key alone already names one row.
+        await DeckViewModel.updateOne(
+          { deckId: deck._id, completionKey },
+          { $max: { slidesReached, activeMs }, $unset: { completionKey: '' } },
+        )
+      } catch (error) {
+        // Same discipline as `/view`: logged, never raised.
+        console.error(
+          `Failed to record reading depth for deck ${deck._id}:`,
+          error,
+        )
+      }
+    }
+    res.status(204).end()
+  },
+)
 
 /**
  * POST /api/decks/:slug/translation — the deck's slide content in another

@@ -363,6 +363,41 @@ describe('the bundle', () => {
     expect(bundle.get('README.md')).toContain('deck-views.csv')
   })
 
+  it('carries reading depth as a floor, blank when never reported', async () => {
+    const owner = await makeUser()
+    const deck = await makeDeck(owner._id)
+    // Depth reported: how far this reading got.
+    await DeckViewModel.create({
+      deckId: deck._id,
+      deckName: deck.title,
+      ownerId: owner._id,
+      viewerId: null,
+      actorKind: 'audience',
+      channel: 'app',
+      occurredAt: new Date(),
+      slidesReached: 7,
+      activeMs: 120_000,
+    })
+    // No depth report ever arrived — the tab closed before one landed.
+    await DeckViewModel.create({
+      deckId: deck._id,
+      deckName: deck.title,
+      ownerId: owner._id,
+      viewerId: null,
+      actorKind: 'audience',
+      channel: 'app',
+      occurredAt: new Date(),
+    })
+
+    const bundle = await getBundle()
+    const csv = bundle.get('deck-views.csv')!
+    expect(column(csv, 'slidesReached').sort()).toEqual(['', '7'])
+    expect(column(csv, 'activeMs').sort()).toEqual(['', '120000'])
+    expect(bundle.get('README.md')).toContain('slidesReached')
+    expect(bundle.get('README.md')).toContain('activeMs')
+    expect(bundle.get('README.md')).toContain('floor')
+  })
+
   it('exports tombstoned lectures marked by deletedAt', async () => {
     const owner = await makeUser()
     await makeDeck(owner._id, { deletedAt: new Date() })

@@ -32,6 +32,19 @@
  *    to poll for new audio and after a settings change; those are not
  *    readings. The client asks for a view to be recorded once, when it opens
  *    the lecture, rather than the route counting every GET it serves.
+ * 6. **Depth completes the opening; it never identifies it further.**
+ *    `slidesReached` and `activeMs` answer "how far" and "how long", but
+ *    reaching them the same way `viewerId` is reached — by asking who the
+ *    reader is — would undo decision 2 for the very readers it protects. So
+ *    the view route hands back a single-use `completionKey` for *this row*,
+ *    and the completion route trades that key for an update: it identifies
+ *    an opening, never a person, and is unset in the same write that spends
+ *    it, so nothing about a finished opening can be reported twice or traced
+ *    back afterwards. Both numbers only move up (a late beacon must not
+ *    shrink what an earlier one already reported), and both are a floor —
+ *    a reader who closes the tab mid-lecture reports nothing further, so
+ *    what is stored is "reached at least this far", never "reached exactly
+ *    this far and no further".
  */
 import { Schema, type Types } from 'mongoose'
 import { ACTOR_CHANNELS, type ActorChannel } from '@slide-machine/shared'
@@ -70,6 +83,18 @@ export interface DeckViewDb {
    * distinction the cost ledger draws, for the same reason. */
   channel: ActorChannel
   occurredAt: Date
+  /** The furthest slide index reached, plus one — a floor, not an exact
+   * count: a reader who closes the tab mid-lecture reports nothing further.
+   * Only ever moves up (decision 6). Null until the first depth report. */
+  slidesReached?: number | null
+  /** Milliseconds this opening was actually visible on screen — accrues only
+   * while the tab was in the foreground, so a lecture left open overnight
+   * does not read as a long one. Also a floor, and only ever moves up. */
+  activeMs?: number | null
+  /** This opening's single-use credential for reporting depth (decision 6).
+   * Set when the row is created, unset by the same update that spends it —
+   * null both before it exists and after it has been used. */
+  completionKey?: string | null
 }
 
 const deckViewSchema = new Schema<DeckViewDb>({
@@ -87,6 +112,9 @@ const deckViewSchema = new Schema<DeckViewDb>({
     default: 'app',
   },
   occurredAt: { type: Date, required: true, default: Date.now },
+  slidesReached: { type: Number, default: null },
+  activeMs: { type: Number, default: null },
+  completionKey: { type: String, default: null },
 })
 
 // "How often was this lecture opened, over this window" — the question the
@@ -97,6 +125,10 @@ deckViewSchema.index({ deckId: 1, occurredAt: -1 })
 deckViewSchema.index({ ownerId: 1, occurredAt: -1 })
 // The retention sweep and any deployment-wide total walk by time alone.
 deckViewSchema.index({ occurredAt: -1 })
+// Sparse: most rows have no key (never issued one, or already spent it), and
+// a dense index would carry every one of those for a lookup that only ever
+// targets the rare row still holding a live key.
+deckViewSchema.index({ completionKey: 1 }, { sparse: true })
 
 // Deliberately no soft-delete plugin, matching the cost ledger: a deleted
 // lecture was still read, and a record that disappears with the thing it

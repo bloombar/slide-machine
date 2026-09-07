@@ -102,6 +102,11 @@ downstream before analysis, as the study protocol (P-7, P-14) requires.
   in a small cohort: a signed-in reader's rows here sit next to their rows in
   cost-events.csv, and adjacent timestamps reconstruct a reading session for
   one person. Aggregate before publishing, and suppress small cells here too.
+  slidesReached and activeMs are both a floor, not an exact figure: a reader
+  who closes the browser abruptly reports nothing further, so either column
+  can understate how far a reading actually went. activeMs counts only time
+  the page was visible in the foreground, never a backgrounded or locked tab.
+  Both are blank when no depth report ever arrived for that opening.
 
 Rows with a deletedAt value were soft-deleted in the application but are
 exported for completeness; exclude them downstream if the analysis calls
@@ -384,6 +389,8 @@ export const buildResearchBundle = async (
         'viewerStudyId',
         'actorKind',
         'channel',
+        'slidesReached',
+        'activeMs',
       ],
       deckViews.map(v => [
         iso(v.occurredAt),
@@ -395,6 +402,10 @@ export const buildResearchBundle = async (
         sid(v.viewerId),
         v.actorKind,
         v.channel,
+        // Both a floor, never exact — see the README bullet: a reader who
+        // closed the tab abruptly reports nothing further.
+        v.slidesReached ?? undefined,
+        v.activeMs ?? undefined,
       ]),
     ),
   )

@@ -57,6 +57,16 @@ const open = (target = slug, token?: string) => {
   return req.send()
 }
 
+/** Report reading depth for an opening already recorded by `open()`. */
+const complete = (
+  body: {
+    completionKey?: unknown
+    slidesReached?: unknown
+    activeMs?: unknown
+  },
+  target = slug,
+) => request(server).post(`/api/decks/${target}/view/complete`).send(body)
+
 const views = async () => DeckViewModel.find({}).sort({ _id: 1 }).lean()
 
 let ada: string
@@ -110,7 +120,11 @@ beforeEach(async () => {
 
 describe('recording that a lecture was opened', () => {
   it('records a signed-in reader as audience, by name', async () => {
-    expect((await open(slug, byron)).status).toBe(204)
+    const res = await open(slug, byron)
+    expect(res.status).toBe(200)
+    // The single-use depth-reporting credential (EVAL-7 depth): ≥32 bytes
+    // hex, so it is 64 or more hex characters.
+    expect(res.body.completionKey).toMatch(/^[0-9a-f]{64,}$/)
 
     const [row] = await views()
     expect(row).toBeDefined()
@@ -125,7 +139,9 @@ describe('recording that a lecture was opened', () => {
   })
 
   it('counts a signed-out reader without identifying them', async () => {
-    expect((await open()).status).toBe(204)
+    const res = await open()
+    expect(res.status).toBe(200)
+    expect(res.body.completionKey).toMatch(/^[0-9a-f]{64,}$/)
 
     const [row] = await views()
     // The whole compromise §16 requires: the opening is recorded, the person
@@ -302,7 +318,7 @@ describe('the nuisance guard on an endpoint anyone can post to', () => {
     expect(await DeckViewModel.countDocuments({})).toBe(0)
 
     // The real lecture still counts, which is the whole point.
-    expect((await open()).status).toBe(204)
+    expect((await open()).status).toBe(200)
     expect(await DeckViewModel.countDocuments({})).toBe(1)
   })
 
@@ -328,7 +344,7 @@ describe('the nuisance guard on an endpoint anyone can post to', () => {
 
     // Ada's budget is untouched, so her openings of a lecture she can see
     // are still recorded.
-    expect((await open(slug, ada)).status).toBe(204)
+    expect((await open(slug, ada)).status).toBe(200)
     expect(await DeckViewModel.countDocuments({})).toBe(1)
   })
 
@@ -340,7 +356,143 @@ describe('the nuisance guard on an endpoint anyone can post to', () => {
     expect(afterAda).toBe(FLOOD)
 
     // Same address, different account — and still counted.
-    expect((await open(slug, byron)).status).toBe(204)
+    expect((await open(slug, byron)).status).toBe(200)
     expect(await DeckViewModel.countDocuments({})).toBe(afterAda + 1)
+  })
+})
+
+/** Backs `slug`'s deck with some slides, so `slidesReached` has a range to
+ * be validated against — a fresh `deck.create` starts with none. */
+const addSlides = (count: number) =>
+  SlideModel.create(
+    Array.from({ length: count }, (_, index) => ({
+      deckId,
+      index,
+      layoutType: 'content',
+    })),
+  )
+
+describe('reporting how far a reader got (EVAL-7 depth)', () => {
+  it('updates the opening the key names', async () => {
+    await addSlides(5)
+    const key = (await open()).body.completionKey as string
+
+    const res = await complete({
+      completionKey: key,
+      slidesReached: 3,
+      activeMs: 45_000,
+    })
+    expect(res.status).toBe(204)
+
+    const [row] = await views()
+    expect(row!.slidesReached).toBe(3)
+    expect(row!.activeMs).toBe(45_000)
+  })
+
+  it('is single-use — a second completion with the same key changes nothing', async () => {
+    await addSlides(5)
+    const key = (await open()).body.completionKey as string
+    await complete({ completionKey: key, slidesReached: 3, activeMs: 45_000 })
+
+    // Same key, larger numbers — if this landed it would grow the row, but
+    // the key is already spent, so it must not.
+    const again = await complete({
+      completionKey: key,
+      slidesReached: 5,
+      activeMs: 90_000,
+    })
+    expect(again.status).toBe(204)
+
+    const [row] = await views()
+    expect(row!.slidesReached).toBe(3)
+    expect(row!.activeMs).toBe(45_000)
+    // Unset (not merely blanked) by the first update — a lean read reports a
+    // genuinely absent field as undefined, not the schema's null default —
+    // confirming the key is truly gone rather than merely refused a second
+    // time.
+    expect(row!.completionKey).toBeUndefined()
+  })
+
+  it('never lets a report shrink an already-larger stored value', async () => {
+    await addSlides(12)
+    // A value higher than the report below claims — reachable in principle
+    // by an out-of-order arrival, and simulated directly here since only one
+    // completion call can ever land through the API's own single-use key.
+    const key = 'f'.repeat(64)
+    await DeckViewModel.create({
+      deckId,
+      deckName: 'Waves',
+      ownerId: adaId,
+      viewerId: null,
+      actorKind: 'audience',
+      channel: 'app',
+      occurredAt: new Date(),
+      slidesReached: 10,
+      activeMs: 500_000,
+      completionKey: key,
+    })
+
+    await complete({ completionKey: key, slidesReached: 3, activeMs: 1_000 })
+
+    const [row] = await views()
+    expect(row!.slidesReached).toBe(10)
+    expect(row!.activeMs).toBe(500_000)
+  })
+
+  it('rejects out-of-range or malformed values without a 500, and records nothing', async () => {
+    await addSlides(3)
+    const key = (await open()).body.completionKey as string
+    const bad = [
+      { completionKey: key, slidesReached: -1, activeMs: 1000 }, // negative
+      { completionKey: key, slidesReached: 1.5, activeMs: 1000 }, // non-integer
+      { completionKey: key, slidesReached: 999, activeMs: 1000 }, // beyond the deck's slide count
+      { completionKey: key, slidesReached: 1, activeMs: -5 }, // negative time
+      { completionKey: key, slidesReached: 1, activeMs: 999_999_999_999 }, // past the sane ceiling
+      { completionKey: 12345, slidesReached: 1, activeMs: 1000 }, // key not a string
+      {}, // nothing at all
+    ]
+    for (const body of bad) {
+      const res = await complete(body)
+      expect(res.status).toBe(204)
+    }
+
+    // None of the above touched the row — the key is still there, waiting
+    // for a legitimate report.
+    const [row] = await views()
+    expect(row!.slidesReached).toBeNull()
+    expect(row!.activeMs).toBeNull()
+    expect(row!.completionKey).toBe(key)
+  })
+
+  it("carries a signed-out reader's depth without identifying them", async () => {
+    await addSlides(4)
+    const key = (await open()).body.completionKey as string
+    await complete({ completionKey: key, slidesReached: 4, activeMs: 60_000 })
+
+    const [row] = await views()
+    expect(row!.viewerId).toBeNull()
+    expect(row!.slidesReached).toBe(4)
+    expect(row!.activeMs).toBe(60_000)
+  })
+
+  it('answers 204 for an unknown key rather than erroring', async () => {
+    await addSlides(2)
+    const res = await complete({
+      completionKey: 'not-a-real-key',
+      slidesReached: 1,
+      activeMs: 1000,
+    })
+    expect(res.status).toBe(204)
+    expect(
+      await DeckViewModel.countDocuments({ slidesReached: { $ne: null } }),
+    ).toBe(0)
+  })
+
+  it('refuses a slug naming no lecture', async () => {
+    const res = await complete(
+      { completionKey: 'x'.repeat(64), slidesReached: 1, activeMs: 1000 },
+      'no-such-lecture',
+    )
+    expect(res.status).toBe(404)
   })
 })
