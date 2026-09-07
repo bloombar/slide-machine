@@ -79,8 +79,8 @@ const read = (locale: string, token?: string) => {
   return req.send({ locale })
 }
 
-/** Play a slide's narration, optionally in another language. */
-const speak = (token: string, body: { locale?: string } = {}) =>
+/** Play a slide's narration, optionally in another language and/or mode. */
+const speak = (token: string, body: { locale?: string; mode?: string } = {}) =>
   request(server)
     .post(`/api/slides/${slideId}/tts`)
     .set('Authorization', `Bearer ${token}`)
@@ -288,6 +288,113 @@ describe('hearing a lecture narrated', () => {
     // Every play is in some language. Leaving the untranslated ones blank
     // would make them an unlabelled remainder rather than a count.
     expect(rows.every(r => r.locale === 'en')).toBe(true)
+  })
+})
+
+// The bug this file exists to guard against: a translation row does not say
+// whether it happened because someone read the lecture or because narration
+// needed the words first, so a class that reads a deck once and then listens
+// to it looks, by row count, like a class that read it many times.
+describe('why a translation happened', () => {
+  it('labels a reading', async () => {
+    expect((await read('fr', byron)).status).toBe(200)
+
+    const row = await rowFor('audienceLocales')
+    expect(row.trigger).toBe('reading')
+  })
+
+  it('labels translation performed only so content-mode narration could speak', async () => {
+    expect((await speak(byron, { locale: 'fr' })).status).toBe(200)
+
+    // The narration route's own translation event, not the audio-synthesis
+    // row beside it (that one carries no trigger at all — see below).
+    const row = await rowFor('audienceLocales')
+    expect(row.trigger).toBe('narration')
+  })
+
+  it('labels translation performed only so transcript-mode narration could speak', async () => {
+    await SlideModel.updateOne(
+      { _id: slideId },
+      { $set: { sourceTranscript: 'A wave that stays in place.' } },
+    )
+    expect(
+      (await speak(byron, { locale: 'fr', mode: 'transcript' })).status,
+    ).toBe(200)
+
+    const row = await rowFor('audienceLocales')
+    expect(row.trigger).toBe('narration')
+  })
+
+  it('leaves no trigger on the audio-synthesis row beside a translation', async () => {
+    expect((await speak(byron, { locale: 'fr' })).status).toBe(200)
+
+    const synthesisRows = await CostEventModel.find({
+      metric: { $regex: '^audienceTts' },
+    }).lean()
+    expect(synthesisRows.length).toBeGreaterThan(0)
+    // Synthesizing audio is not translation, whatever attribution the request
+    // that caused it happens to carry — stamping every row this route writes
+    // with 'narration' would claim a translation on rows where none happened.
+    expect(synthesisRows.every(r => r.trigger == null)).toBe(true)
+  })
+
+  it('leaves no trigger on a plain playback that never translates anything', async () => {
+    expect((await speak(byron)).status).toBe(200)
+
+    const rows = await CostEventModel.find({}).lean()
+    expect(rows.length).toBeGreaterThan(0)
+    expect(rows.every(r => r.trigger == null)).toBe(true)
+  })
+
+  it('leaves no trigger on non-language work', async () => {
+    await act(ada, 'export.download', { deckId, format: 'yaml' })
+
+    const rows = await CostEventModel.find({}).lean()
+    expect(rows.length).toBeGreaterThan(0)
+    expect(rows.every(r => r.trigger == null)).toBe(true)
+  })
+
+  // The end-to-end shape of the bug, and the test that proves the fix: a
+  // student reads the lecture once, then listens to three slides. Without the
+  // trigger, all four rows look like readings; with it, filtering to
+  // trigger = 'reading' returns exactly the one that was.
+  it('leaves exactly one reading row behind any number of narration requests', async () => {
+    expect((await read('fr', byron)).status).toBe(200)
+    for (let i = 0; i < 3; i += 1) {
+      expect((await speak(byron, { locale: 'fr' })).status).toBe(200)
+    }
+
+    const rows = await rowsFor('audienceLocales')
+    expect(rows).toHaveLength(4)
+    expect(rows.filter(r => r.trigger === 'reading')).toHaveLength(1)
+    expect(rows.filter(r => r.trigger === 'narration')).toHaveLength(3)
+  })
+
+  // Regression: none of the above may change what pricing already recorded.
+  // Same row count, same billable/quantity/costMicros `audienceLocales`
+  // already had — the reading spends the allowance for the new language (as
+  // the pre-existing "records the language, the reader, and the lecture" and
+  // "records the language on a cache hit too" tests already establish), and
+  // the narration behind it is a cache hit against that same language, same
+  // as any other reader arriving after the first. `trigger` only labels
+  // these; it changes neither.
+  it('changes no pricing figure while labelling the rows', async () => {
+    expect((await read('fr', byron)).status).toBe(200)
+    expect((await speak(byron, { locale: 'fr' })).status).toBe(200)
+
+    const rows = await rowsFor('audienceLocales')
+    expect(rows).toHaveLength(2)
+    const [reading, narration] = rows
+    if (!reading || !narration) throw new Error('expected two rows')
+    expect(reading.trigger).toBe('reading')
+    expect(reading.billable).toBe(true)
+    expect(reading.quantity).toBe(1)
+    expect(reading.costMicros).toBe(0) // priced on translationCharacters instead (BILL-7)
+
+    expect(narration.trigger).toBe('narration')
+    expect(narration.billable).toBe(false)
+    expect(narration.quantity).toBe(0)
+    expect(narration.costMicros).toBe(0)
   })
 })
 
