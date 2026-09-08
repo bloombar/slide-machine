@@ -10,9 +10,9 @@ import { apiFetch } from './http'
 import { config } from '../config'
 
 /**
- * Tells the server somebody opened this lecture, and returns the single-use
- * key that opening can later be completed with (EVAL-7 depth) — null when
- * the opening was not recorded, so there is nothing to complete.
+ * Tells the server somebody opened this lecture, and returns the key that
+ * opening's depth can later be reported against (EVAL-7 depth) — null when
+ * the opening was not recorded, so there is nothing to report.
  *
  * Fire-and-forget on purpose. A reader whose opening went uncounted has still
  * read the lecture, and nothing on the page should wait for, or fail on, a
@@ -37,7 +37,7 @@ export const recordDeckView = async (
  * Reports how far a reader got in an opening `recordDeckView` already
  * started (EVAL-7 depth): the furthest slide reached and how long the page
  * was actually visible. `useReadingDepth` is the caller — see there for when
- * this fires.
+ * this fires, and why it fires more than once per reading.
  *
  * Uses `navigator.sendBeacon` where available so the report survives the tab
  * closing, which a normal fetch cannot promise; falls back to a keepalive

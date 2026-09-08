@@ -724,12 +724,12 @@ export default function DeckViewerPage() {
    * lecture from inside the viewer, which nothing renders today.
    */
   const reportedViewRef = useRef<string | null>(null)
-  // This opening's single-use depth-reporting key (EVAL-7 depth), once the
-  // beacon above hands one back — null until then. A report that lands in the
-  // gap before a new lecture's key arrives still carries the previous
-  // lecture's, but harmlessly: `useReadingDepth` sends it against *this*
-  // slug, and the server only matches a key against the row it names, so a
-  // stale key from a different opening simply matches nothing.
+  // This opening's depth-reporting key (EVAL-7 depth), once the beacon above
+  // hands one back — null until then. A report that lands in the gap before a
+  // new lecture's key arrives still carries the previous lecture's, but
+  // harmlessly: `useReadingDepth` sends it against *this* slug, and the
+  // server only matches a key against the row it names, so a stale key from a
+  // different opening simply matches nothing.
   const [completionKey, setCompletionKey] = useState<string | null>(null)
   useEffect(() => {
     if (!slug || reportedViewRef.current === slug) return

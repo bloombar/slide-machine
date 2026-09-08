@@ -36,15 +36,28 @@
  *    `slidesReached` and `activeMs` answer "how far" and "how long", but
  *    reaching them the same way `viewerId` is reached — by asking who the
  *    reader is — would undo decision 2 for the very readers it protects. So
- *    the view route hands back a single-use `completionKey` for *this row*,
- *    and the completion route trades that key for an update: it identifies
- *    an opening, never a person, and is unset in the same write that spends
- *    it, so nothing about a finished opening can be reported twice or traced
- *    back afterwards. Both numbers only move up (a late beacon must not
- *    shrink what an earlier one already reported), and both are a floor —
- *    a reader who closes the tab mid-lecture reports nothing further, so
- *    what is stored is "reached at least this far", never "reached exactly
- *    this far and no further".
+ *    the view route hands back a `completionKey` naming *this row*, and the
+ *    completion route trades that key for an update: it identifies an
+ *    opening, never a person.
+ * 7. **The key is reusable for one reading, and monotonicity is what makes
+ *    that safe.** A reader sends several reports over one opening — the tab
+ *    going to the background, a periodic flush, the page unloading — and the
+ *    *last* one is the accurate one, because depth only grows as they read.
+ *    So the key is not spent on first use. It cannot be: a key retired by
+ *    the first report would freeze every row at whatever the first flush
+ *    happened to see (30 seconds in), and the column would measure the
+ *    reporting timer rather than the reading. Replay is instead made
+ *    harmless by `$max` — a report can only ever raise a stored value, never
+ *    lower it — so re-sending one changes nothing, and arriving out of order
+ *    changes nothing either. What bounds the key is time, not use:
+ *    `completionKeyExpiresAt` stops it working once no honest reading could
+ *    still be in progress, and until then the worst a stolen or guessed key
+ *    achieves is raising one anonymous row towards a ceiling
+ *    (`slidesReached` to the deck's slide count, `activeMs` to a day) that
+ *    the route validates against anyway.
+ * 8. **Both numbers are a floor.** A reader who closes the tab mid-lecture
+ *    reports nothing further, so what is stored is "reached at least this
+ *    far", never "reached exactly this far and no further".
  */
 import { Schema, type Types } from 'mongoose'
 import { ACTOR_CHANNELS, type ActorChannel } from '@slide-machine/shared'
@@ -85,16 +98,20 @@ export interface DeckViewDb {
   occurredAt: Date
   /** The furthest slide index reached, plus one — a floor, not an exact
    * count: a reader who closes the tab mid-lecture reports nothing further.
-   * Only ever moves up (decision 6). Null until the first depth report. */
+   * Only ever moves up (decision 8). Null until the first depth report. */
   slidesReached?: number | null
   /** Milliseconds this opening was actually visible on screen — accrues only
    * while the tab was in the foreground, so a lecture left open overnight
    * does not read as a long one. Also a floor, and only ever moves up. */
   activeMs?: number | null
-  /** This opening's single-use credential for reporting depth (decision 6).
-   * Set when the row is created, unset by the same update that spends it —
-   * null both before it exists and after it has been used. */
+  /** This opening's credential for reporting depth (decision 6). Set when the
+   * row is created and good for as many reports as the reading sends, since
+   * only the last one is accurate; null on rows that never got one. */
   completionKey?: string | null
+  /** When `completionKey` stops being accepted (decision 7). Time, not use,
+   * is what retires it — a key spent on first use would freeze the row at
+   * whatever the first flush saw. Null on rows with no key. */
+  completionKeyExpiresAt?: Date | null
 }
 
 const deckViewSchema = new Schema<DeckViewDb>({
@@ -115,6 +132,7 @@ const deckViewSchema = new Schema<DeckViewDb>({
   slidesReached: { type: Number, default: null },
   activeMs: { type: Number, default: null },
   completionKey: { type: String, default: null },
+  completionKeyExpiresAt: { type: Date, default: null },
 })
 
 // "How often was this lecture opened, over this window" — the question the
@@ -125,9 +143,9 @@ deckViewSchema.index({ deckId: 1, occurredAt: -1 })
 deckViewSchema.index({ ownerId: 1, occurredAt: -1 })
 // The retention sweep and any deployment-wide total walk by time alone.
 deckViewSchema.index({ occurredAt: -1 })
-// Sparse: most rows have no key (never issued one, or already spent it), and
-// a dense index would carry every one of those for a lookup that only ever
-// targets the rare row still holding a live key.
+// Sparse: rows written before depth existed carry no key at all, and a dense
+// index would hold an entry for every one of them for a lookup that only ever
+// names a live key.
 deckViewSchema.index({ completionKey: 1 }, { sparse: true })
 
 // Deliberately no soft-delete plugin, matching the cost ledger: a deleted

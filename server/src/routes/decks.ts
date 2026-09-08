@@ -238,9 +238,9 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
  * viewer says so.
  *
  * Answers 204 whatever happens, except the one case that has something to
- * hand back: a recorded opening answers 200 with a single-use
- * `completionKey` (EVAL-7 depth) for `/decks/:slug/view/complete` to spend
- * later, reporting how far this reader got. A reader whose lecture failed to
+ * hand back: a recorded opening answers 200 with a
+ * `completionKey` (EVAL-7 depth) that `/decks/:slug/view/complete` trades for
+ * an update, reporting how far this reader got. A reader whose lecture failed to
  * be counted has still read it, and failing their request to protect a
  * statistic would be the wrong way round — the same discipline the cost
  * ledger and the audit log use.
@@ -332,11 +332,13 @@ decksRouter.post('/decks/:slug/view', optionalAuth, async (req, res) => {
     .setOptions(deck.deletedAt ? withDeleted : {})
     .catch(() => null)
 
-  // This opening's single-use credential for reporting depth later (EVAL-7
-  // depth decision 6): crypto-random and long enough that guessing one is not
-  // a practical attack, scoped to this row alone, and never derived from
-  // anything about the reader.
+  // This opening's credential for reporting depth later (EVAL-7 depth,
+  // decisions 6-7): crypto-random and long enough that guessing one is not a
+  // practical attack, scoped to this row alone, and never derived from
+  // anything about the reader. Good for every report this reading sends —
+  // only the last one is accurate — and retired by time rather than by use.
   const completionKey = randomBytes(32).toString('hex')
+  const completionKeyExpiresAt = new Date(Date.now() + COMPLETION_KEY_TTL_MS)
 
   try {
     await DeckViewModel.create({
@@ -357,6 +359,7 @@ decksRouter.post('/decks/:slug/view', optionalAuth, async (req, res) => {
       channel: 'app',
       occurredAt: new Date(),
       completionKey,
+      completionKeyExpiresAt,
     })
   } catch (error) {
     // Logged, never raised. Losing a row costs a report some accuracy;
@@ -382,6 +385,17 @@ const isFiniteNonNegative = (value: unknown): value is number =>
  * a value is refused as absurd rather than trusted as a floor. */
 const MAX_ACTIVE_MS = 24 * 60 * 60 * 1000
 
+/**
+ * How long a `completionKey` keeps working (EVAL-7 depth decision 7).
+ *
+ * The key is deliberately not spent on first use — a reading sends several
+ * reports and only the last is accurate — so something else has to retire it,
+ * and that something is time. Matched to `MAX_ACTIVE_MS` because they bound
+ * the same thing from two directions: past a day of visible time the route
+ * refuses the value, and past a day since the opening it refuses the key.
+ */
+const COMPLETION_KEY_TTL_MS = MAX_ACTIVE_MS
+
 /** Same shape of guard as `viewLimiter`, kept separate so a flood against
  * completion cannot spend a signed-in reader's opening budget, and vice
  * versa. */
@@ -401,20 +415,35 @@ const completeLimiter = createRateLimiter({
  * `navigator.sendBeacon`, which cannot carry an Authorization header — the
  * same anonymity the beacon needs is what lets it fire on tab close.
  *
- * `slidesReached` and `activeMs` only ever grow (Mongo's `$max`, which also
- * handles "no report yet" since null sorts below every number), and the
- * update unsets `completionKey` in the same write: once matched, the key is
- * spent, so a replay of the same beacon — the periodic flush resending after
- * a beacon that already landed — finds no row and changes nothing rather
- * than erroring. Malformed or out-of-range values are refused before they
- * ever reach the database. Either way this answers 204: a failed depth
- * report must cost the report, never the reader, the same discipline `/view`
- * follows.
+ * One reading sends several reports — the tab going to the background, the
+ * periodic flush, the page unloading — and every one of them must be able to
+ * land, because the *last* is the accurate one. So the key is not spent on
+ * first use (decision 7): a key retired by the first report would pin every
+ * row to whatever the first flush happened to see, thirty seconds in, and
+ * the columns would measure the reporting timer instead of the reading.
+ *
+ * What makes repeats safe is `$max`: `slidesReached` and `activeMs` only ever
+ * grow, so re-sending a report changes nothing, and one arriving out of order
+ * changes nothing either. (`$max` also handles "no report yet", since null
+ * sorts below every number.) The key is bounded by time instead —
+ * `completionKeyExpiresAt` — and malformed or out-of-range values are refused
+ * before they ever reach the database. Either way this answers 204: a failed
+ * depth report must cost the report, never the reader, the same discipline
+ * `/view` follows.
  */
 decksRouter.post(
   '/decks/:slug/view/complete',
   optionalAuth,
   async (req, res) => {
+    // Before any database work, unlike `/view`, which has to find the lecture
+    // to know whether the caller may even see it. Nothing here needs the deck
+    // to decide whether to answer, so a flood costs one map lookup rather
+    // than two queries.
+    // Keyed the same way as `/view`'s guard, and independently: a caller with
+    // no account falls back to their address, which a lecture hall can share.
+    const caller = req.userId ?? req.ip ?? 'unknown'
+    if (!completeLimiter.take(caller)) return res.status(204).end()
+
     // Existence only, not the view ACL: the completion key was already
     // gated behind that ACL when `/view` issued it, and re-checking it here
     // would refuse a signed-in reader's own private lecture the moment the
@@ -424,11 +453,6 @@ decksRouter.post(
       .setOptions(withDeleted)
       .catch(() => null)
     if (!deck) throw new HttpError(404, 'not_found', 'Deck not found')
-
-    // Keyed the same way as `/view`'s guard, and independently: a caller with
-    // no account falls back to their address, which a lecture hall can share.
-    const caller = req.userId ?? req.ip ?? 'unknown'
-    if (!completeLimiter.take(caller)) return res.status(204).end()
 
     const { completionKey, slidesReached, activeMs } = (req.body ?? {}) as {
       completionKey?: unknown
@@ -448,9 +472,15 @@ decksRouter.post(
       try {
         // Scoped to this deck too, belt-and-braces alongside the key itself:
         // a match requires both, though the key alone already names one row.
+        // The expiry is the third: the key stays usable for the length of a
+        // reading (decision 7), not for the life of the row.
         await DeckViewModel.updateOne(
-          { deckId: deck._id, completionKey },
-          { $max: { slidesReached, activeMs }, $unset: { completionKey: '' } },
+          {
+            deckId: deck._id,
+            completionKey,
+            completionKeyExpiresAt: { $gt: new Date() },
+          },
+          { $max: { slidesReached, activeMs } },
         )
       } catch (error) {
         // Same discipline as `/view`: logged, never raised.

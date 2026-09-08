@@ -389,54 +389,146 @@ describe('reporting how far a reader got (EVAL-7 depth)', () => {
     expect(row!.activeMs).toBe(45_000)
   })
 
-  it('is single-use — a second completion with the same key changes nothing', async () => {
+  /**
+   * The property the whole design rests on, and the one a single-use key
+   * quietly destroys: a reading sends several reports and the *last* is the
+   * accurate one.
+   *
+   * The client reports on a 30-second timer as well as on tab-close, so for
+   * any reading longer than half a minute the first report to arrive is the
+   * timer's, describing the first 30 seconds. If that first report retired
+   * the key, every row in the study would hold "how far they got in 30
+   * seconds" — a plausible-looking number that measures the timer instead of
+   * the reading, and one no fixture-seeded test would ever contradict. So
+   * these go through the real route more than once, the way a real reading
+   * does, rather than writing the later state into the database by hand.
+   */
+  it('lets a later report raise what an earlier one recorded', async () => {
     await addSlides(5)
     const key = (await open()).body.completionKey as string
-    await complete({ completionKey: key, slidesReached: 3, activeMs: 45_000 })
 
-    // Same key, larger numbers — if this landed it would grow the row, but
-    // the key is already spent, so it must not.
-    const again = await complete({
+    // The 30-second flush, thirty seconds into a reading that has much
+    // further to go.
+    await complete({ completionKey: key, slidesReached: 2, activeMs: 30_000 })
+    // The same reading, finished: the reader reached every slide and stayed
+    // for four minutes. This is the report that must win.
+    const last = await complete({
       completionKey: key,
       slidesReached: 5,
-      activeMs: 90_000,
+      activeMs: 240_000,
     })
-    expect(again.status).toBe(204)
+    expect(last.status).toBe(204)
 
     const [row] = await views()
-    expect(row!.slidesReached).toBe(3)
-    expect(row!.activeMs).toBe(45_000)
-    // Unset (not merely blanked) by the first update — a lean read reports a
-    // genuinely absent field as undefined, not the schema's null default —
-    // confirming the key is truly gone rather than merely refused a second
-    // time.
-    expect(row!.completionKey).toBeUndefined()
+    expect(row!.slidesReached).toBe(5)
+    expect(row!.activeMs).toBe(240_000)
+  })
+
+  it('keeps the key usable across every report one reading sends', async () => {
+    await addSlides(10)
+    const key = (await open()).body.completionKey as string
+
+    // Eight flushes and a final unload — more than a single-use key would
+    // survive, and each one must land.
+    for (let slidesReached = 1; slidesReached <= 9; slidesReached += 1) {
+      const res = await complete({
+        completionKey: key,
+        slidesReached,
+        activeMs: slidesReached * 30_000,
+      })
+      expect(res.status).toBe(204)
+    }
+
+    const [row] = await views()
+    expect(row!.slidesReached).toBe(9)
+    expect(row!.activeMs).toBe(270_000)
+    // Still live: nothing about reporting depth retires the key, because
+    // there is no way for the server to know which report is the last one.
+    expect(row!.completionKey).toBe(key)
   })
 
   it('never lets a report shrink an already-larger stored value', async () => {
     await addSlides(12)
-    // A value higher than the report below claims — reachable in principle
-    // by an out-of-order arrival, and simulated directly here since only one
-    // completion call can ever land through the API's own single-use key.
-    const key = 'f'.repeat(64)
-    await DeckViewModel.create({
-      deckId,
-      deckName: 'Waves',
-      ownerId: adaId,
-      viewerId: null,
-      actorKind: 'audience',
-      channel: 'app',
-      occurredAt: new Date(),
-      slidesReached: 10,
-      activeMs: 500_000,
-      completionKey: key,
-    })
+    const key = (await open()).body.completionKey as string
 
+    // A finished reading, then a straggler: the beacon that fired at slide 3
+    // arriving after the one that fired at slide 10 (a retried `sendBeacon`,
+    // or two reports racing on the wire). Reached entirely through the real
+    // route — with a reusable key there is nothing left to simulate by hand.
+    await complete({ completionKey: key, slidesReached: 10, activeMs: 500_000 })
     await complete({ completionKey: key, slidesReached: 3, activeMs: 1_000 })
 
-    const [row] = await views()
+    let [row] = await views()
     expect(row!.slidesReached).toBe(10)
     expect(row!.activeMs).toBe(500_000)
+
+    // The straggler must have been *ignored*, not merely unable to land. A
+    // route that retired the key on first use would hold 10 here too, for
+    // entirely the wrong reason — so read on and prove the key still works.
+    await complete({ completionKey: key, slidesReached: 12, activeMs: 600_000 })
+    ;[row] = await views()
+    expect(row!.slidesReached).toBe(12)
+    expect(row!.activeMs).toBe(600_000)
+  })
+
+  it('takes each number on its own merits when one grew and the other did not', async () => {
+    await addSlides(6)
+    const key = (await open()).body.completionKey as string
+
+    // A reader who read on without the clock moving (the tab was hidden for
+    // the gap), then sat on the last slide without advancing. Neither report
+    // is a superset of the other, and the row must end up holding the larger
+    // of each.
+    await complete({ completionKey: key, slidesReached: 2, activeMs: 90_000 })
+    await complete({ completionKey: key, slidesReached: 6, activeMs: 90_000 })
+    await complete({ completionKey: key, slidesReached: 6, activeMs: 150_000 })
+
+    const [row] = await views()
+    expect(row!.slidesReached).toBe(6)
+    expect(row!.activeMs).toBe(150_000)
+  })
+
+  it('stops accepting a key once no honest reading could still be running', async () => {
+    await addSlides(5)
+    const key = (await open()).body.completionKey as string
+    // The key is bounded by time rather than by use (decision 7). Age it past
+    // its expiry rather than waiting a day for one.
+    await DeckViewModel.updateOne(
+      { completionKey: key },
+      { $set: { completionKeyExpiresAt: new Date(Date.now() - 1000) } },
+    )
+
+    const res = await complete({
+      completionKey: key,
+      slidesReached: 5,
+      activeMs: 60_000,
+    })
+    expect(res.status).toBe(204)
+
+    const [row] = await views()
+    expect(row!.slidesReached).toBeNull()
+    expect(row!.activeMs).toBeNull()
+  })
+
+  it('issues a key that expires, rather than one good forever', async () => {
+    await addSlides(2)
+    const before = Date.now()
+    const key = (await open()).body.completionKey as string
+
+    const after = Date.now()
+
+    const [row] = await views()
+    expect(row!.completionKey).toBe(key)
+    // A live key with no expiry would be a permanent capability on the row;
+    // the window is a reading's length, not the row's lifetime. The key was
+    // issued at some instant between `before` and `after`, so its expiry must
+    // land in that same span shifted forward by exactly one TTL — which pins
+    // the TTL without pinning the clock.
+    expect(row!.completionKeyExpiresAt).toBeInstanceOf(Date)
+    const expiresAt = row!.completionKeyExpiresAt!.getTime()
+    const TTL_MS = 24 * 60 * 60 * 1000
+    expect(expiresAt).toBeGreaterThanOrEqual(before + TTL_MS)
+    expect(expiresAt).toBeLessThanOrEqual(after + TTL_MS)
   })
 
   it('rejects out-of-range or malformed values without a 500, and records nothing', async () => {

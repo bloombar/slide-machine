@@ -173,10 +173,17 @@ const deckViewRow = (
   return Object.fromEntries(header.map((name, i) => [name, cells[i] ?? '']))
 }
 
+/** `useReadingDepth`'s own flush interval. Kept in step with the client by
+ * hand; if that constant moves, this wait has to move with it. */
+const FLUSH_INTERVAL_MS = 30_000
+
 test('records how far a signed-out reader got (EVAL-7 depth)', async ({
   page,
   browser,
 }) => {
+  // Builds a lecture, then deliberately spends a flush interval reading it.
+  test.setTimeout(180_000)
+
   const lectureTitle = `ReadingDepth ${stamp}`
   const depthAuthor = { email: `depth-${stamp}@example.com`, name: 'Depth' }
 
@@ -223,7 +230,30 @@ test('records how far a signed-out reader got (EVAL-7 depth)', async ({
   const visitorPage = await visitorContext.newPage()
   await visitorPage.goto(deckUrl)
   await expect(visitorPage.getByTestId('slide')).toBeVisible()
-  for (let i = 0; i < 3; i += 1) {
+
+  // Read the first two slides, then linger long enough for the viewer's own
+  // periodic flush to fire — and go on reading afterwards.
+  //
+  // This is the whole point of the test, and the reason it is worth its
+  // wall-clock time. A reading is not over when its first report is sent: the
+  // flush fires every 30 seconds at a reader who may have twenty minutes to
+  // go. If the server treats that first report as final, this row records
+  // "reached slide 2 of 4", which is not an obviously broken number — it is a
+  // plausible one, and every engagement figure in the study would be built on
+  // it. Nothing shorter than a real flush, followed by real further reading,
+  // can tell the two behaviours apart from outside.
+  await visitorPage.keyboard.press('ArrowRight')
+  await visitorPage.waitForTimeout(300)
+  await expect(visitorPage.getByText('2 / 4')).toBeVisible()
+
+  // Headless Chromium never backgrounds a page, so `visibilitychange` cannot
+  // be provoked here and the flush is the only mid-reading report available.
+  // Waited out rather than faked: a shortened interval would be testing a
+  // build the readers never run.
+  await visitorPage.waitForTimeout(FLUSH_INTERVAL_MS + 3_000)
+
+  // Reading on, past where the flush left off.
+  for (let i = 0; i < 2; i += 1) {
     await visitorPage.keyboard.press('ArrowRight')
     // A beat of genuinely visible time between slides, so `activeMs` is a
     // real (if small) reading rather than an instant flip through four.
@@ -254,6 +284,13 @@ test('records how far a signed-out reader got (EVAL-7 depth)', async ({
   expect(row, `no deck-views.csv row named "${lectureTitle}"`).not.toBeNull()
   // A floor, not an exact count (EVAL-7 depth): reached at least all four
   // slides, and was visible for a real, non-zero stretch of time.
+  //
+  // Four, not two. The viewer's periodic flush reported this reading when it
+  // had reached slide 2, and the reader then read on — so this asserts that
+  // the *last* report is the one that stuck. A server that retired the
+  // reporting key on its first use records 2 here, which is why this test
+  // spends a real flush interval mid-lecture instead of reading straight
+  // through.
   expect(Number(row!.slidesReached)).toBeGreaterThanOrEqual(4)
   expect(Number(row!.activeMs)).toBeGreaterThan(0)
   // The reader who reported it was never identified, same as the opening.

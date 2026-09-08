@@ -2,14 +2,23 @@
  * Tracks how far a reader gets into a lecture and reports it (EVAL-7 depth):
  * the furthest slide reached, and how long the page was actually visible.
  *
- * Nothing here identifies the reader — only `slug` and the single-use
- * `completionKey` `recordDeckView` handed back for this one opening (see
- * `deck-view.ts` decision 6). Depth is a floor, not an exact figure: a
- * reader who closes the tab mid-lecture may leave no further report at all,
- * so this reports at the moments most likely to be the last one it gets —
- * the tab going to the background, the page unloading, and (in case neither
- * fires, e.g. the browser is killed outright) a periodic flush — rather than
- * waiting for a "the reader is done" signal that may never come.
+ * Nothing here identifies the reader — only `slug` and the `completionKey`
+ * `recordDeckView` handed back for this one opening (see `deck-view.ts`
+ * decisions 6-8).
+ *
+ * Depth is a floor, not an exact figure: a reader who closes the tab
+ * mid-lecture may leave no further report at all. So this reports at every
+ * moment that might turn out to be the last one it gets — the tab going to
+ * the background, the page unloading, leaving the lecture within the app, and
+ * a periodic flush in case none of those fire — rather than waiting for a
+ * "the reader is done" signal that may never come.
+ *
+ * Reporting repeatedly is the design, not a fallback. Each report supersedes
+ * the last, and the server keeps the larger of what it holds and what
+ * arrives, so the final report is the one that counts and an early one costs
+ * nothing. A key spent on its first use would invert that — the 30-second
+ * flush would win every race and the columns would describe the timer rather
+ * than the reading.
  *
  * `activeMs` only ever accrues while `document.visibilityState` is
  * 'visible': a backgrounded tab, a locked laptop, a lecture left open
@@ -63,6 +72,14 @@ export function useReadingDepth(
     let visibleSince =
       document.visibilityState === 'visible' ? Date.now() : null
 
+    // What the last report said. A report that would repeat it is dropped:
+    // the server would take it and change nothing, so sending it is pure
+    // traffic — and the flush firing every 30 seconds into a backgrounded
+    // tab, where neither number can move, is exactly that. A lecture hall
+    // shares one address with the rate limiter, so idle tabs must stay quiet.
+    let sentSlides = -1
+    let sentActiveMs = -1
+
     const elapsedMs = (): number =>
       accumulatedMs + (visibleSince !== null ? Date.now() - visibleSince : 0)
 
@@ -77,11 +94,12 @@ export function useReadingDepth(
       // No key means this opening was never recorded (rate-limited, or a
       // write failure) — there is nothing to complete.
       if (!key) return
-      reportReadingDepth(slug, {
-        completionKey: key,
-        slidesReached: maxSlideRef.current,
-        activeMs: Math.round(elapsedMs()),
-      })
+      const slidesReached = maxSlideRef.current
+      const activeMs = Math.round(elapsedMs())
+      if (slidesReached <= sentSlides && activeMs <= sentActiveMs) return
+      sentSlides = slidesReached
+      sentActiveMs = activeMs
+      reportReadingDepth(slug, { completionKey: key, slidesReached, activeMs })
     }
 
     const onVisibilityChange = (): void => {
@@ -105,6 +123,13 @@ export function useReadingDepth(
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('pagehide', onPageHide)
       window.clearInterval(flush)
+      // Leaving the lecture inside the app fires neither `pagehide` nor
+      // `visibilitychange` — the page never unloads — so without this a
+      // reader who clicks away to another route reports whatever the last
+      // flush saw, or nothing at all if they left inside the first 30
+      // seconds. This is that reading's last chance to say how far it got.
+      bankVisibleSpan()
+      report()
     }
   }, [slug])
 }
