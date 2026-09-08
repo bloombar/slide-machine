@@ -147,12 +147,6 @@ describe('an action names what it worked on', () => {
   })
 
   it('attributes to the slide named in the input, as well as the deck it resolves to', async () => {
-    // `entityFromInput` is the database-backed half of attribution and needs
-    // real documents to resolve (see attribution-resolve.test.ts) — exercised
-    // directly here, the way the agent-channel case below exercises the
-    // ledger writer directly, rather than hunting for an action whose input
-    // happens to name a slide and whose provider happens to meter under a
-    // mock.
     const slide = await SlideModel.create({
       deckId,
       index: 0,
@@ -167,6 +161,62 @@ describe('an action names what it worked on', () => {
     const entity = await entityFromInput({ slideId: slide._id.toString() })
     expect(entity.slideId).toBe(slide._id.toString())
     expect(entity.deckId).toBe(deckId)
+  })
+
+  it('carries that slide all the way onto the ledger row, through a real action', async () => {
+    // The case above proves the resolver reads the input; it cannot prove
+    // anything reaches a cost event, because it never dispatches an action.
+    // Between the two sits `dispatch.ts`, which spreads the resolved entity
+    // into the ambient attribution — the one place a dropped field would
+    // blank every slideId in the export while the resolver's own test stayed
+    // green.
+    //
+    // `deck.refineSlide` is the vehicle: a real action, dispatched the
+    // ordinary way, whose input names a slide *and* the deck (so this pins
+    // the narrowest-first rule too). The mock generation adapter does not
+    // meter, so the metering a real adapter does from inside the request is
+    // added here — that is the only part of this that is a stand-in, and it
+    // is doing exactly what `gemini.ts` does at the same point.
+    const slide = await SlideModel.create({
+      deckId,
+      index: 0,
+      layoutType: 'content',
+      title: 'Nodes',
+      body: 'A wave that stays in place.',
+    })
+
+    const { registry } = await import('../../src/providers/registry')
+    const { recordUsage } = await import('../../src/billing/usage')
+    const gen =
+      registry.get<Record<'refineSlide', (arg: unknown) => Promise<unknown>>>(
+        'generation',
+      )
+    const realRefine = gen.refineSlide.bind(gen)
+    const spy = vi
+      .spyOn(gen, 'refineSlide')
+      .mockImplementation(async (arg: unknown) => {
+        // Metered from inside the request, exactly where the real adapter
+        // meters, so the ambient attribution under test is the live one.
+        await recordUsage(adaId, 'aiTokens', 100)
+        return realRefine(arg)
+      })
+
+    try {
+      const res = await act(ada, 'deck.refineSlide', {
+        deckId,
+        slideId: slide._id.toString(),
+      })
+      expect(res.status).toBe(200)
+    } finally {
+      spy.mockRestore()
+    }
+
+    const row = await CostEventModel.findOne({ metric: 'aiTokens' }).lean()
+    expect(row, 'the action recorded no cost event to inspect').toBeTruthy()
+    expect(row?.slideId?.toString()).toBe(slide._id.toString())
+    // The deck is still there beside it: the slide narrows the attribution,
+    // it does not replace it.
+    expect(row?.deckId?.toString()).toBe(deckId)
   })
 
   it('leaves the slide blank for an action that names only a deck', async () => {
@@ -227,6 +277,16 @@ describe('how the request arrived', () => {
 })
 
 describe('narration is for one slide', () => {
+  /**
+   * Whichever synthesis metric this deck's voice bills under. Named by shape
+   * rather than by literal, because which of the three it is depends on the
+   * voice the deck was created with and on whether the listener is the owner
+   * — a test pinned to one literal passes only by luck and fails the moment
+   * a default voice changes, without anything about attribution being wrong.
+   */
+  const ttsRow = async () =>
+    CostEventModel.findOne({ metric: { $regex: '^(tts|audienceTts)' } }).lean()
+
   // Unique per call: the audio cache lives on disk and outlives the
   // database, so a fixed body would make the first call of a re-run a hit.
   const makeSlide = async (): Promise<string> => {
@@ -246,9 +306,8 @@ describe('narration is for one slide', () => {
     const res = await speak(ada, slideId)
     expect(res.status).toBe(200)
 
-    const row = await CostEventModel.findOne({
-      metric: 'ttsCharacters',
-    }).lean()
+    const row = await ttsRow()
+    expect(row, 'no synthesis row was recorded at all').toBeTruthy()
     expect(row?.slideId?.toString()).toBe(slideId)
     expect(row?.deckId?.toString()).toBe(deckId)
     expect(row?.billable).toBe(true)
@@ -264,9 +323,8 @@ describe('narration is for one slide', () => {
     const res = await speak(ada, slideId) // served from the cache
     expect(res.status).toBe(200)
 
-    const row = await CostEventModel.findOne({
-      metric: 'ttsCharacters',
-    }).lean()
+    const row = await ttsRow()
+    expect(row, 'no synthesis row was recorded at all').toBeTruthy()
     expect(row?.slideId?.toString()).toBe(slideId)
     expect(row?.billable).toBe(false)
   })
@@ -348,15 +406,18 @@ describe('pricing is unchanged by this slice', () => {
     expect(res.status).toBe(200)
 
     const row = await CostEventModel.findOne({
-      metric: 'ttsCharacters',
+      metric: { $regex: '^(tts|audienceTts)' },
     }).lean()
-    expect(row).toBeTruthy()
+    expect(row, 'no synthesis row was recorded at all').toBeTruthy()
     expect(row!.billable).toBe(true)
     expect(row!.quantity).toBeGreaterThan(0)
-    // The figure the pricing table produces for this quantity, independent
-    // of anything this slice touched — recording which slide the work was
-    // for must not move what it cost.
-    expect(row!.costMicros).toBe(costMicrosFor('ttsCharacters', row!.quantity))
+    // The figure the pricing table produces for this quantity under this
+    // row's own metric, independent of anything this slice touched —
+    // recording which slide the work was for must not move what it cost.
+    // Read from the row rather than named as a literal: pinning the wrong
+    // metric here would compare against a rate the row was never priced at,
+    // and pass or fail for reasons that have nothing to do with slideId.
+    expect(row!.costMicros).toBe(costMicrosFor(row!.metric, row!.quantity))
   })
 })
 
