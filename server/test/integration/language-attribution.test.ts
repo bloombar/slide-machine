@@ -370,6 +370,24 @@ describe('why a translation happened', () => {
     expect(rows.filter(r => r.trigger === 'narration')).toHaveLength(3)
   })
 
+  // The instructor's own reading is a reading too, and it is billed in a
+  // different unit — so a counting rule written around the audience metric
+  // alone silently drops it. This is the case that keeps the README's rule
+  // honest about that.
+  it("labels the owner's own translated reading, on the owner's metric", async () => {
+    expect((await read('fr', ada)).status).toBe(200)
+
+    // An author is charged for the words, an audience for the language
+    // (BILL-3), so this reading lands on `translationCharacters` rather than
+    // `audienceLocales`.
+    const owned = await rowsFor('translationCharacters')
+    expect(owned.length).toBeGreaterThan(0)
+    expect(owned.every(r => r.trigger === 'reading')).toBe(true)
+    // And it is genuinely absent from the audience metric, which is why a
+    // filter on that metric alone undercounts readings.
+    expect(await rowsFor('audienceLocales')).toHaveLength(0)
+  })
+
   // Regression: none of the above may change what pricing already recorded.
   // Same row count, same billable/quantity/costMicros `audienceLocales`
   // already had — the reading spends the allowance for the new language (as

@@ -382,9 +382,55 @@ describe('the bundle', () => {
       'narration',
       'reading',
     ])
-    expect(bundle.get('README.md')).toContain(
-      "filter audienceLocales rows to trigger = 'reading'",
-    )
+    expect(bundle.get('README.md')).toContain("filter to trigger = 'reading'")
+  })
+
+  it('tells analysts which metric carries whose reading', async () => {
+    const owner = await makeUser()
+    const student = await makeUser({ email: 'student@example.com' })
+    const deck = await makeDeck(owner._id)
+    // The same act — opening the lecture in French — recorded twice, once by
+    // the instructor and once by a student, in the two different units BILL-3
+    // bills them in. Both are readings; only one is on audienceLocales.
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorKind: 'owner',
+      deckId: deck._id,
+      metric: 'translationCharacters',
+      locale: 'fr',
+      trigger: 'reading',
+      quantity: 120,
+      billable: true,
+      costMicros: 1_200,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorId: student._id,
+      actorKind: 'audience',
+      deckId: deck._id,
+      metric: 'audienceLocales',
+      locale: 'fr',
+      trigger: 'reading',
+      quantity: 1,
+      billable: true,
+      costMicros: 0,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+
+    const bundle = await getBundle()
+    const csv = bundle.get('cost-events.csv')!
+    expect(column(csv, 'trigger').sort()).toEqual(['reading', 'reading'])
+
+    // The README has to name both metrics. It used to send analysts to
+    // audienceLocales alone, which would report this lecture as read once in
+    // French when it was read twice — a plausible number, quietly missing
+    // every reading the instructor did.
+    const readme = bundle.get('README.md')!
+    expect(readme).toContain('translationCharacters')
+    expect(readme).toContain('audienceLocales')
   })
 
   it('exports lecture openings, naming only the readers who signed in', async () => {
