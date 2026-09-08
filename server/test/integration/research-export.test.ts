@@ -369,6 +369,35 @@ describe('the bundle', () => {
     expect(column(csv, 'channel').sort()).toEqual(['agent', 'app'])
   })
 
+  it("reads a row written before the column existed as 'app', as the README promises", async () => {
+    const owner = await makeUser()
+    const deck = await makeDeck(owner._id)
+    // Written straight to the collection, bypassing the schema, so the
+    // document genuinely has no `channel` path — which is what every row
+    // recorded before BILL-7 added the field looks like. Creating one through
+    // the model instead would apply the default on write and prove nothing.
+    await CostEventModel.collection.insertOne({
+      payerId: owner._id,
+      actorKind: 'owner',
+      deckId: deck._id,
+      deckName: deck.title,
+      metric: 'exports',
+      quantity: 1,
+      billable: true,
+      costMicros: 1_000,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+
+    const bundle = await getBundle()
+    // The README tells analysts a blank-looking channel means 'app'. That
+    // only holds because the export hydrates these rows through the schema —
+    // a `.lean()` here would silently start exporting an empty cell and the
+    // README would become a lie without a single test changing colour.
+    expect(column(bundle.get('cost-events.csv')!, 'channel')).toEqual(['app'])
+    expect(bundle.get('README.md')).toContain("reads as 'app'")
+  })
+
   it('exports lecture openings, naming only the readers who signed in', async () => {
     const owner = await makeUser()
     const reader = await makeUser({ email: 'reader@example.com' })
