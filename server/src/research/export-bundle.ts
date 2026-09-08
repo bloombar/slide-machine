@@ -102,6 +102,7 @@ downstream before analysis, as the study protocol (P-7, P-14) requires.
   transcriptsUpdated are what it actually changed — a run that touched two
   slides at strength 1 and one that touched two at strength 5 are different
   observations, and the outcome counts alone cannot tell them apart.
+
 - deck-views.csv — one row per time a lecture was opened in the viewer over
   the window (EVAL-7). A blank viewerStudyId is a signed-out reader: those
   are counted as openings and deliberately never identified, so distinct
