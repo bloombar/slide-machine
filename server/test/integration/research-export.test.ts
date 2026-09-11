@@ -327,6 +327,77 @@ describe('the bundle', () => {
     expect(bundle.get('README.md')).toContain('read or heard in')
   })
 
+  it('exports the channel a cost event arrived through', async () => {
+    const owner = await makeUser()
+    const deck = await makeDeck(owner._id)
+    // One request from the product's own front end, one from an external
+    // assistant over MCP — the whole point is that an analyst can tell
+    // them apart in the export, not just in the database.
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorKind: 'owner',
+      channel: 'app',
+      deckId: deck._id,
+      deckName: deck.title,
+      metric: 'sttMinutes',
+      quantity: 1,
+      billable: true,
+      costMicros: 500_000,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorKind: 'owner',
+      channel: 'agent',
+      deckId: deck._id,
+      deckName: deck.title,
+      metric: 'sttMinutes',
+      quantity: 1,
+      billable: true,
+      costMicros: 500_000,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+
+    const bundle = await getBundle()
+    const csv = bundle.get('cost-events.csv')!
+    // Pin the header itself, so a future column reorder can't silently
+    // shift which value 'channel' reads out as.
+    const [header] = csv.trim().split('\r\n')
+    expect(header!.split(',')).toContain('channel')
+    expect(column(csv, 'channel').sort()).toEqual(['agent', 'app'])
+  })
+
+  it("reads a row written before the column existed as 'app', as the README promises", async () => {
+    const owner = await makeUser()
+    const deck = await makeDeck(owner._id)
+    // Written straight to the collection, bypassing the schema, so the
+    // document genuinely has no `channel` path — which is what every row
+    // recorded before BILL-7 added the field looks like. Creating one through
+    // the model instead would apply the default on write and prove nothing.
+    await CostEventModel.collection.insertOne({
+      payerId: owner._id,
+      actorKind: 'owner',
+      deckId: deck._id,
+      deckName: deck.title,
+      metric: 'exports',
+      quantity: 1,
+      billable: true,
+      costMicros: 1_000,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+
+    const bundle = await getBundle()
+    // The README tells analysts a blank-looking channel means 'app'. That
+    // only holds because the export hydrates these rows through the schema —
+    // a `.lean()` here would silently start exporting an empty cell and the
+    // README would become a lie without a single test changing colour.
+    expect(column(bundle.get('cost-events.csv')!, 'channel')).toEqual(['app'])
+    expect(bundle.get('README.md')).toContain("reads as 'app'")
+  })
+
   it('exports which slide a piece of narration was for, blank for whole-lecture work', async () => {
     const owner = await makeUser()
     const listener = await makeUser({ email: 'listener@example.com' })
