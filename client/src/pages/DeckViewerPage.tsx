@@ -67,6 +67,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useIsAdmin } from '../hooks/useIsAdmin'
 import { useTimeAgo } from '../hooks/useTimeAgo'
 import { useSlideNavigation } from '../hooks/useSlideNavigation'
+import { useReadingDepth } from '../hooks/useReadingDepth'
 import { useSlideTranslation } from '../hooks/useSlideTranslation'
 import { useBracketKeys } from '../hooks/useBracketKeys'
 import { useFullScreenKeys } from '../hooks/useFullScreenKeys'
@@ -723,12 +724,25 @@ export default function DeckViewerPage() {
    * lecture from inside the viewer, which nothing renders today.
    */
   const reportedViewRef = useRef<string | null>(null)
+  // This opening's depth-reporting key (EVAL-7 depth), once the beacon above
+  // hands one back — null until then. A report that lands in the gap before a
+  // new lecture's key arrives still carries the previous lecture's, but
+  // harmlessly: `useReadingDepth` sends it against *this* slug, and the
+  // server only matches a key against the row it names, so a stale key from a
+  // different opening simply matches nothing.
+  const [completionKey, setCompletionKey] = useState<string | null>(null)
   useEffect(() => {
     if (!slug || reportedViewRef.current === slug) return
     if (view?.deck.permalinkSlug !== slug) return
     reportedViewRef.current = slug
-    void recordDeckView(slug)
+    void recordDeckView(slug).then(result =>
+      setCompletionKey(result.completionKey),
+    )
   }, [view, slug])
+
+  // Tracks how far this reading gets and reports it (EVAL-7 depth): the
+  // furthest slide reached and how long the page was actually visible.
+  useReadingDepth(slug, completionKey, nav.current)
 
   /**
    * A link from outside naming one slide — `?slide=<slide id>`, which an
