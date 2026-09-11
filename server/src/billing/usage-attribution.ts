@@ -21,6 +21,11 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 // project code at runtime — which is what keeps the counters and the cost
 // ledger able to share it without importing each other.
 import type { ActorChannel, Locale } from '@slide-machine/shared'
+// Also type-only, and also project code that erases at compile — imported
+// from the model file rather than `@slide-machine/shared` because, like
+// `CostActorKind`, it names nothing a client needs: it is purely a fact this
+// ledger records about its own rows.
+import type { TranslationTrigger } from '../models/cost-event'
 
 /**
  * What is known about a piece of metered work at the moment it happens.
@@ -79,6 +84,20 @@ export interface UsageAttribution {
    * language-specific piece of work", never "English".
    */
   locale?: Locale
+  /**
+   * What caused a translation — a viewer reading the lecture in that
+   * language, or narration that needed the words translated before it could
+   * speak them (SHARE-2, PLAY-3).
+   *
+   * The same kind of fact as `locale`: about the work, not about who is
+   * doing it. Both `translateNarration` and the content-narration path run
+   * under the narration route's attribution and both record a translation
+   * event, usually a cache hit — so without this, a student who reads a
+   * lecture once and then listens to ten slides leaves eleven rows that all
+   * look like readings, and counting "how many times was this lecture read
+   * in French" silently counts listening too.
+   */
+  trigger?: TranslationTrigger
   /** The project the work belonged to, and its name at the time. */
   projectId?: string
   projectName?: string

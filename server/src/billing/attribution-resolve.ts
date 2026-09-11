@@ -25,6 +25,7 @@ import { DeckModel } from '../models/deck'
 import { ProjectModel } from '../models/project'
 import { SlideModel } from '../models/slide'
 import type { Locale } from '@slide-machine/shared'
+import type { TranslationTrigger } from '../models/cost-event'
 import type { UsageAttribution } from './usage-attribution'
 
 /** The entity half of an attribution — what the work was for. */
@@ -124,6 +125,12 @@ export const entityFromInput = async (
  * off, the row says nothing about a slide rather than claiming the deck's
  * first one.
  *
+ * `trigger` is why a translation happened, and only the two routes that
+ * cause one pass it: the deck translation route passes `'reading'`, the
+ * narration route passes `'narration'`. Left off, non-translation work
+ * (generating a lecture, extracting seed material) records no trigger, which
+ * the ledger already reads as "not applicable".
+ *
  * The options are named one by one rather than spread. Spreading carried
  * whatever a caller happened to pass straight onto a ledger row, so a field
  * this function had never heard of would still be written — and a field it
@@ -138,11 +145,13 @@ export const attributionForDeck = (
     audience,
     locale,
     slideId,
+    trigger,
   }: {
     actorId?: string
     audience?: boolean
     locale?: Locale
     slideId?: string
+    trigger?: TranslationTrigger
   } = {},
 ): UsageAttribution => ({
   userId: payerId,
@@ -150,6 +159,7 @@ export const attributionForDeck = (
   ...(audience === undefined ? {} : { audience }),
   ...(locale === undefined ? {} : { locale }),
   ...(slideId === undefined ? {} : { slideId }),
+  ...(trigger === undefined ? {} : { trigger }),
   deckId: String(deck._id),
   deckName: deck.title,
   ...(deck.projectId ? { projectId: String(deck.projectId) } : {}),

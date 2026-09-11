@@ -422,6 +422,12 @@ decksRouter.post('/decks/:slug/translation', requireAuth, async (req, res) => {
     actorId: req.userId,
     audience: actor === 'audience',
     locale,
+    // This route is a reader opening the lecture in a language (BILL-7): the
+    // translation happened because someone asked to read it, not to narrate
+    // it. Distinguishes this row from the ones the tts route's own
+    // translation work leaves, so counting readings does not also count
+    // playbacks.
+    trigger: 'reading',
   })
 
   const slides = await SlideModel.find({ deckId: deck._id, ...filter })

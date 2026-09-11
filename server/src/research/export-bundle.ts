@@ -98,6 +98,20 @@ downstream before analysis, as the study protocol (P-7, P-14) requires.
   cache hit. Treat a language as a quasi-identifier when you do: a lecture
   with one reader in a language singles that pseudonym out, and every other
   row it appears in with it. Suppress small cells before publishing.
+  The trigger column is blank except on translation rows, where it says why
+  the translation happened: 'reading' is somebody opening the lecture in
+  that language, 'narration' is translation performed only so narration
+  could speak the words. To count how many *times* a lecture was read in a
+  language, filter to trigger = 'reading' — counting narration rows too
+  inflates that figure in proportion to how much students listened, since a
+  single reading can be followed by many playbacks. Then choose the metric
+  deliberately, because whose reading it was decides which unit it was
+  billed in (BILL-3): a student's reading lands on audienceLocales, and the
+  owner's or an editor's own lands on translationCharacters. Filtering to
+  audienceLocales counts student readings only, and drops every reading the
+  instructor made without saying so. Counting distinct students per language
+  is unaffected either way: audience membership does not change with how
+  they read.
 
 - deck-views.csv — one row per time a lecture was opened in the viewer over
   the window (EVAL-7). A blank viewerStudyId is a signed-out reader: those
@@ -355,6 +369,7 @@ export const buildResearchBundle = async (
         'deckName',
         'slideId',
         'locale',
+        'trigger',
         'metric',
         'quantity',
         'billable',
@@ -373,6 +388,7 @@ export const buildResearchBundle = async (
         e.deckName,
         e.slideId?.toString(),
         e.locale,
+        e.trigger,
         e.metric,
         e.quantity,
         e.billable,
