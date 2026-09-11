@@ -84,14 +84,35 @@ downstream before analysis, as the study protocol (P-7, P-14) requires.
   actor keyed by study id. Read a blank actor with the actorKind column
   beside it: 'system' means work no request was attributed to, and
   anything else means an account purged since the event, or a row from
-  before translated viewing required one. The locale column is the
-  language the lecture was read or heard in; it is blank for work that has
-  no language, which is not the same as English. Count distinct
+  before translated viewing required one. The channel column is how the
+  request arrived: 'app' is the product's own front end, 'agent' is an
+  external AI assistant over MCP, and a row written before the field
+  existed reads as 'app'. The locale column is the language the lecture
+  was read or heard in; it is blank for work that has no language, which
+  is not the same as English. The deckId column is the lecture the work
+  belonged to, and the slideId column beside it is the one slide it was
+  for — present for per-slide work (narration), blank for whole-lecture
+  work (translating a deck, generating slides, extracting seed material).
+  Blank means "not slide-specific", never "unknown". Count distinct
   actorStudyId per (deckId, locale) for how many students used a language,
   and count rows for how many times — never sum quantity, which is 0 on a
   cache hit. Treat a language as a quasi-identifier when you do: a lecture
   with one reader in a language singles that pseudonym out, and every other
   row it appears in with it. Suppress small cells before publishing.
+  The trigger column is blank except on translation rows, where it says why
+  the translation happened: 'reading' is somebody opening the lecture in
+  that language, 'narration' is translation performed only so narration
+  could speak the words. To count how many *times* a lecture was read in a
+  language, filter to trigger = 'reading' — counting narration rows too
+  inflates that figure in proportion to how much students listened, since a
+  single reading can be followed by many playbacks. Then choose the metric
+  deliberately, because whose reading it was decides which unit it was
+  billed in (BILL-3): a student's reading lands on audienceLocales, and the
+  owner's or an editor's own lands on translationCharacters. Filtering to
+  audienceLocales counts student readings only, and drops every reading the
+  instructor made without saying so. Counting distinct students per language
+  is unaffected either way: audience membership does not change with how
+  they read.
 
 - refine-jobs.csv — one row per post-lecture refinement run (GEN-4) started
   in the window. Failed and soft-deleted runs are included: a run that
@@ -113,6 +134,11 @@ downstream before analysis, as the study protocol (P-7, P-14) requires.
   in a small cohort: a signed-in reader's rows here sit next to their rows in
   cost-events.csv, and adjacent timestamps reconstruct a reading session for
   one person. Aggregate before publishing, and suppress small cells here too.
+  slidesReached and activeMs are both a floor, not an exact figure: a reader
+  who closes the browser abruptly reports nothing further, so either column
+  can understate how far a reading actually went. activeMs counts only time
+  the page was visible in the foreground, never a backgrounded or locked tab.
+  Both are blank when no depth report ever arrived for that opening.
 
 Rows with a deletedAt value were soft-deleted in the application but are
 exported for completeness; exclude them downstream if the analysis calls
@@ -368,11 +394,14 @@ export const buildResearchBundle = async (
         'payerStudyId',
         'actorStudyId',
         'actorKind',
+        'channel',
         'projectId',
         'projectName',
         'deckId',
         'deckName',
+        'slideId',
         'locale',
+        'trigger',
         'metric',
         'quantity',
         'billable',
@@ -384,11 +413,14 @@ export const buildResearchBundle = async (
         sid(e.payerId),
         sid(e.actorId),
         e.actorKind,
+        e.channel,
         e.projectId?.toString(),
         e.projectName,
         e.deckId?.toString(),
         e.deckName,
+        e.slideId?.toString(),
         e.locale,
+        e.trigger,
         e.metric,
         e.quantity,
         e.billable,
@@ -453,6 +485,8 @@ export const buildResearchBundle = async (
         'viewerStudyId',
         'actorKind',
         'channel',
+        'slidesReached',
+        'activeMs',
       ],
       deckViews.map(v => [
         iso(v.occurredAt),
@@ -464,6 +498,10 @@ export const buildResearchBundle = async (
         sid(v.viewerId),
         v.actorKind,
         v.channel,
+        // Both a floor, never exact — see the README bullet: a reader who
+        // closed the tab abruptly reports nothing further.
+        v.slidesReached ?? undefined,
+        v.activeMs ?? undefined,
       ]),
     ),
   )

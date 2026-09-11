@@ -70,7 +70,7 @@ import { retainTtsObject, ttsStorageKeys } from '../models/tts-object'
 import { assertTtsCapacity, ttsMetricFor } from '../billing/tts-usage'
 import { effectivePlanTier, PLAN_FIELDS } from '../billing/plan-grant'
 import { recordUsage } from '../billing/usage'
-import { runWithUsage } from '../billing/usage-context'
+import { runWithUsage, type UsageAttribution } from '../billing/usage-context'
 import { attributionForDeck } from '../billing/attribution-resolve'
 
 export const ttsRouter = Router()
@@ -221,7 +221,26 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
     // only the translated ones would leave the original-language plays as an
     // unlabelled remainder rather than a count.
     locale: spokenLocale,
+    // Narration is requested one slide at a time, and the slide is already in
+    // hand here — no lookup needed (BILL-7's per-slide question). Recorded on
+    // both cache hit and cache miss, since the row exists either way.
+    slideId,
   })
+  /**
+   * The same attribution, with `trigger` added, for the two calls below that
+   * actually translate: `translateNarration` and `displayedContent`'s call to
+   * `translateSlides`. Kept apart from `attribution` above rather than added
+   * to it, because that one also covers this route's non-translation metering
+   * — Gemini narrating a transcript-less slide, TTS synthesis itself — and a
+   * plain playback in the lecture's own language never translates anything.
+   * Stamping every row this route writes with `trigger: 'narration'` would
+   * claim a translation on rows where none happened, which is the same
+   * mistake a locale defaulting to English would be, just on this field.
+   */
+  const translationAttribution: UsageAttribution = {
+    ...attribution,
+    trigger: 'narration',
+  }
   // Translating the narration is translation work, charged to the same owner
   // out of the same two pools as translated reading (BILL-3, SHARE-2).
   const translationBilling = target
@@ -285,7 +304,7 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
   const translatedSpeech = async (locale: Locale): Promise<Speech | null> => {
     // The lecturer's own words, translated.
     if (mode === 'transcript' && transcript) {
-      const spoken = await runWithUsage(attribution, () =>
+      const spoken = await runWithUsage(translationAttribution, () =>
         translateNarration(
           deck._id,
           slideId,
@@ -299,7 +318,10 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
     }
     // Nothing was said about this slide, so it is narrated from its translated
     // content — the way PLAY-2 narrates from content in the original language.
-    const translated = await runWithUsage(attribution, displayedContent)
+    const translated = await runWithUsage(
+      translationAttribution,
+      displayedContent,
+    )
     if (!translated) return null
     return mode === 'transcript'
       ? {

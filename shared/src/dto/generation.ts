@@ -70,3 +70,14 @@ export interface DeckTranslationResponse {
   source: Locale
   perSlide: Record<string, SlideTranslationEntry>
 }
+
+/**
+ * Returned by the "a lecture was opened" beacon (EVAL-7 depth). `completionKey`
+ * is this one opening's single-use credential for reporting how far the
+ * reader got — scoped to the row `/view` just wrote, never to who opened it.
+ * Absent (204, no body) when the opening was not recorded — rate-limited or a
+ * write failure — because there is then no row for a depth report to find.
+ */
+export interface DeckViewBeaconResponse {
+  completionKey: string
+}
