@@ -4,13 +4,17 @@
  *
  *   - A `deletedAt` field (null = live, a Date = tombstoned).
  *   - Query middleware that transparently excludes tombstoned records from every
- *     read and update — so callers never have to remember to filter. The escape
- *     hatch is `.setOptions({ withDeleted: true })`, used by admin recovery
- *     (ADMIN-6), the restore path, and the retention purge.
- *   - The filter is injected on reads (`find*`, `count*`, `distinct`, `exists`)
- *     and updates (`update*`, `findOneAndUpdate`). It is deliberately NOT injected
- *     on `deleteOne`/`deleteMany`/`findOneAndDelete`, so the purge job, test
- *     cleanup, and the dev seed reset still hard-delete everything.
+ *     read and update it covers — so callers never have to remember to filter.
+ *     The escape hatch is `.setOptions({ withDeleted: true })`, used by admin
+ *     recovery (ADMIN-6), the restore path, and the retention purge.
+ *   - The filter is injected on reads (`find`, `findOne`, `countDocuments`) and
+ *     updates (`updateOne`, `updateMany`, `findOneAndUpdate`) — exactly the ops
+ *     in `FILTERED_OPS` below, which is the list to read rather than this
+ *     sentence. `distinct` and `exists` are NOT among them and do see tombstoned
+ *     records; `withDeleted` on such a query is accepted but changes nothing.
+ *     It is also deliberately not injected on `deleteOne`/`deleteMany`/
+ *     `findOneAndDelete`, so the purge job, test cleanup, and the dev seed
+ *     reset still hard-delete everything.
  *
  * To tombstone, set `deletedAt` (on a loaded doc, or via `updateMany` — the
  * injected `deletedAt: null` filter then only tombstones still-live records). To

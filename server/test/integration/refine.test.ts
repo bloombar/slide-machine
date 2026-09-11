@@ -86,6 +86,50 @@ const awaitJob = (jobId: string) =>
   )
 
 describe('deck.refine', () => {
+  // The research export reports what a run was *asked* for beside what it
+  // changed (GEN-4), because two runs that touched the same number of slides
+  // are different observations if one asked for a light pass and the other
+  // for an aggressive split. The export's own tests build RefineJob documents
+  // by hand, so this is the only place that shows the action actually storing
+  // the request it was given — without it, `request` could be dropped from
+  // reconcile.ts and every export test would stay green over a column that is
+  // blank for every real run.
+  it('records what the run was asked to do, not only what it did', async () => {
+    const start = await act(ada, 'deck.refine', {
+      deckId,
+      identifySpeakers: true,
+      refineSlides: {
+        level: 4,
+        parts: { text: true, layout: false },
+        allowSplit: true,
+      },
+      refineTranscript: { level: 2 },
+    })
+    expect(start.status).toBe(200)
+
+    const job = await RefineJobModel.findById(start.body.jobId as string).lean()
+    expect(job?.request).toMatchObject({
+      identifySpeakers: true,
+      slidesLevel: 4,
+      slidesParts: { text: true, layout: false },
+      allowSplit: true,
+      transcriptLevel: 2,
+    })
+  })
+
+  it('records no request fields the caller did not ask for', async () => {
+    // A bare run: the columns must be blank rather than filled with defaults
+    // the caller never chose, or the export would report every run as having
+    // asked for whatever the code happens to fall back to.
+    const start = await act(ada, 'deck.refine', { deckId })
+    expect(start.status).toBe(200)
+
+    const job = await RefineJobModel.findById(start.body.jobId as string).lean()
+    expect(job?.request?.slidesLevel).toBeUndefined()
+    expect(job?.request?.transcriptLevel).toBeUndefined()
+    expect(job?.request?.identifySpeakers).toBeUndefined()
+  })
+
   it('runs all three passes as a job and keeps narration in-line', async () => {
     // One recording; the mock diarizer scripts speaker 1 (lecturer, 0–600s) and
     // speaker 2 (student, 600–620s).
