@@ -398,6 +398,52 @@ describe('the bundle', () => {
     expect(bundle.get('README.md')).toContain("reads as 'app'")
   })
 
+  it('exports which slide a piece of narration was for, blank for whole-lecture work', async () => {
+    const owner = await makeUser()
+    const listener = await makeUser({ email: 'listener@example.com' })
+    const deck = await makeDeck(owner._id)
+    const slide = await SlideModel.create({
+      deckId: deck._id,
+      index: 0,
+      layoutType: 'content',
+      title: 'Nodes',
+    })
+    // Narration is for one slide; translating the deck is whole-lecture work
+    // with no one slide to name.
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorId: listener._id,
+      actorKind: 'audience',
+      deckId: deck._id,
+      deckName: deck.title,
+      slideId: slide._id,
+      metric: 'audienceTtsCharacters',
+      quantity: 0,
+      billable: false,
+      costMicros: 0,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorKind: 'owner',
+      deckId: deck._id,
+      metric: 'translationCharacters',
+      quantity: 40,
+      billable: true,
+      costMicros: 4_000,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+
+    const bundle = await getBundle()
+    expect(column(bundle.get('cost-events.csv')!, 'slideId').sort()).toEqual([
+      '',
+      slide._id.toString(),
+    ])
+    expect(bundle.get('README.md')).toContain('slideId')
+  })
+
   it('exports lecture openings, naming only the readers who signed in', async () => {
     const owner = await makeUser()
     const reader = await makeUser({ email: 'reader@example.com' })

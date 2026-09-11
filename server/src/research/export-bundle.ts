@@ -88,12 +88,16 @@ downstream before analysis, as the study protocol (P-7, P-14) requires.
   external AI assistant over MCP, and a row written before the field
   existed reads as 'app'. The locale column is the language the lecture
   was read or heard in; it is blank for work that has no language, which
-  is not the same as English. Count distinct actorStudyId per (deckId,
-  locale) for how many students used a language, and count rows for how
-  many times — never sum quantity, which is 0 on a cache hit. Treat a
-  language as a quasi-identifier when you do: a lecture with one reader in
-  a language singles that pseudonym out, and every other row it appears in
-  with it. Suppress small cells before publishing.
+  is not the same as English. The deckId column is the lecture the work
+  belonged to, and the slideId column beside it is the one slide it was
+  for — present for per-slide work (narration), blank for whole-lecture
+  work (translating a deck, generating slides, extracting seed material).
+  Blank means "not slide-specific", never "unknown". Count distinct
+  actorStudyId per (deckId, locale) for how many students used a language,
+  and count rows for how many times — never sum quantity, which is 0 on a
+  cache hit. Treat a language as a quasi-identifier when you do: a lecture
+  with one reader in a language singles that pseudonym out, and every other
+  row it appears in with it. Suppress small cells before publishing.
 
 - deck-views.csv — one row per time a lecture was opened in the viewer over
   the window (EVAL-7). A blank viewerStudyId is a signed-out reader: those
@@ -349,6 +353,7 @@ export const buildResearchBundle = async (
         'projectName',
         'deckId',
         'deckName',
+        'slideId',
         'locale',
         'metric',
         'quantity',
@@ -366,6 +371,7 @@ export const buildResearchBundle = async (
         e.projectName,
         e.deckId?.toString(),
         e.deckName,
+        e.slideId?.toString(),
         e.locale,
         e.metric,
         e.quantity,
