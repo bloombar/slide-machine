@@ -102,10 +102,20 @@ export const recordCostEvent = async ({
       // reading it in French whoever ends up being charged for it, so there is
       // nothing here that could land on the wrong account's report.
       locale: context?.locale ?? null,
+      // Also outside the `sameParty` guard, for the same reason as the
+      // channel and the locale: what caused a translation — a reading or a
+      // narration needing the words first — is a fact about the work, not a
+      // reference to an entity one account owns.
+      trigger: context?.trigger ?? null,
       projectId: sameParty ? (context?.projectId ?? null) : null,
       projectName: sameParty ? context?.projectName : undefined,
       deckId: sameParty ? (context?.deckId ?? null) : null,
       deckName: sameParty ? context?.deckName : undefined,
+      // Inside the `sameParty` guard, like `deckId` and `projectId` above and
+      // unlike `channel`/`locale`: a slide is an entity reference belonging to
+      // one account, not a fact about the request itself, so it must not
+      // leak across a party boundary onto another account's report.
+      slideId: sameParty ? (context?.slideId ?? null) : null,
       metric,
       quantity,
       billable,

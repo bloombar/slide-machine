@@ -44,6 +44,19 @@ export const COST_ACTOR_KINDS = ['owner', 'audience', 'system'] as const
 
 export type CostActorKind = (typeof COST_ACTOR_KINDS)[number]
 
+/**
+ * What caused a translation: a viewer reading the lecture in that language, or
+ * narration that needed the words translated before it could speak them.
+ *
+ * A local enum, like `CostActorKind`, rather than one in `@slide-machine/shared`:
+ * nothing about it is a client concept, it is a fact recorded on this ledger for
+ * this ledger's own question — was a translation row a reading or overhead of
+ * narration.
+ */
+export const TRANSLATION_TRIGGERS = ['reading', 'narration'] as const
+
+export type TranslationTrigger = (typeof TRANSLATION_TRIGGERS)[number]
+
 export interface CostEventDb {
   /** The account charged — the deck's owner for audience work (BILL-3). */
   payerId: Types.ObjectId
@@ -85,12 +98,44 @@ export interface CostEventDb {
    * Rows written before this field existed have none, and mean unknown.
    */
   locale?: Locale | null
+  /**
+   * What caused a translation — a viewer reading the lecture in that language,
+   * or narration that needed the words translated before it could be spoken
+   * (SHARE-2, PLAY-3).
+   *
+   * Both a reading and a playback go through the same translate-and-cache
+   * path and both record a row, usually a cache hit at zero (the honest
+   * denominator this ledger exists for) — so without this field, ten
+   * playbacks of a lecture already read in French look like ten more French
+   * readings, and "how many times was this lecture read in French" is
+   * inflated by however much narration was used. Counting distinct students
+   * is unaffected either way; only the *count of times* conflates the two.
+   *
+   * Null for every event that is not translation — generating a lecture,
+   * extracting seed material — and null there means "not applicable". Null
+   * is never "reading": a translation row that forgot to set this must not
+   * silently join the reading count.
+   */
+  trigger?: TranslationTrigger | null
   projectId?: Types.ObjectId | null
   /** The project's title when the event happened; the row outlives it. */
   projectName?: string
   deckId?: Types.ObjectId | null
   /** The lecture's title when the event happened; the row outlives it. */
   deckName?: string
+  /**
+   * The single slide this work was for — narration is requested one slide at
+   * a time, unlike translating a deck or generating one, which are whole-
+   * lecture work with no one slide to name.
+   *
+   * Null means "not slide-specific", never "a slide that could not be
+   * found" — resolution failures do not write rows at all.
+   *
+   * Rows written before this field existed have none. No index: nothing in
+   * this slice queries by slide, and the research export reads a whole
+   * window at a time regardless.
+   */
+  slideId?: Types.ObjectId | null
   metric: UsageMetric
   /** In the metric's own unit — tokens, minutes, characters. */
   quantity: number
@@ -118,10 +163,12 @@ const costEventSchema = new Schema<CostEventDb>({
     default: 'app',
   },
   locale: { type: String, enum: [...LOCALES], default: null },
+  trigger: { type: String, enum: TRANSLATION_TRIGGERS, default: null },
   projectId: { type: Schema.Types.ObjectId, ref: 'Project', default: null },
   projectName: String,
   deckId: { type: Schema.Types.ObjectId, ref: 'Deck', default: null },
   deckName: String,
+  slideId: { type: Schema.Types.ObjectId, ref: 'Slide', default: null },
   metric: { type: String, required: true },
   quantity: { type: Number, required: true },
   billable: { type: Boolean, required: true, default: true },

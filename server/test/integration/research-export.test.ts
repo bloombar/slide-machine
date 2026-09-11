@@ -327,6 +327,229 @@ describe('the bundle', () => {
     expect(bundle.get('README.md')).toContain('read or heard in')
   })
 
+  it('exports the channel a cost event arrived through', async () => {
+    const owner = await makeUser()
+    const deck = await makeDeck(owner._id)
+    // One request from the product's own front end, one from an external
+    // assistant over MCP — the whole point is that an analyst can tell
+    // them apart in the export, not just in the database.
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorKind: 'owner',
+      channel: 'app',
+      deckId: deck._id,
+      deckName: deck.title,
+      metric: 'sttMinutes',
+      quantity: 1,
+      billable: true,
+      costMicros: 500_000,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorKind: 'owner',
+      channel: 'agent',
+      deckId: deck._id,
+      deckName: deck.title,
+      metric: 'sttMinutes',
+      quantity: 1,
+      billable: true,
+      costMicros: 500_000,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+
+    const bundle = await getBundle()
+    const csv = bundle.get('cost-events.csv')!
+    // Pin the header itself, so a future column reorder can't silently
+    // shift which value 'channel' reads out as.
+    const [header] = csv.trim().split('\r\n')
+    expect(header!.split(',')).toContain('channel')
+    expect(column(csv, 'channel').sort()).toEqual(['agent', 'app'])
+  })
+
+  it("reads a row written before the column existed as 'app', as the README promises", async () => {
+    const owner = await makeUser()
+    const deck = await makeDeck(owner._id)
+    // Written straight to the collection, bypassing the schema, so the
+    // document genuinely has no `channel` path — which is what every row
+    // recorded before BILL-7 added the field looks like. Creating one through
+    // the model instead would apply the default on write and prove nothing.
+    await CostEventModel.collection.insertOne({
+      payerId: owner._id,
+      actorKind: 'owner',
+      deckId: deck._id,
+      deckName: deck.title,
+      metric: 'exports',
+      quantity: 1,
+      billable: true,
+      costMicros: 1_000,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+
+    const bundle = await getBundle()
+    // The README tells analysts a blank-looking channel means 'app'. That
+    // only holds because the export hydrates these rows through the schema —
+    // a `.lean()` here would silently start exporting an empty cell and the
+    // README would become a lie without a single test changing colour.
+    expect(column(bundle.get('cost-events.csv')!, 'channel')).toEqual(['app'])
+    expect(bundle.get('README.md')).toContain("reads as 'app'")
+  })
+
+  it('exports which slide a piece of narration was for, blank for whole-lecture work', async () => {
+    const owner = await makeUser()
+    const listener = await makeUser({ email: 'listener@example.com' })
+    const deck = await makeDeck(owner._id)
+    const slide = await SlideModel.create({
+      deckId: deck._id,
+      index: 0,
+      layoutType: 'content',
+      title: 'Nodes',
+    })
+    // Narration is for one slide; translating the deck is whole-lecture work
+    // with no one slide to name.
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorId: listener._id,
+      actorKind: 'audience',
+      deckId: deck._id,
+      deckName: deck.title,
+      slideId: slide._id,
+      metric: 'audienceTtsCharacters',
+      quantity: 0,
+      billable: false,
+      costMicros: 0,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorKind: 'owner',
+      deckId: deck._id,
+      metric: 'translationCharacters',
+      quantity: 40,
+      billable: true,
+      costMicros: 4_000,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+
+    const bundle = await getBundle()
+    expect(column(bundle.get('cost-events.csv')!, 'slideId').sort()).toEqual([
+      '',
+      slide._id.toString(),
+    ])
+    expect(bundle.get('README.md')).toContain('slideId')
+  })
+
+  it('exports why a translation happened, and tells an analyst how to read it', async () => {
+    const owner = await makeUser()
+    const reader = await makeUser({ email: 'reader@example.com' })
+    const deck = await makeDeck(owner._id)
+    // A reading, a narration, and one row with no trigger at all — the three
+    // shapes a real ledger has, and the three a reader of the CSV must be
+    // able to tell apart.
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorId: reader._id,
+      actorKind: 'audience',
+      deckId: deck._id,
+      deckName: deck.title,
+      locale: 'zh',
+      trigger: 'reading',
+      metric: 'audienceLocales',
+      quantity: 1,
+      billable: true,
+      costMicros: 0,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorId: reader._id,
+      actorKind: 'audience',
+      deckId: deck._id,
+      deckName: deck.title,
+      locale: 'zh',
+      trigger: 'narration',
+      metric: 'audienceLocales',
+      quantity: 0,
+      billable: false,
+      costMicros: 0,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorKind: 'owner',
+      deckId: deck._id,
+      metric: 'sttMinutes',
+      quantity: 3,
+      billable: true,
+      costMicros: 1_500_000,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+
+    const bundle = await getBundle()
+    expect(column(bundle.get('cost-events.csv')!, 'trigger').sort()).toEqual([
+      '',
+      'narration',
+      'reading',
+    ])
+    expect(bundle.get('README.md')).toContain("filter to trigger = 'reading'")
+  })
+
+  it('tells analysts which metric carries whose reading', async () => {
+    const owner = await makeUser()
+    const student = await makeUser({ email: 'student@example.com' })
+    const deck = await makeDeck(owner._id)
+    // The same act — opening the lecture in French — recorded twice, once by
+    // the instructor and once by a student, in the two different units BILL-3
+    // bills them in. Both are readings; only one is on audienceLocales.
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorKind: 'owner',
+      deckId: deck._id,
+      metric: 'translationCharacters',
+      locale: 'fr',
+      trigger: 'reading',
+      quantity: 120,
+      billable: true,
+      costMicros: 1_200,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorId: student._id,
+      actorKind: 'audience',
+      deckId: deck._id,
+      metric: 'audienceLocales',
+      locale: 'fr',
+      trigger: 'reading',
+      quantity: 1,
+      billable: true,
+      costMicros: 0,
+      currency: 'USD',
+      occurredAt: new Date(),
+    })
+
+    const bundle = await getBundle()
+    const csv = bundle.get('cost-events.csv')!
+    expect(column(csv, 'trigger').sort()).toEqual(['reading', 'reading'])
+
+    // The README has to name both metrics. It used to send analysts to
+    // audienceLocales alone, which would report this lecture as read once in
+    // French when it was read twice — a plausible number, quietly missing
+    // every reading the instructor did.
+    const readme = bundle.get('README.md')!
+    expect(readme).toContain('translationCharacters')
+    expect(readme).toContain('audienceLocales')
+  })
+
   it('exports lecture openings, naming only the readers who signed in', async () => {
     const owner = await makeUser()
     const reader = await makeUser({ email: 'reader@example.com' })
