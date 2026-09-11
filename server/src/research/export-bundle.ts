@@ -83,14 +83,17 @@ downstream before analysis, as the study protocol (P-7, P-14) requires.
   actor keyed by study id. Read a blank actor with the actorKind column
   beside it: 'system' means work no request was attributed to, and
   anything else means an account purged since the event, or a row from
-  before translated viewing required one. The locale column is the
-  language the lecture was read or heard in; it is blank for work that has
-  no language, which is not the same as English. Count distinct
-  actorStudyId per (deckId, locale) for how many students used a language,
-  and count rows for how many times — never sum quantity, which is 0 on a
-  cache hit. Treat a language as a quasi-identifier when you do: a lecture
-  with one reader in a language singles that pseudonym out, and every other
-  row it appears in with it. Suppress small cells before publishing.
+  before translated viewing required one. The channel column is how the
+  request arrived: 'app' is the product's own front end, 'agent' is an
+  external AI assistant over MCP, and a row written before the field
+  existed reads as 'app'. The locale column is the language the lecture
+  was read or heard in; it is blank for work that has no language, which
+  is not the same as English. Count distinct actorStudyId per (deckId,
+  locale) for how many students used a language, and count rows for how
+  many times — never sum quantity, which is 0 on a cache hit. Treat a
+  language as a quasi-identifier when you do: a lecture with one reader in
+  a language singles that pseudonym out, and every other row it appears in
+  with it. Suppress small cells before publishing.
 
 - deck-views.csv — one row per time a lecture was opened in the viewer over
   the window (EVAL-7). A blank viewerStudyId is a signed-out reader: those
@@ -341,6 +344,7 @@ export const buildResearchBundle = async (
         'payerStudyId',
         'actorStudyId',
         'actorKind',
+        'channel',
         'projectId',
         'projectName',
         'deckId',
@@ -357,6 +361,7 @@ export const buildResearchBundle = async (
         sid(e.payerId),
         sid(e.actorId),
         e.actorKind,
+        e.channel,
         e.projectId?.toString(),
         e.projectName,
         e.deckId?.toString(),
