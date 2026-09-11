@@ -104,6 +104,12 @@ export interface UsageAttribution {
   /** The lecture the work belonged to, and its title at the time. */
   deckId?: string
   deckName?: string
+  /**
+   * The single slide the work was for, when it was for exactly one — a
+   * narration request, not a whole-lecture action like translating a deck.
+   * Absent, not resolved to "unknown", for work with no one slide to name.
+   */
+  slideId?: string
 }
 
 const storage = new AsyncLocalStorage<UsageAttribution>()

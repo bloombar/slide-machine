@@ -221,6 +221,10 @@ ttsRouter.post('/slides/:slideId/tts', requireAuth, async (req, res) => {
     // only the translated ones would leave the original-language plays as an
     // unlabelled remainder rather than a count.
     locale: spokenLocale,
+    // Narration is requested one slide at a time, and the slide is already in
+    // hand here — no lookup needed (BILL-7's per-slide question). Recorded on
+    // both cache hit and cache miss, since the row exists either way.
+    slideId,
   })
   /**
    * The same attribution, with `trigger` added, for the two calls below that

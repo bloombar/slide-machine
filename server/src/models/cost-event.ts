@@ -123,6 +123,19 @@ export interface CostEventDb {
   deckId?: Types.ObjectId | null
   /** The lecture's title when the event happened; the row outlives it. */
   deckName?: string
+  /**
+   * The single slide this work was for — narration is requested one slide at
+   * a time, unlike translating a deck or generating one, which are whole-
+   * lecture work with no one slide to name.
+   *
+   * Null means "not slide-specific", never "a slide that could not be
+   * found" — resolution failures do not write rows at all.
+   *
+   * Rows written before this field existed have none. No index: nothing in
+   * this slice queries by slide, and the research export reads a whole
+   * window at a time regardless.
+   */
+  slideId?: Types.ObjectId | null
   metric: UsageMetric
   /** In the metric's own unit — tokens, minutes, characters. */
   quantity: number
@@ -155,6 +168,7 @@ const costEventSchema = new Schema<CostEventDb>({
   projectName: String,
   deckId: { type: Schema.Types.ObjectId, ref: 'Deck', default: null },
   deckName: String,
+  slideId: { type: Schema.Types.ObjectId, ref: 'Slide', default: null },
   metric: { type: String, required: true },
   quantity: { type: Number, required: true },
   billable: { type: Boolean, required: true, default: true },

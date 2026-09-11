@@ -34,6 +34,13 @@ export interface EntityAttribution {
   projectName?: string
   deckId?: string
   deckName?: string
+  /**
+   * The slide, when the input named one that resolved. Kept *alongside* the
+   * deck it resolved to, not instead of it — BILL-7's per-lecture totals still
+   * need the deck, and the slide is the one extra fact narration needs that a
+   * lecture-level attribution cannot answer.
+   */
+  slideId?: string
 }
 
 /** Inputs we know how to find a lecture or project in. Deliberately just the
@@ -92,7 +99,8 @@ export const entityFromInput = async (
         .select('deckId')
         .setOptions({ includeDeleted: true })
         .catch(() => null)
-      if (doc) return await deckPart(doc.deckId.toString())
+      if (doc)
+        return { slideId: slide, ...(await deckPart(doc.deckId.toString())) }
     }
     const deck = idOf(deckId)
     if (deck) return await deckPart(deck)
@@ -111,6 +119,11 @@ export const entityFromInput = async (
  * `locale` is the language the work is for, and only the language-bearing
  * paths pass one: reading a lecture in translation, and hearing it narrated.
  * Left off, the rows say nothing about language rather than claiming English.
+ *
+ * `slideId` is the single slide the work was for, and only narration passes
+ * one — the route already has the slide in hand, so no lookup is needed. Left
+ * off, the row says nothing about a slide rather than claiming the deck's
+ * first one.
  *
  * `trigger` is why a translation happened, and only the two routes that
  * cause one pass it: the deck translation route passes `'reading'`, the
@@ -131,11 +144,13 @@ export const attributionForDeck = (
     actorId,
     audience,
     locale,
+    slideId,
     trigger,
   }: {
     actorId?: string
     audience?: boolean
     locale?: Locale
+    slideId?: string
     trigger?: TranslationTrigger
   } = {},
 ): UsageAttribution => ({
@@ -143,6 +158,7 @@ export const attributionForDeck = (
   ...(actorId === undefined ? {} : { actorId }),
   ...(audience === undefined ? {} : { audience }),
   ...(locale === undefined ? {} : { locale }),
+  ...(slideId === undefined ? {} : { slideId }),
   ...(trigger === undefined ? {} : { trigger }),
   deckId: String(deck._id),
   deckName: deck.title,
