@@ -1962,6 +1962,23 @@
   phase: 3
   status: Backlog
   review: false
+- id: GEN-14
+  title: A slide never says the same thing twice
+  full: "An update adds the model's new material to the slide already on screen
+    (GEN-8). Speech doubles back — an instructor restates a point for the room,
+    or the model re-emits a bullet it already wrote — and an append that does
+    not look at what is already there puts the same line on the slide twice.
+    Observed in a live lecture: one slide carried \"Automatically keep backups
+    to safely revert changes\" as two consecutive bullets. Exact repeats never
+    land. A bullet identical to one the slide already holds is discarded on
+    append rather than added. Comparison ignores surrounding whitespace and
+    case, which are not meaningful differences in a heading-height line;
+    anything beyond that is a judgment the…"
+  section: §9 Slide Generation & Enrichment
+  family: GEN
+  phase: 3
+  status: Backlog
+  review: false
 - id: IMG-4
   title: AI-generated imagery (optional)
   full: For slides that warrant a custom diagram or infographic rather than a
@@ -2322,6 +2339,40 @@
   phase: 3
   status: Backlog
   review: false
+- id: TMPL-12
+  title: Every shipped design holds what it says it holds
+  full: "A built-in design states what each of its boxes can hold — on the slot,
+    on the text style the box follows, or in the layout's constraints — and the
+    app enforces those limits when it fills a slide. A stated limit is therefore
+    a promise about the design, and a design that breaks its own promise loses a
+    reader content without telling anyone: type gives way before content does
+    (TMPL-9), so an over-full box shrinks rather than clipping, and nothing
+    about the slide looks wrong. Every design the app ships is filled to its own
+    stated limits and measured in a browser, because only a browser can see
+    wrapping, leading and clipping. At those limits nothing is clipped, nothing
+    overlaps, nothing sits off…"
+  section: §7 Style Template Library
+  family: TMPL
+  phase: P2
+  status: Backlog
+  review: false
+- id: TMPL-25
+  title: A design's instructions reach the model in full
+  full: Every generation request carries the template's layout menu — each layout,
+    each box, and the authoring instructions its author wrote (TMPL-10). Those
+    instructions are the mechanism by which a subject-appropriate template
+    produces subject-appropriate slides, so a box whose instruction did not
+    reach the model is a box the template no longer steers. The budget is
+    configurable, not hard-coded. The recommended ceiling on the assembled menu
+    is a server setting (TECH-4) — GENERATION_DESCRIPTOR_MAX_CHARS, default 5000
+    — so a deployment that accepts a larger prompt for richer guidance can raise
+    it, and one paying for latency can lower it. Over budget, nothing is
+    dropped. The menu is sent in full…
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 3
+  status: Backlog
+  review: false
 - id: EVAL-4
   title: Quiz response ingestion
   full: The application reads a published Form's responses back — per-item
@@ -2449,22 +2500,5 @@
   section: §18 Future Work
   family: FUTURE
   phase: 4
-  status: Backlog
-  review: false
-- id: TMPL-12
-  title: Every shipped design holds what it says it holds
-  full: "A built-in design states what each of its boxes can hold — on the slot,
-    on the text style the box follows, or in the layout's constraints — and the
-    app enforces those limits when it fills a slide. A stated limit is therefore
-    a promise about the design, and a design that breaks its own promise loses a
-    reader content without telling anyone: type gives way before content does
-    (TMPL-9), so an over-full box shrinks rather than clipping, and nothing
-    about the slide looks wrong. Every design the app ships is filled to its own
-    stated limits and measured in a browser, because only a browser can see
-    wrapping, leading and clipping. At those limits nothing is clipped, nothing
-    overlaps, nothing sits off…"
-  section: §7 Style Template Library
-  family: TMPL
-  phase: P2
   status: Backlog
   review: false

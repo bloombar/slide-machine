@@ -789,6 +789,16 @@ The default **cascades at creation, not by reference**: a new project copies the
 
 A stale choice does not travel: a template deleted after it was chosen ([TMPL-4](#tmpl-4-custom-templates-create--edit--save)) is not handed to new work, which starts from the deployment default instead.
 
+#### TMPL-25 A design's instructions reach the model in full
+
+Every generation request carries the template's layout menu — each layout, each box, and the authoring instructions its author wrote ([TMPL-10](#tmpl-10-slot-metadata--authoring-instructions)). Those instructions are the mechanism by which a subject-appropriate template produces subject-appropriate slides, so a box whose instruction did not reach the model is a box the template no longer steers.
+
+- **The budget is configurable, not hard-coded.** The recommended ceiling on the assembled menu is a server setting ([TECH-4](#tech-4-server-configuration)) — `GENERATION_DESCRIPTOR_MAX_CHARS`, default **5000** — so a deployment that accepts a larger prompt for richer guidance can raise it, and one paying for latency can lower it.
+- **Over budget, nothing is dropped.** The menu is sent **in full** regardless of length. Silently shortening instructions, or giving them up one box at a time, produces blander slides with no error, no empty box, and nothing the author can see — a degradation that is invisible from the product and discoverable only in a server log. A prompt that costs more is the better failure.
+- **The author is told instead.** A template whose instructions exceed the budget shows a notice wherever that template is chosen or edited: at the top of the Design tab's template list, and on the template's own editor page. It states the template's current instruction length and the recommended maximum, and asks the author to shorten the instructions so that generation stays fast and the lecture stays responsive. It is advice, not an error — the template works either way.
+- **The notice is the one the product already uses** for a lecture whose pinned design is out of date ([TMPL-11](#tmpl-11-template-versions--opt-in-updates)) — same placement, same visual weight — so an author meets one kind of design-level advisory, not two.
+- **It clears itself.** Once the instructions are edited back under the budget the notice disappears, with no dismissal to remember and no stale state; raising the server budget clears it for every template at once.
+
 ### 8. Live Lecture Capture
 
 #### CAP-1 Session lifecycle
@@ -1006,6 +1016,15 @@ The server sometimes overrides the model's decision and turns an **update** into
 - **Where no written title is available, the heading is left blank.** The slide is created untitled rather than with a heading derived from the raw phrase, and the layout renders the empty heading as it renders any other empty box — no placeholder text, no quoted speech. A blank heading is a gap the instructor can see and fill; a transcribed one looks deliberate and is read aloud by anyone presenting the deck. Deriving a heading mechanically from speech is never the right answer, so the mechanism is removed rather than improved.
 - **An untitled slide is titled at the first opportunity, live.** Blank is a starting state, not a resting one. While a slide has no heading, every subsequent phrase that reaches it carries the fact into the prompt: the model is told the current slide is untitled and asked to name it now that there is more to go on than the fragment that created it. The title arrives in the same response as the rest of that phrase's content — no extra call, no added latency — so in practice the heading fills itself in within a sentence or two of speech, while the instructor is still on the slide. A slide that never accumulates another phrase simply stays blank, which is the correct outcome for a slide with nothing on it.
 - **And if it does not, later passes still close it.** The post-lecture reformat ([GEN-4](#gen-4-post-lecture-ai-reformat-holistic-regeneration)) titles an untitled slide from its content and transcript as part of its normal pass, and manual editing ([EDIT-1](#edit-1-full-content-editing)) fills it any time. Blank is therefore temporary at three different horizons, while a transcribed heading survives until a human notices and retypes it.
+
+#### GEN-14 A slide never says the same thing twice
+
+An update adds the model's new material to the slide already on screen ([GEN-8](#gen-8-new-slide-vs-update-current)). Speech doubles back — an instructor restates a point for the room, or the model re-emits a bullet it already wrote — and an append that does not look at what is already there puts the same line on the slide twice. Observed in a live lecture: one slide carried "Automatically keep backups to safely revert changes" as two consecutive bullets.
+
+- **Exact repeats never land.** A bullet identical to one the slide already holds is discarded on append rather than added. Comparison ignores surrounding whitespace and case, which are not meaningful differences in a heading-height line; anything beyond that is a judgment the server does not make.
+- **A discarded repeat is not a failed update.** The rest of the phrase's material still applies and the slide still counts as updated, since the speaker did say it — it simply was not new. Nothing is reported to the instructor mid-lecture.
+- **Duplication also costs capacity.** A repeated bullet consumes the layout's bullet budget ([TMPL-6](#tmpl-6-layout-descriptors-for-ai-selection)) and can push genuine content onto an overflow slide, so dropping it is a correctness matter and not only a cosmetic one.
+- **The prompt asks for less repetition in the first place.** The model is told, where it can see the slide's current content, not to restate a point the slide already makes — a near-repeat in different words is something only the model can recognise, and the server's exact-match check cannot. The two work at different grains deliberately: the prompt reduces how often a repeat is produced, the server guarantees an identical one is never stored.
 
 **Metering note.** Gemini, Speech-to-Text, and image-API usage in §8–§9 all count against the user's plan caps (BILL-3) and are subject to enforcement (BILL-4).
 
