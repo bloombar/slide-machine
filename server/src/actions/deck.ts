@@ -102,7 +102,6 @@ import {
 import {
   clampToBudget,
   refitOverflows,
-  titleFromPhrase,
   updateOverflows,
   charCount,
 } from '../lib/slide-fit'
@@ -1034,6 +1033,10 @@ export const sessionPhrase = defineAction<
                   layoutType: lastSlide.layoutType,
                   bulletCount: lastSlide.bullets?.length ?? 0,
                   bodyChars: charCount(lastSlide.body),
+                  // GEN-13: sent unconditionally (unlike `content` below, which
+                  // rides the layout-refit flag), so the model can be asked for
+                  // a title for a slide the server promoted without one.
+                  titled: Boolean(lastSlide.title),
                   // The exact slot content, so a refit re-maps real text
                   // instead of guessing from the rolling context
                   content: currentSlideContent,
@@ -1348,13 +1351,25 @@ export const sessionPhrase = defineAction<
       isHeaderLayout(lastSlide.layoutType, descriptors) &&
       (result.slots.body || result.slots.bullets?.length)
     ) {
+      // GEN-13: while lastSlide was untitled, the `titled` fragment asked
+      // the model for a title for lastSlide's own content, not for the new
+      // slide this promotion is about to create. That title belongs to
+      // lastSlide — persist it there and strip it before promoting, or it
+      // would head the new slide instead and lastSlide (no longer
+      // `lastSlide` after this phrase) would never be asked again.
+      if (!lastSlide.title && result.slots.title) {
+        lastSlide.title = result.slots.title
+        await lastSlide.save()
+        result = { ...result, slots: { ...result.slots, title: undefined } }
+      }
+      // No fallback title on the promoted slide itself: it keeps whatever
+      // title the model returned for it (often none, in delta mode) rather
+      // than being headed by a raw quote of the speaker's disfluency — it
+      // is titled live, by the model, at the next phrase that reaches it
+      // (see the `titled` prompt fragment above).
       result = {
         ...result,
         action: 'new',
-        slots: {
-          ...result.slots,
-          title: result.slots.title || titleFromPhrase(input.phrase),
-        },
       }
     }
 
@@ -1399,13 +1414,23 @@ export const sessionPhrase = defineAction<
         descriptors,
       )
     ) {
+      // GEN-13: a title the model wrote while lastSlide was untitled is
+      // for lastSlide's content, not the slide this overflow promotion is
+      // about to create — persist it there and strip it before promoting
+      // (see the header-promotion site above for why).
+      if (!lastSlide.title && result.slots.title) {
+        lastSlide.title = result.slots.title
+        await lastSlide.save()
+        result = { ...result, slots: { ...result.slots, title: undefined } }
+      }
+      // No fallback title on the promoted slide itself: it keeps whatever
+      // title the model returned for it (often none, in delta mode) rather
+      // than being headed by a raw quote of the speaker's disfluency — it
+      // is titled live, by the model, at the next phrase that reaches it
+      // (see the `titled` prompt fragment above).
       result = {
         ...result,
         action: 'new',
-        slots: {
-          ...result.slots,
-          title: result.slots.title || titleFromPhrase(input.phrase),
-        },
       }
     }
     // The current slide is a blank whiteboard canvas (no text slots): folding
@@ -1416,13 +1441,16 @@ export const sessionPhrase = defineAction<
       result.action === 'update' &&
       lastSlide?.layoutType === WHITEBOARD_LAYOUT_TYPE
     ) {
+      // GEN-13: unlike the header and overflow promotions above, no title
+      // redirect happens here. The `untitled` prompt fragment excludes
+      // whiteboard canvases (they have no text slots to hold one), and the
+      // `capacity` fragment's whiteboard branch asks the model for a title
+      // for the NEW slide this promotion is about to create, not for the
+      // canvas. So `result.slots.title` already belongs on the promoted
+      // slide — leave it in `result` and let it pass through untouched.
       result = {
         ...result,
         action: 'new',
-        slots: {
-          ...result.slots,
-          title: result.slots.title || titleFromPhrase(input.phrase),
-        },
       }
     }
     // Whiteboard drawing is active on the client (WB-3): a new slide would
@@ -1467,9 +1495,10 @@ export const sessionPhrase = defineAction<
           .join(' ')
       }
       // Title/caption are headings, not accumulating content: a fresh value
-      // OVERWRITES in place (e.g. a sharper title as the topic clarifies), so a
-      // header slide's slot content stays current. Empty slots leave the
-      // existing heading intact.
+      // OVERWRITES in place (e.g. a sharper title as the topic clarifies, or
+      // GEN-13's self-heal filling one in for a slide the server promoted
+      // without one), so a header slide's slot content stays current. Empty
+      // slots leave the existing heading intact.
       if (result.slots.title) lastSlide.title = result.slots.title
       if (result.slots.caption) lastSlide.caption = result.slots.caption
       // Keep the layout fixed while the user is drawing on this slide, or if it

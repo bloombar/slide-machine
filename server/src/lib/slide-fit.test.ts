@@ -1,8 +1,7 @@
 /**
  * Unit tests for slide capacity enforcement: overflowing updates are
- * detected, new-slide content clamps to the layout's character
- * budgets (word-boundary cuts for spaced text, hard cuts for CJK),
- * and promoted updates get a synthesized title.
+ * detected, and new-slide content clamps to the layout's character
+ * budgets (word-boundary cuts for spaced text, hard cuts for CJK).
  */
 import { describe, it, expect } from 'vitest'
 import type {
@@ -13,7 +12,6 @@ import {
   charCount,
   clampToBudget,
   closeMarkdown,
-  titleFromPhrase,
   updateOverflows,
 } from './slide-fit'
 
@@ -215,13 +213,10 @@ describe('a box’s own limits (TMPL-10)', () => {
 })
 
 describe('helpers', () => {
-  it('counts characters and synthesizes titles from phrases', () => {
+  it('counts characters', () => {
     expect(charCount('  one two   three ')).toBe(15)
     expect(charCount('光合作用')).toBe(4)
     expect(charCount(undefined)).toBe(0)
-    expect(titleFromPhrase('and they also need minerals from the soil')).toBe(
-      'And They Also Need Minerals From',
-    )
   })
 })
 

@@ -757,7 +757,10 @@ const instructions = (req: SlideGenerationRequest): string => {
   // slide. Surfacing its "load" (as for a normal slide) invited exactly that bug.
   const capacity = req.currentSlide
     ? req.currentSlide.layoutType === WHITEBOARD_LAYOUT_TYPE
-      ? `\nThe current slide is a freehand whiteboard drawing canvas: it has NO text slots and its layout ("${WHITEBOARD_LAYOUT_TYPE}") is NOT in the set above. NEVER choose "update" for it and NEVER output layoutType "${WHITEBOARD_LAYOUT_TYPE}". This phrase's content must go on a "new" slide (or "none" if it is filler).`
+      ? // GEN-13: this "new" slide is foreseeable here (unlike the
+        // budget-overflow case, decided server-side after the response), so
+        // the model can be asked for its title in the same call.
+        `\nThe current slide is a freehand whiteboard drawing canvas: it has NO text slots and its layout ("${WHITEBOARD_LAYOUT_TYPE}") is NOT in the set above. NEVER choose "update" for it and NEVER output layoutType "${WHITEBOARD_LAYOUT_TYPE}". This phrase's content must go on a "new" slide (or "none" if it is filler); give that new slide a "title" in slots.`
       : `\nCurrent slide load: ${req.currentSlide.bulletCount} bullets, ~${req.currentSlide.bodyChars} body characters (layout "${req.currentSlide.layoutType}"). If adding this phrase's content would exceed the layout's limits, choose "new" instead of "update".`
     : ''
 
@@ -810,6 +813,21 @@ A SECOND, SEPARATE one is not a change to that box: another program, another for
     ? `\nWhat the speaker has ALREADY said while on the current slide (its raw spoken transcript — use it to judge what the slide already covers and to avoid repeating points):\n"${req.currentSlide.sourceTranscript}"`
     : ''
 
+  // GEN-13: a blank heading is a starting state, not a resting one. A slide
+  // the server promoted (see `capacity`/`pinLayout` above, or a budget
+  // overflow it can't foresee) may have gone live with no title; this is the
+  // first phrase that reaches it with the slide's accumulated content and
+  // transcript to go on, which the promoting call didn't have. "delta" mode
+  // normally means slots hold ONLY the added material — title is the
+  // exception while the slide is untitled.
+  const untitled =
+    req.currentSlide?.titled === false &&
+    // A whiteboard canvas is never updated (see `capacity`) and has no
+    // title of its own; don't ask for one there.
+    req.currentSlide.layoutType !== WHITEBOARD_LAYOUT_TYPE
+      ? `\nThe CURRENT slide has NO title yet. ALSO set "title" in slots for this "update" — even in "delta" mode, where slots otherwise hold only the added material, title is the one exception: write a short heading for the slide from what it holds so far (above) plus this phrase.`
+      : ''
+
   // A fourth action bullet, present only when commands are offered:
   // the bar is deliberately high — a wrong "command" hijacks the deck
   // mid-lecture, while a missed one merely adds a slide
@@ -833,7 +851,15 @@ A SECOND, SEPARATE one is not a change to that box: another program, another for
   // slide mid-lecture is not. The server enforces this too.
   const pinLayout =
     req.pinLayout && req.currentSlide
-      ? `\nIMPORTANT: the current slide is a heading slide (layout "${req.currentSlide.layoutType}") that introduces a topic rather than accumulating content. Its layout is FIXED: for any "update", keep layoutType EXACTLY "${req.currentSlide.layoutType}" and never "refit" it to a different layout. Only a sharper title (or caption) may update it — anything needing body text or bullets must be a "new" slide.`
+      ? // GEN-13: this "new" slide is foreseeable here (unlike the
+        // budget-overflow case, decided server-side after the response), so
+        // the model can normally be asked for its title in the same call —
+        // EXCEPT when the current slide is itself untitled: the `untitled`
+        // fragment above is then already asking for a title for the CURRENT
+        // slide's own content, and there is only one "title" slot. Asking
+        // for both would contend for it, so title is omitted here and the
+        // new slide gets its own self-heal on the phrase that reaches it.
+        `\nIMPORTANT: the current slide is a heading slide (layout "${req.currentSlide.layoutType}") that introduces a topic rather than accumulating content. Its layout is FIXED: for any "update", keep layoutType EXACTLY "${req.currentSlide.layoutType}" and never "refit" it to a different layout. Only a sharper title (or caption) may update it — anything needing body text or bullets must be a "new" slide${req.currentSlide.titled === false ? '' : ', with a "title" in slots'}.`
       : ''
 
   // Untitled lecture: ask for a title alongside the slide decision;
@@ -874,6 +900,7 @@ A SECOND, SEPARATE one is not a change to that box: another program, another for
     deckStructure,
     capacity,
     currentTranscript,
+    untitled,
     language,
     phrase: req.phrase,
   })
