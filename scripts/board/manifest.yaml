@@ -1101,6 +1101,24 @@
   status: Done
   review: false
   note: delivered early
+- id: PROJ-3
+  title: Move a lecture between projects
+  full: "A lecture is filed under one project, and the file it sits in can be
+    wrong — a session recorded in the wrong course, a project split in two after
+    the fact. Its owner can move it to another project, from the lecture's own
+    settings. The lecture carries everything of its own across: slides,
+    transcript, template, seed notes and seed material, sharing overrides, quiz
+    and exports. What changes is what it inherits — from the moment it lands, it
+    takes the new project's seed context, AI freedom, language and narration
+    voice wherever it has no setting of its own, and a lecture that follows its
+    project's privacy settings (SHARE-1) follows the new project's. A lecture
+    that has pinned its own access…"
+  section: §6 Slide Projects & Seeding
+  family: PROJ
+  phase: 2
+  status: Backlog
+  review: false
+  note: shipped during the Phase 2 window; the roadmap scope lists never named it
 - id: PROJ-4
   title: Order the lectures in a project
   full: "Lectures are listed newest-first, which is the order a course is recorded
@@ -1654,6 +1672,24 @@
   phase: 2
   status: Backlog
   review: false
+- id: TMPL-24
+  title: An account's default design
+  full: "An account has a default design, chosen in Account settings → Design and
+    offering the same library, the same authoring actions and the same exports
+    as a project's or a lecture's Design tab — one design is chosen the same way
+    wherever it is chosen. Until an account chooses, its default is the
+    deployment's default template (TMPL-3) rather than nothing, so the tab shows
+    what new work will actually get. This deployment configures NYU Elegant; a
+    deployment that ships its own set names its own, and an id its template set
+    does not hold is ignored in favour of one it does. The default cascades at
+    creation, not by reference: a new project copies the account's default, a
+    new lecture copies its…"
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 2
+  status: Backlog
+  review: false
+  note: shipped during the Phase 2 window; the roadmap scope lists never named it
 - id: BILL-1
   title: Subscription tiers
   full: "The product offers four subscription tiers, each priced accordingly
@@ -1904,6 +1940,23 @@
     recognizer to finalize. Word-based rather than time-based: a count of stable
     words is deterministic and independent of speaking rate. No double
     generation — when the recognizer finalizes…"
+  section: §9 Slide Generation & Enrichment
+  family: GEN
+  phase: 3
+  status: Backlog
+  review: false
+- id: GEN-13
+  title: Titles for server-promoted slides
+  full: "The server sometimes overrides the model's decision and turns an update
+    into a new slide: when the current slide is a heading and the update carries
+    body or bullets, when the update would overflow the layout's budget (GEN-8),
+    and when the current slide is a blank whiteboard canvas (GEN-10). In each
+    case the model was answering a different question — a delta update returns
+    only the added material, and correctly carries no title — so the promoted
+    slide arrives without one. A promoted slide gets a written title, never a
+    transcription. Deriving one mechanically from the raw phrase reproduces
+    whatever the speaker happened to say at that moment: verbal fillers (\"uh\",
+    \"um\"), sentence fragments…"
   section: §9 Slide Generation & Enrichment
   family: GEN
   phase: 3
@@ -2398,24 +2451,6 @@
   phase: 4
   status: Backlog
   review: false
-- id: PROJ-3
-  title: Move a lecture between projects
-  full: "A lecture is filed under one project, and the file it sits in can be
-    wrong — a session recorded in the wrong course, a project split in two after
-    the fact. Its owner can move it to another project, from the lecture's own
-    settings. The lecture carries everything of its own across: slides,
-    transcript, template, seed notes and seed material, sharing overrides, quiz
-    and exports. What changes is what it inherits — from the moment it lands, it
-    takes the new project's seed context, AI freedom, language and narration
-    voice wherever it has no setting of its own, and a lecture that follows its
-    project's privacy settings (SHARE-1) follows the new project's. A lecture
-    that has pinned its own access…"
-  section: §6 Slide Projects & Seeding
-  family: PROJ
-  phase: 2
-  status: Backlog
-  review: false
-  note: shipped during the Phase 2 window; the roadmap scope lists never named it
 - id: TMPL-12
   title: Every shipped design holds what it says it holds
   full: "A built-in design states what each of its boxes can hold — on the slot,
@@ -2433,21 +2468,3 @@
   phase: P2
   status: Backlog
   review: false
-- id: TMPL-24
-  title: An account's default design
-  full: "An account has a default design, chosen in Account settings → Design and
-    offering the same library, the same authoring actions and the same exports
-    as a project's or a lecture's Design tab — one design is chosen the same way
-    wherever it is chosen. Until an account chooses, its default is the
-    deployment's default template (TMPL-3) rather than nothing, so the tab shows
-    what new work will actually get. This deployment configures NYU Elegant; a
-    deployment that ships its own set names its own, and an id its template set
-    does not hold is ignored in favour of one it does. The default cascades at
-    creation, not by reference: a new project copies the account's default, a
-    new lecture copies its…"
-  section: §7 Style Template Library
-  family: TMPL
-  phase: 2
-  status: Backlog
-  review: false
-  note: shipped during the Phase 2 window; the roadmap scope lists never named it
