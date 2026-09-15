@@ -797,6 +797,34 @@ export const deckReorderSlides = defineAction<
  * bloating the prompt on a long-dwelt slide. */
 const LIVE_TRANSCRIPT_CHARS = 4000
 
+/**
+ * GEN-14: normalizes a bullet for duplicate comparison. Trimmed and
+ * lowercased — whitespace and case are not meaningful differences in a
+ * heading-height line. Anything beyond exact-normalized matching (a
+ * near-repeat in different words) is the model's job, not the server's.
+ */
+const normalizedBullet = (bullet: string): string => bullet.trim().toLowerCase()
+
+/**
+ * GEN-14: a slide never says the same thing twice. Drops any bullet in
+ * `incoming` that normalizes to one already in `existing`, or to an earlier
+ * bullet within `incoming` itself (a single response can repeat itself too),
+ * keeping the first occurrence of each and preserving order. `existing`
+ * passed empty is pure within-batch dedup, used where the caller is about to
+ * replace rather than append.
+ */
+const dedupeBullets = (existing: string[], incoming: string[]): string[] => {
+  const seen = new Set(existing.map(normalizedBullet))
+  const kept: string[] = []
+  for (const bullet of incoming) {
+    const key = normalizedBullet(bullet)
+    if (seen.has(key)) continue
+    seen.add(key)
+    kept.push(bullet)
+  }
+  return kept
+}
+
 export const sessionPhrase = defineAction<
   SessionPhraseInput,
   SlideEvent,
@@ -1118,10 +1146,31 @@ export const sessionPhrase = defineAction<
       descriptors,
       lastSlide?.layoutType,
     )
-    const rawResult =
+    let rawResult =
       generated.layoutType === safeLayout
         ? generated
         : { ...generated, layoutType: safeLayout }
+
+    // GEN-14: dedupe BEFORE any capacity decision, not after. updateOverflows,
+    // refitOverflows and clampToBudget all count or slice `slots.bullets`
+    // downstream of this point — a duplicate still present when they run
+    // consumes a budget slot or trips an overflow it should never have
+    // caused (a repeat can shove genuine content onto an overflow slide, or
+    // get discarded along with it). A refit REPLACES the bullet list rather
+    // than appending to it, so it only needs within-batch dedup (existing =
+    // []); a plain additive delta is checked against what the slide already
+    // holds. Every capacity check below reads this already-deduped list.
+    if (rawResult.action === 'update' && rawResult.slots.bullets?.length) {
+      const existing =
+        rawResult.updateMode === 'refit' ? [] : (lastSlide?.bullets ?? [])
+      rawResult = {
+        ...rawResult,
+        slots: {
+          ...rawResult.slots,
+          bullets: dedupeBullets(existing, rawResult.slots.bullets),
+        },
+      }
+    }
 
     // Apply the model's latest title suggestion as long as the user has not
     // locked the title, so an auto-title keeps refining as the topic
@@ -1306,7 +1355,12 @@ export const sessionPhrase = defineAction<
       const refit = clampToBudget(rawResult, descriptors)
       if (refit.slots.title) lastSlide.title = refit.slots.title
       if (refit.slots.body) lastSlide.body = refit.slots.body
-      if (refit.slots.bullets?.length) lastSlide.bullets = refit.slots.bullets
+      // GEN-14: a refit replaces the bullet list wholesale rather than
+      // appending to it, so there is nothing existing to compare against —
+      // but the model's own refit response can itself repeat a bullet, so
+      // within-batch dedup still applies (same rule as the additive path).
+      if (refit.slots.bullets?.length)
+        lastSlide.bullets = dedupeBullets([], refit.slots.bullets)
       if (refit.slots.caption) lastSlide.caption = refit.slots.caption
       lastSlide.layoutType = refit.layoutType
       lastSlide.sourceTranscript = [lastSlide.sourceTranscript, input.phrase]
@@ -1470,24 +1524,53 @@ export const sessionPhrase = defineAction<
       return event({ kind: 'slide.update', slide: toSlideDto(lastSlide) })
     }
 
-    // Honor image intent by giving it a layout that can show the image
-    // (GEN-7): if the model asked for a photo on a layout without an
-    // image slot, upgrade to one that fits — or drop the image if none
-    // can, so no invisible, orphaned image is ever stored.
-    if (result.action === 'new')
+    if (result.action === 'new') {
+      // GEN-14: within-batch dedup runs BEFORE the budget clamp below, not
+      // after. clampToBudget slices `slots.bullets` down to the layout's
+      // `maxBullets` on whatever list it is given — a duplicate still in
+      // that list can consume a budgeted slot a genuine trailing bullet
+      // needed, silently dropping real content instead of the repeat. (A
+      // slide reaching here that was promoted from an update already had
+      // its bullets deduped against the OLD slide above; this covers a
+      // response whose action was 'new' from the start, and is a no-op
+      // otherwise.)
+      if (result.slots.bullets?.length) {
+        result = {
+          ...result,
+          slots: {
+            ...result.slots,
+            bullets: dedupeBullets([], result.slots.bullets),
+          },
+        }
+      }
+      // Honor image intent by giving it a layout that can show the image
+      // (GEN-7): if the model asked for a photo on a layout without an
+      // image slot, upgrade to one that fits — or drop the image if none
+      // can, so no invisible, orphaned image is ever stored.
       result = clampToBudget(
         reconcileImageLayout(result, descriptors),
         descriptors,
       )
+    }
     if (result.action === 'update' && lastSlide) {
       // Additive update (GEN-8): new bullets slot in, body extends,
       // layout may re-fit. Body/bullets are the accumulating record and are
       // never rewritten — only extended.
+      //
+      // GEN-14: a slide never says the same thing twice. Drop any incoming
+      // bullet that repeats one already on the slide (speech doubles back —
+      // the instructor restates a point, or the model re-emits a bullet it
+      // already wrote) and any repeated within this batch. A phrase whose
+      // bullets are all discarded still falls through as a normal update
+      // below — the speaker did say it, it simply was not new.
       if (result.slots.bullets?.length) {
-        lastSlide.bullets = [
-          ...(lastSlide.bullets ?? []),
-          ...result.slots.bullets,
-        ]
+        const freshBullets = dedupeBullets(
+          lastSlide.bullets ?? [],
+          result.slots.bullets,
+        )
+        if (freshBullets.length) {
+          lastSlide.bullets = [...(lastSlide.bullets ?? []), ...freshBullets]
+        }
       }
       if (result.slots.body) {
         lastSlide.body = [lastSlide.body, result.slots.body]
@@ -1560,6 +1643,13 @@ export const sessionPhrase = defineAction<
       return event({ kind: 'slide.update', slide: toSlideDto(lastSlide) })
     }
 
+    // GEN-14: a brand-new slide has nothing existing to compare against, but
+    // the model's own response can still repeat a bullet within itself.
+    // Already deduped and clamped above (before the budget clamp, not
+    // after — see the 'new' action block), so this is just the name the
+    // rest of this section knows the finished list by.
+    const newSlideBullets = result.slots.bullets
+
     // Resolved before the slide is written, not after: the client watches for
     // an arriving image only on a slide that already carries search terms
     // (DeckViewerPage `watchImage`), so a picture found for terms we never
@@ -1571,7 +1661,7 @@ export const sessionPhrase = defineAction<
       ? imageSearchTerms(result.imageGuidance, {
           title: result.slots.title,
           body: result.slots.body,
-          bullets: result.slots.bullets,
+          bullets: newSlideBullets,
           caption: result.slots.caption,
         })
       : []
@@ -1582,7 +1672,7 @@ export const sessionPhrase = defineAction<
       layoutType: result.layoutType,
       title: result.slots.title,
       body: result.slots.body,
-      bullets: result.slots.bullets,
+      bullets: newSlideBullets,
       caption: result.slots.caption,
       // Boxes the template's author named, already checked against what the
       // layout declares (GEN-11). The conventional four are derived onto the
@@ -1607,7 +1697,7 @@ export const sessionPhrase = defineAction<
         {
           title: result.slots.title,
           body: result.slots.body,
-          bullets: result.slots.bullets,
+          bullets: newSlideBullets,
           caption: result.slots.caption,
           imageKeywords: newSlideSearchTerms,
           layoutType: result.layoutType,

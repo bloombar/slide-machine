@@ -738,3 +738,55 @@ claimed all three sites redirect, was wrong and has been corrected.
 acceptable per the instructor's own stated preference (a blank heading over one quoting spoken disfluency),
 and the gap closes itself as soon as the speaker continues past the slide that triggered the overflow, which
 in practice they always do (the overflow only fires because there was more to say).
+
+## GEN-14: within-batch bullet dedup on the refit and new-slide paths too, not just the additive append (2026-09-15)
+
+**Brief.** GEN-14's named target was the additive-update append (`server/src/actions/deck.ts`, the plain
+`result.action === 'update'` branch): filter an incoming bullet against what the slide already holds, and
+against earlier bullets in the same batch. The brief separately asked to check whether "the same
+append-without-checking shape" exists on the refit and new-slide paths, and fix it there too if so.
+
+**What I found.** Neither of those two sites *appends* — a refit assigns `lastSlide.bullets =
+refit.slots.bullets` wholesale (SPEC says a refit provides the complete slide) and slide creation sets
+`bullets: result.slots.bullets` fresh — so there is no *existing* slide content to compare an incoming bullet
+against, and the "already holds" half of GEN-14 does not apply to either. But both still write an array taken
+directly from one model response with no check that the array itself is internally repeat-free, so the same
+underlying defect — a single generation call whose bullets list repeats itself — reaches the stored slide by a
+different route. GEN-14's own text is "a slide never says the same thing twice," not "an appended slide never
+says the same thing twice."
+
+**Choice.** Applied the shared `dedupeBullets` helper's within-batch half (`existing` passed empty) at both
+sites: `refit.slots.bullets` before it overwrites `lastSlide.bullets`, and a `newSlideBullets` local reused
+everywhere `result.slots.bullets` previously fed slide creation, its image search terms, and its enrichment
+context. The additive path keeps both halves (existing-slide + within-batch); refit and new-slide get
+within-batch only, since "existing" is empty by construction there.
+
+**Why not leave it to the prompt fix alone.** The generation prompt now tells the model not to restate the
+slide's current content, but a refit or brand-new slide is a single call generating several bullets at once —
+nothing in that call's context prevents the model from listing the same point twice within its own reply, and
+GEN-14 draws the same server/prompt split for this case as for the additive one: the prompt reduces it, the
+server guarantees the exact-match case is never stored, regardless of which of the three code paths wrote it.
+
+## GEN-14 rework: dedupe before capacity decisions, not after (2026-09-15)
+
+**What review found.** The round-1 fix above deduped at each append/assignment site, but three capacity
+decisions read `slots.bullets` earlier in the same function: `updateOverflows` (additive path), `refitOverflows`
+(refit path) and `clampToBudget` (refit and new-slide paths). All three ran on the raw, still-duplicated list, so
+a repeat could still consume a budgeted slot or trip a false overflow before dedup ever got a chance to run.
+
+**Choice.** Moved the additive/refit dedup to run once, immediately after `rawResult` is established and before
+the refit branch or any capacity check reads it — against `lastSlide.bullets` for a plain delta, against `[]`
+(within-batch only) for a refit, since a refit replaces the bullet list wholesale rather than appending to it.
+The downstream dedup calls at the refit and additive append sites are now idempotent no-ops on an
+already-deduped list; left in place as a second line of defense rather than removed, since removing them adds
+risk for no behavioral gain. The new-slide path (`result.action === 'new'`) needed a separate fix: its
+within-batch dedup ran after `clampToBudget`, so a duplicate in the raw list could occupy a budgeted slot a
+genuine trailing bullet needed. Moved that dedup to before the clamp; the `newSlideBullets` local at slide
+creation is now just the name for the already-deduped-and-clamped list, not a second computation.
+
+**Test note.** The classic template's `list` layout states `constraints.maxBullets: 6` in its JSON, but the
+runtime bullet cap the app actually enforces (via `slotLimits`'s measured-geometry fit, TMPL-6) came back as 5
+in this environment — the two are allowed to differ by design, and hardcoding either would make the new
+budget-edge tests fragile to font/geometry changes unrelated to GEN-14. The new integration tests discover the
+cap empirically (send far more bullets than any plausible budget, read back how many landed), following the
+same `listBulletCap()` pattern `decks.test.ts` already uses for its own capacity test.

@@ -783,8 +783,15 @@ const instructions = (req: SlideGenerationRequest): string => {
       ? `\nFor "update", also set "updateMode":
 - "delta": adds a small amount; slots contain ONLY the added material. Keep layoutType "${req.currentSlide.layoutType}" unless another layout still displays every slot this slide uses.
 ${refitRule}
-Current slide content: ${JSON.stringify(conventionalOnly(req.currentSlide.content))}`
+Current slide content: ${JSON.stringify(conventionalOnly(req.currentSlide.content))}
+Do NOT restate material already shown above, even reworded. If this phrase only repeats what the slide already says, answer "none" — an update that adds nothing is not an update.`
       : ''
+  // GEN-14: this anti-restating line lives inside updateRules, not as its
+  // own fragment, because it refers to "material already shown above" —
+  // the `Current slide content: …` line two lines up, rendered by this
+  // same fragment. The instruction and the data it points at travel
+  // together on purpose, so it is absent exactly when that line is: with
+  // layout refit off, or while the user is annotating (no update at all).
 
   // What the slide's authored boxes hold right now (GEN-11). Shown for every
   // update, refit or not: these boxes are replaced rather than appended to, so
