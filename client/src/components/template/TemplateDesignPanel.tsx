@@ -24,6 +24,7 @@ import ConfirmDialog from '../ConfirmDialog'
 import TemplateLibrary from './TemplateLibrary'
 import TemplateImport from './TemplateImport'
 import TemplateFileImport from './TemplateFileImport'
+import TemplateDescriptorNotice from './TemplateDescriptorNotice'
 
 export default function TemplateDesignPanel({
   templates,
@@ -96,6 +97,10 @@ export default function TemplateDesignPanel({
       .finally(() => setBusyId(undefined))
   }
 
+  // The design currently applied here — what the notice measures, the same
+  // one a lecture on this Design tab actually generates with.
+  const current = templates.find(t => t.id === value)
+
   return (
     <>
       {error && (
@@ -103,6 +108,7 @@ export default function TemplateDesignPanel({
           {error}
         </p>
       )}
+      {current && <TemplateDescriptorNotice template={current} />}
       <TemplateLibrary
         templates={templates}
         value={value}

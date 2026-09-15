@@ -169,10 +169,14 @@ End to end:
 can never produce a formula, so the template an instructor picks is what decides whether
 specialized content appears at all — no separate subject setting is needed.
 
-**The descriptor set is budgeted.** Live generation runs once per finalized phrase, so every
-byte of descriptor costs latency. `description` is length-capped, self-evident conventional
-slots are described tersely, and if the set has to be trimmed that is logged rather than
-silently truncated.
+**The descriptor set always reaches the model in full** ([TMPL-25](SPEC.md#tmpl-25-a-designs-instructions-reach-the-model-in-full)).
+Live generation runs once per finalized phrase, so every byte of descriptor costs latency, and a
+long menu is the author's to shorten — but nothing is ever trimmed on their behalf, since a slot
+whose instruction silently stopped reaching the model produced worse slides with no error and no
+way to notice. `GENERATION_DESCRIPTOR_MAX_CHARS` (default 5000, [TECH-4](SPEC.md#tech-4-server-configuration))
+is only a recommended ceiling: past it the menu still goes out whole, and the template's author
+sees an advisory — in the Design tab and on the template's own editor page — with the current
+length and the recommendation to shorten it.
 
 ### What the model is told about a box
 

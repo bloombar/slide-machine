@@ -40,6 +40,7 @@ import LayoutInspector from './LayoutInspector'
 import LayoutTreeOutline from './LayoutTreeOutline'
 import SlotInspector, { type ContentType } from './SlotInspector'
 import TemplateSettings from './TemplateSettings'
+import TemplateDescriptorNotice from './TemplateDescriptorNotice'
 import { flattenLayout } from './flatten'
 import { usePreviewImages } from './usePreviewImages'
 import { useDraftHistory } from './useDraftHistory'
@@ -689,6 +690,7 @@ export default function TemplateEditor({
       }}
       className="flex flex-col gap-6"
     >
+      <TemplateDescriptorNotice template={template} />
       <div className="flex flex-col gap-4 lg:flex-row">
         <LayoutRail
           layouts={layouts}

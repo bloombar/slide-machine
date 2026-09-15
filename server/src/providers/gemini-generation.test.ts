@@ -15,12 +15,18 @@ const testEnv = vi.hoisted(() => ({
   GEMINI_MODEL: 'gemini-test-model',
   GEMINI_TIMEOUT_MS: 5000,
   GENERATION_LOG_PROMPTS: false as boolean,
+  GENERATION_DESCRIPTOR_MAX_CHARS: 5000,
   // The real externalized templates: tests assert their content
   PROMPTS_DIR: new URL('../../../config/prompts', import.meta.url).pathname,
 }))
 vi.mock('../config/env', () => ({ env: testEnv }))
 
-import { GeminiGenerationProvider, pingGemini } from './gemini-generation'
+import {
+  GeminiGenerationProvider,
+  pingGemini,
+  renderLayouts,
+  descriptorStatus,
+} from './gemini-generation'
 import { GenerationUnavailableError } from './errors'
 
 const provider = new GeminiGenerationProvider()
@@ -166,7 +172,7 @@ describe('slot metadata reaching the model (TMPL-10)', () => {
     expect(prompt).not.toContain('LaTeX')
   })
 
-  it('spends the budget down rather than dropping every instruction, and says so', async () => {
+  it('sends every instruction in full even well over the recommended budget, and says so (TMPL-25)', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const long = 'y'.repeat(190)
     const manySlots = Array.from({ length: 40 }, (_, i) => ({
@@ -187,17 +193,15 @@ describe('slot metadata reaching the model (TMPL-10)', () => {
         ],
       } as Partial<SlideGenerationRequest>),
     )
-    // Every box is still offered — only the instructions gave way
+    // Every box is still offered, and every one of its instructions —
+    // nothing gives way for length any more (TMPL-25).
     expect(prompt).toContain('box-39')
-    // Some did give way: forty of these cannot fit.
     const kept = prompt.split(long).length - 1
-    expect(kept).toBeLessThan(manySlots.length)
-    // But not all of them. Dropping the lot was the old behaviour, and it
-    // left a template whose instructions are its point with none of them.
-    expect(kept).toBeGreaterThan(0)
-    // ...and never silently: the author has no other way to find out
+    expect(kept).toBe(manySlots.length)
+    // ...but the author is still told, so a bigger prompt is not invisible
+    // to the one person who can shorten it.
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('slot instructions'),
+      expect.stringContaining('over the recommended'),
     )
     warn.mockRestore()
   })
@@ -2019,5 +2023,74 @@ describe('the slide’s load in the refine prompt (GEN-4)', () => {
   it('leaves an empty box out of the count', async () => {
     const prompt = await promptFor({ bullets: [] }, { maxBullets: 6 })
     expect(prompt).not.toContain('How full this slide is')
+  })
+})
+
+/**
+ * TMPL-25: the layout menu reaches the model in full, whatever it costs.
+ *
+ * A menu used to be trimmed a rung at a time past a hard-coded 4000-char
+ * cap, giving up instructions box by box, least useful first — a title box's
+ * instruction was always among the first dropped. These cover the
+ * replacement: nothing is ever trimmed, and the recommended ceiling is an
+ * env setting that only drives the advisory, never the prompt's content.
+ */
+describe('layout menu budget (TMPL-25)', () => {
+  // Many layouts, each carrying a long, uniquely-named instruction, so the
+  // rendered menu is well past the old 4000-char cap on its own.
+  const manyLayouts = Array.from({ length: 15 }, (_, i) => ({
+    type: `layout-${String(i).padStart(2, '0')}`,
+    label: `Layout ${i}`,
+    purpose: 'Generic slide',
+    slots: [
+      {
+        name: 'title',
+        kind: 'text' as const,
+        label: 'Title',
+        description: `UNIQUE_INSTRUCTION_${i}: ${'x'.repeat(280)}`,
+        maxChars: 60,
+      },
+    ],
+  }))
+
+  it('sends every instruction whole, including the one the old ladder gave up first', async () => {
+    fetchMock.mockResolvedValue(geminiReply({ action: 'none' }))
+    await provider.generateSlideContent(
+      request({ layoutDescriptors: manyLayouts }),
+    )
+    const prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    // "layout-00" sorts first among ties, so the old give-up ladder (least
+    // useful first, stable by type name) dropped its title instruction
+    // before any other — this is the one that used to vanish.
+    expect(prompt).toContain('UNIQUE_INSTRUCTION_0:')
+    // And the last one, which the old ladder kept longest, still has to
+    // survive too — the whole menu goes, not just the tail of it.
+    expect(prompt).toContain('UNIQUE_INSTRUCTION_14:')
+  })
+
+  it('reads the recommended budget from env, without changing the prompt', () => {
+    // `testEnv` is shared and hoisted, so a failed assertion here that skips
+    // the restore at the end would leave `max: 100` set for every later test
+    // in this file. Restore in a `finally` so a failure can't leak it.
+    const originalMax = testEnv.GENERATION_DESCRIPTOR_MAX_CHARS
+    try {
+      const full = renderLayouts(manyLayouts)
+      testEnv.GENERATION_DESCRIPTOR_MAX_CHARS = 10_000
+      const under = descriptorStatus(manyLayouts)
+      expect(under.overBudget).toBe(false)
+      expect(under.max).toBe(10_000)
+
+      testEnv.GENERATION_DESCRIPTOR_MAX_CHARS = 100
+      const over = descriptorStatus(manyLayouts)
+      expect(over.overBudget).toBe(true)
+      expect(over.max).toBe(100)
+
+      // The budget changed the verdict, never the menu itself.
+      expect(renderLayouts(manyLayouts)).toBe(full)
+      expect(under.length).toBe(over.length)
+    } finally {
+      testEnv.GENERATION_DESCRIPTOR_MAX_CHARS = originalMax
+    }
   })
 })

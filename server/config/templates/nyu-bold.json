@@ -175,7 +175,7 @@
           "name": "title",
           "kind": "text",
           "label": "Part title",
-          "description": "The name of the part that follows, in capitals.",
+          "description": "The next part's name, in capitals.",
           "multiline": true,
           "maxChars": 27,
           "required": true
@@ -388,7 +388,7 @@
           "name": "body",
           "kind": "text",
           "label": "Body",
-          "description": "One or two sentences of context for the points.",
+          "description": "One or two sentences setting up the points.",
           "multiline": true,
           "required": false,
           "maxChars": 203
@@ -467,7 +467,7 @@
           "name": "title",
           "kind": "text",
           "label": "Title",
-          "description": "The heading, ranged right against the points. Two or three words in capitals.",
+          "description": "Two or three words in capitals, ranged right against the points.",
           "multiline": true,
           "maxChars": 33,
           "required": true
@@ -560,7 +560,7 @@
           "name": "body-2",
           "kind": "text",
           "label": "Right column",
-          "description": "The second paragraph, which follows on from the first.",
+          "description": "The second paragraph, following the first.",
           "multiline": true,
           "maxChars": 363,
           "required": false
@@ -646,7 +646,7 @@
           "name": "body",
           "kind": "text",
           "label": "Body",
-          "description": "What to notice in the picture, in a few sentences.",
+          "description": "What to notice in the picture, briefly.",
           "multiline": true,
           "maxChars": 249,
           "required": false
@@ -734,7 +734,7 @@
           "name": "title",
           "kind": "text",
           "label": "Title",
-          "description": "What the three have in common, in capitals.",
+          "description": "What the three share, in capitals.",
           "maxChars": 24,
           "required": true
         },
@@ -763,7 +763,7 @@
           "name": "body",
           "kind": "text",
           "label": "Left caption",
-          "description": "What the left picture shows. Open with its name in a word or two.",
+          "description": "What the left picture shows, opening with its name.",
           "maxChars": 164,
           "required": false
         },
@@ -771,7 +771,7 @@
           "name": "body-2",
           "kind": "text",
           "label": "Middle caption",
-          "description": "What the middle picture shows, in the same shape.",
+          "description": "The middle picture, in the same shape.",
           "maxChars": 164,
           "required": false
         },
@@ -779,7 +779,7 @@
           "name": "body-3",
           "kind": "text",
           "label": "Right caption",
-          "description": "What the right picture shows, in the same shape.",
+          "description": "The right picture, in the same shape.",
           "maxChars": 164,
           "required": false
         }
@@ -880,7 +880,7 @@
           "name": "image",
           "kind": "image",
           "label": "Image",
-          "description": "The picture. It runs nearly the full width of the slide.",
+          "description": "The picture, nearly full width.",
           "required": true
         },
         {
@@ -935,7 +935,7 @@
           "name": "title",
           "kind": "text",
           "label": "Statement",
-          "description": "The sentence, in capitals across the whole slide. Name the speaker if it is a quotation.",
+          "description": "The sentence, in capitals across the whole slide. Name the speaker if quoting.",
           "multiline": true,
           "maxChars": 55,
           "required": true
@@ -1066,7 +1066,7 @@
           "name": "body",
           "kind": "text",
           "label": "Body",
-          "description": "Why the figure matters, in a sentence or two.",
+          "description": "Why the figure matters, briefly.",
           "maxChars": 144,
           "required": false
         }
@@ -1151,7 +1151,7 @@
           "name": "snippet",
           "kind": "code",
           "label": "Program listing",
-          "description": "The listing itself, exactly as typed. Never a sentence about it.",
+          "description": "The listing, exactly as typed — never a sentence about it.",
           "required": true
         }
       ],
@@ -1213,7 +1213,7 @@
           "name": "eq",
           "kind": "math",
           "label": "Equation",
-          "description": "The expression in LaTeX, with no surrounding prose.",
+          "description": "The expression in LaTeX, no surrounding prose.",
           "required": true
         },
         {

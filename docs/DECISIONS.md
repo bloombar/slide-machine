@@ -790,3 +790,71 @@ in this environment — the two are allowed to differ by design, and hardcoding 
 budget-edge tests fragile to font/geometry changes unrelated to GEN-14. The new integration tests discover the
 cap empirically (send far more bullets than any plausible budget, read back how many landed), following the
 same `listBulletCap()` pattern `decks.test.ts` already uses for its own capacity test.
+
+## TMPL-25: deleted the trim ladder rather than leaving it dead, and measured a real over-budget template (2026-09-15)
+
+**`fitLayouts` / `renderLayouts`'s detail ladder.** TMPL-25 says the layout menu always reaches the model in
+full, so nothing in the live path may trim it any more. The choice the brief left open was what to do with the
+now-unused machinery: `fitLayouts` (the give-up loop), the `'brief'`/`'none'` detail levels, `firstSentence`,
+`instructionValue`/`CONVENTIONAL` (the give-up ranking) and `describeSlot`'s `level`/`show` parameters. Deleted
+all of it rather than leaving it unreferenced — nothing else in the codebase called `renderLayouts` with
+anything but `'full'` once `instructions()` stopped needing the other two, so keeping it would be dead code with
+no caller, not an option a future slice could plausibly reach for. `renderLayouts` now always renders every
+instruction; a new `descriptorStatus(descriptors)` (server) pairs it with `descriptorBudget()`, which reads
+`env.GENERATION_DESCRIPTOR_MAX_CHARS` live (per-call, like every other env-driven setting in
+`gemini-generation.ts`) rather than freezing it into a module-load constant — a lowered setting has to change the
+next request's over-budget verdict without a restart. `server/src/providers/descriptor-fit.test.ts` covered only
+the deleted ladder and was deleted with it;
+`server/src/templates/descriptor-budget.test.ts` was rewritten to assert the new invariant (every built-in's
+menu contains every layout, box and instruction, whatever its length) instead of the old "fits inside the cap"
+one.
+
+**Hermetic budget in `vitest.config.ts`.** `GENERATION_DESCRIPTOR_MAX_CHARS` was not pinned in the shared test
+env at first, unlike `GENERATION_FREEDOM`/`GENERATION_LAYOUT_REFIT`, which are pinned so a developer's `.env`
+cannot change what a test asserts. Pinned it to the code default (5000) for the same reason:
+`descriptor-budget.test.ts` asserts a specific built-in genuinely exceeds the budget, which only holds at the
+default value.
+
+**The client action's shape.** `TemplateDescriptorNotice` measures the *saved* template (`template.descriptorStatus`,
+gated the same as `template.get`), not the editor's live unsaved draft. Generation itself only ever sees a saved
+template, so measuring the draft would show the author a number nothing downstream uses yet, and would need a
+second, heavier action (or reimplementing the character count client-side, which the brief rules out) to accept
+a full unsaved layout array on every keystroke. The tradeoff: in `TemplateEditor.tsx` the notice only updates
+after a save, not while typing. `TemplateDescriptorNotice` takes the whole `Template` object rather than just its
+id so that a save — which produces a new object with the same id — retriggers the fetch; `TemplateDesignPanel`
+passes the currently-applied template the same way.
+
+**Measured, not assumed: which shipped templates are actually over 5000.** The brief's production log (4791,
+under the new default) does not by itself demonstrate the notice fires on real data. Measuring all five
+built-ins' `renderLayouts` output directly: `classic` 2539, `midnight` 2539, `nyu-elegant` 4791, `seminar` 2539,
+and **`nyu-bold` 5104** — over the 5000 default by 104 characters. `nyu-bold` is a real, shipped template that
+will show the advisory the day this ships, not only in a synthetic fixture; `descriptor-budget.test.ts` and
+`template.test.ts` both assert this rather than assuming it.
+
+## TMPL-25 rework: nyu-bold trimmed under budget, and what that means for the tests (2026-09-15)
+
+The instructor chose, of the options put to them, to trim `nyu-bold`'s wording rather than ship a built-in an
+author can never bring under budget. `server/config/templates/nyu-bold.json` was edited: redundant phrasing was
+tightened across eleven boxes (e.g. the `image-list` layout's three near-identical caption instructions —
+"What the middle/right picture shows, in the same shape." became "The middle/right picture, in the same
+shape." — and `section`'s title instruction "The name of the part that follows, in capitals." became "The
+next part's name, in capitals."). No distinct instruction was deleted; every box still says what it said, only
+fewer words. Measured before/after: 5104 → 4947 characters, 53 under the 5000 default rather than sitting on a
+handful of characters' margin.
+
+That changes what "measured, not assumed" above claims: **no shipped built-in now measures over the recommended
+budget.** `descriptor-budget.test.ts`'s per-template `nyu-bold genuinely exceeds...` case was inverted to `no
+shipped design exceeds the recommended budget`, looping every built-in rather than naming one, since that is
+the invariant actually worth guarding — it fails loudly if a future edit to any design's instructions pushes it
+over, rather than resting on one template's margin. `template.test.ts`'s over-budget case was rewritten the same
+way: it now builds a synthetic over-budget `Template` fixture (a single box holding a 5200-character
+description) rather than reaching for `nyu-bold`, since no built-in reaches that branch any more. Consequently
+the advisory itself — `overBudget: true` — is exercised only by that fixture and by
+`TemplateDescriptorNotice.test.tsx`'s client tests, never by a shipped design. That is the correct outcome of
+having fixed the underlying problem, and is recorded here rather than left for a reader to discover from a
+suite that still reads green either way.
+
+**Gating docstring.** `templateDescriptorStatus`'s comment said it was gated "the same as `template.get`", but
+`template.get` actually uses the narrower `templateReadableBySlug` rule; the action's own `readableById` gate
+matches `template.duplicate`/`template.export`/`template.previewImage` instead. The gate itself was already
+correct — only the citation was wrong — so the docstring now names those three.

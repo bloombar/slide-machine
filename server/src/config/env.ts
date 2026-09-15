@@ -212,6 +212,18 @@ const envSchema = z
     // the deck's structure, not just the last few slides. On by default; flip off
     // to restore the pre-structure prompt exactly.
     GENERATION_DECK_STRUCTURE: z.stringbool().default(true),
+    // Recommended ceiling on the assembled layout menu (TMPL-25). The menu
+    // — every layout, box and authoring instruction (TMPL-10) — is always
+    // sent to the model in full; exceeding this no longer trims anything, a
+    // deployment that wants richer per-box guidance can raise it and one
+    // paying for latency can lower it. It only drives an advisory shown to
+    // the template's author (in the Design tab and the template editor),
+    // telling them to shorten their instructions so generation stays fast.
+    GENERATION_DESCRIPTOR_MAX_CHARS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(5000),
     /** Hard cap on one generation call — phrase-to-slide must stay live. */
     GEMINI_TIMEOUT_MS: z.coerce.number().default(12_000),
     // Service-account JSON for Cloud Speech-to-Text streaming (real-time STT).

@@ -481,6 +481,10 @@
       "confirmRemovedLayouts": "{count, plural, one {# diapositiva usa un diseño que ya no existe y se dejará como está.} other {# diapositivas usan diseños que ya no existen y se dejarán como están.}}",
       "confirmKept": "No se elimina nada. Lo que no tenga equivalente permanece en su diapositiva y solo deja de mostrarse, así que puedes recolocarlo donde quieras."
     },
+    "descriptorBudget": {
+      "heading": "Las instrucciones de este diseño se están alargando",
+      "hint": "Las instrucciones de tus cajas suman {length} caracteres, por encima de los {max} recomendados. Acórtalas para que la generación siga siendo rápida y la clase responda con fluidez."
+    },
     "exportSlides": "Exportar el diseño a Google Slides",
     "exportSlidesHint": "Guarda este diseño en tu Drive como una presentación cuyos diseños de diapositiva son sus maquetas, con una diapositiva de muestra por cada una.",
     "exportSlidesDone": "Guardado en Drive: abrir en Google Slides",

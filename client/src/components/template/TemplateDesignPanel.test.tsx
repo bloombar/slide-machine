@@ -103,7 +103,17 @@ const renderPanel = (
   return onChange
 }
 
-beforeEach(() => vi.mocked(dispatchAction).mockReset())
+beforeEach(() => {
+  vi.mocked(dispatchAction).mockReset()
+  // The panel's own descriptor-budget notice (TMPL-25) calls this on mount
+  // for whichever template is applied; a harmless default keeps the panel's
+  // own tests about what the panel itself does, not about that notice.
+  vi.mocked(dispatchAction).mockResolvedValue({
+    length: 0,
+    max: 5000,
+    overBudget: false,
+  })
+})
 afterEach(cleanup)
 
 describe('TemplateDesignPanel (TMPL-4)', () => {

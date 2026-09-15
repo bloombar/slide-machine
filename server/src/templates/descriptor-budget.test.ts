@@ -1,29 +1,28 @@
 /**
- * Every built-in's layout menu must reach the model within the generation
- * prompt's descriptor budget (docs/TEMPLATES.md §3), carrying as much of its
- * authoring guidance (TMPL-10) as will fit.
+ * Every built-in's layout menu reaches the model in full (TMPL-25), whatever
+ * its length against the recommended budget (docs/TEMPLATES.md §3).
  *
- * Guarded because of how the budget used to fail. Going over did not trim the
- * overage — the whole menu was re-rendered with no instructions at all, so
- * EVERY box's guidance stopped reaching the model at once, and the only trace
- * was a console warning nobody watches during a live lecture. A template
- * whose instructions are its point kept producing slides, just markedly worse
- * ones.
+ * Guarded because of how the budget used to fail. Going over it did not trim
+ * the overage — the whole menu re-rendered with progressively less
+ * instruction until it fit, and a template whose instructions could not be
+ * shortened enough lost EVERY box's guidance at once, with the only trace a
+ * console warning nobody watches during a live lecture. TMPL-25 replaced
+ * trimming with sending the menu whole and telling the author instead — this
+ * file checks the "whole" half of that never regresses.
  *
- * `nyu-elegant` is the template that makes this real: sixteen layouts with an
- * instruction on nearly every box cannot all fit, so it exercises the spend
- * rather than the happy path.
+ * No shipped design exceeds the recommended budget — `nyu-bold` was the one
+ * that did, at 5104 against the 5000 default, until its instruction wording
+ * was trimmed to fit (docs/DECISIONS.md). That means the advisory itself is
+ * exercised only by client tests and the fixture below, never by a shipped
+ * design — stated here rather than implied, since a passing suite cannot say
+ * so on its own.
  */
 import { describe, expect, it } from 'vitest'
-import {
-  MAX_DESCRIPTOR_CHARS,
-  fitLayouts,
-  renderLayouts,
-} from '../providers/gemini-generation'
+import { descriptorStatus, renderLayouts } from '../providers/gemini-generation'
 import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
 import { listBuiltinTemplates, layoutDescriptors } from './builtin'
 
-describe('layout descriptor budget', () => {
+describe('layout menu (TMPL-25)', () => {
   const templates = listBuiltinTemplates()
 
   /**
@@ -34,7 +33,7 @@ describe('layout descriptor budget', () => {
    * so an empty or short set has to fail as itself, here, rather than being
    * read off a count of zero failures.
    */
-  it('is a set worth budgeting at all', () => {
+  it('is a set worth checking at all', () => {
     expect(templates.length).toBeGreaterThan(0)
     for (const template of templates)
       expect(
@@ -54,19 +53,10 @@ describe('layout descriptor budget', () => {
      * the evidence that THIS design was measured — a thing a reader can look
      * for by name in the output, rather than infer from another suite.
      */
-    it(`${template.id} fits its menu inside the cap`, () => {
-      const { menu } = fitLayouts(layoutDescriptors(template))
-      expect(
-        menu.length,
-        `${template.id} menu is ${menu.length} chars, over the ` +
-          `${MAX_DESCRIPTOR_CHARS} cap — going over drops EVERY box's ` +
-          `instruction at once, not just the overage`,
-      ).toBeLessThanOrEqual(MAX_DESCRIPTOR_CHARS)
-    })
-
-    it(`${template.id} gives up instructions but never a box`, () => {
+    it(`${template.id} sends every layout, box and instruction whole`, () => {
       const descriptors = layoutDescriptors(template)
-      const { menu } = fitLayouts(descriptors)
+      const menu = renderLayouts(descriptors)
+
       /*
        * The premise of the case: the menu describes the layouts generation
        * can actually choose, and all of them.
@@ -99,25 +89,31 @@ describe('layout descriptor budget', () => {
             menu,
             `${template.id} dropped box "${slot.name}" from "${layout.type}"`,
           ).toContain(`${slot.name}[${slot.kind}`)
+          // The point of TMPL-25: no box's authoring instruction (TMPL-10) is
+          // ever left out for length, so every one an author wrote is here
+          // verbatim.
+          if (slot.description) {
+            expect(
+              menu,
+              `${template.id} dropped the instruction on "${slot.name}" ` +
+                `in "${layout.type}"`,
+            ).toContain(slot.description)
+          }
         }
       }
     })
   }
 
-  it('spends what it has on the boxes that need telling', () => {
-    const template = listBuiltinTemplates().find(t => t.id === 'nyu-elegant')!
-    const descriptors = layoutDescriptors(template)
-    const full = renderLayouts(descriptors, 'full')
-    // The premise: this template genuinely cannot state everything.
-    expect(full.length).toBeGreaterThan(MAX_DESCRIPTOR_CHARS)
-
-    const { menu, dropped } = fitLayouts(descriptors)
-    expect(dropped).toBeGreaterThan(0)
-    // A listing and an expression are what the model cannot infer from a
-    // name, so their instructions are the last to go.
-    expect(menu).toContain('The listing itself')
-    expect(menu).toContain('LaTeX')
-    // And the limits are never given up, whatever else is.
-    expect(menu).toContain('max 44 chars')
+  it('no shipped design exceeds the recommended budget', () => {
+    // The real guarantee: an author never meets an unactionable advisory on
+    // a built-in they cannot edit. This fails loudly the day a future design
+    // edit pushes one over, rather than resting on any one template's margin.
+    for (const template of templates) {
+      const status = descriptorStatus(layoutDescriptors(template))
+      expect(
+        status.overBudget,
+        `${template.id} measures ${status.length} against a ${status.max} budget`,
+      ).toBe(false)
+    }
   })
 })

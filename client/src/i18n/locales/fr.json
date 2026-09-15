@@ -481,6 +481,10 @@
       "confirmRemovedLayouts": "{count, plural, one {# diapositive utilise une mise en page que le nouveau modèle ne propose plus ; elle restera telle quelle.} other {# diapositives utilisent des mises en page que le nouveau modèle ne propose plus ; elles resteront telles quelles.}}",
       "confirmKept": "Rien n'est supprimé. Ce qui n'a pas d'équivalent reste sur sa diapositive et cesse simplement d'être affiché : vous pourrez le replacer où vous voulez."
     },
+    "descriptorBudget": {
+      "heading": "Les instructions de ce modèle deviennent longues",
+      "hint": "Les instructions de vos zones totalisent {length} caractères, au-delà des {max} recommandés. Raccourcissez-les pour que la génération reste rapide et le cours réactif."
+    },
     "exportSlides": "Exporter la conception vers Google Slides",
     "exportSlidesHint": "Enregistre cette conception dans votre Drive sous forme de présentation dont les mises en page sont les siennes, avec une diapositive de démonstration pour chacune.",
     "exportSlidesDone": "Enregistré dans Drive — ouvrir dans Google Slides",

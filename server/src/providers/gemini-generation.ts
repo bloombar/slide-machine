@@ -32,6 +32,7 @@ import type {
   SlotValue,
   ImportedLayoutDescriptor,
   ImportedLayoutSemantics,
+  TemplateDescriptorStatus,
 } from '@slide-machine/shared'
 import {
   isVoiceCommand,
@@ -485,26 +486,14 @@ const normalizeAction = (
  * box rather than an instruction to the model — an author's words are data,
  * and the surrounding prompt is what tells the model what to do with them.
  */
-const describeSlot = (
-  s: SlotSpec,
-  level: DescriptorDetail = 'full',
-  show = true,
-): string => {
+const describeSlot = (s: SlotSpec): string => {
   const limits: string[] = []
   if (s.maxChars) limits.push(`max ${s.maxChars} chars`)
   if (s.maxWords) limits.push(`max ${s.maxWords} words`)
   if (s.maxItems) limits.push(`max ${s.maxItems} items`)
   if (s.required) limits.push('required')
   const detail = limits.length ? ` (${limits.join(', ')})` : ''
-  // A conventional slot's name says what it is; only an authored instruction
-  // adds anything, so the budget is spent on those.
-  const instruction =
-    level === 'none' || !show
-      ? undefined
-      : level === 'brief'
-        ? firstSentence(s.description)
-        : s.description
-  const purpose = instruction ? ` — "${instruction}"` : ''
+  const purpose = s.description ? ` — "${s.description}"` : ''
   // The kind is what tells the model to write a program listing rather than
   // a paragraph, so it is never dropped — a name and a kind are the least a
   // box can be described by (GEN-11).
@@ -524,54 +513,25 @@ const describeSlot = (
 }
 
 /**
- * How much prompt the layout menu may occupy (docs/TEMPLATES.md §3).
+ * The recommended ceiling on the layout menu's length (TMPL-25), read live so
+ * a deployment can change it without a restart-order surprise.
  *
- * Generation runs once per finalized phrase in a live lecture, so descriptor
- * bloat is latency the audience sees. A template with many layouts, each with
- * many described boxes, can outgrow that — so the block is bounded, and what
- * gives way first is the authoring instructions, since a box's name and limits
- * are what the model cannot work without.
+ * The menu is sent to the model in full whatever this says — going over no
+ * longer trims anything. What the setting drives is the advisory: the
+ * console warning below, and `descriptorStatus`, which the template editor
+ * calls to tell an author their instructions have grown past what generation
+ * stays fast at.
  */
-export const MAX_DESCRIPTOR_CHARS = 4000
+export const descriptorBudget = (): number =>
+  env.GENERATION_DESCRIPTOR_MAX_CHARS
 
-/**
- * How much of each author's instruction the menu carries.
- *
- * A ladder rather than a switch: an instruction that does not fit is worth
- * more shortened than deleted, and every rung stays a sentence the model can
- * act on. Clipping to an arbitrary character count would not — "Never a
- * sentence about it" cut mid-way reads as "Never a", which is worse than
- * saying nothing.
- */
-export type DescriptorDetail = 'full' | 'brief' | 'none'
-
-/**
- * The first sentence of an authoring instruction.
- *
- * Authors write the box's purpose first and qualify it after ("The number
- * alone: \"32%\", \"1.4bn\". Never a sentence."), so the opening sentence is
- * the part that survives compression with its meaning whole.
- */
-const firstSentence = (text: string | undefined): string | undefined => {
-  if (!text) return text
-  const trimmed = text.trim()
-  const end = trimmed.match(/^[\s\S]*?[.!?](?=\s|$)/)
-  return end ? end[0].trim() : trimmed
-}
-
-/** The layout menu, carrying the authors' instructions in the given detail. */
+/** The layout menu, carrying every author's instruction in full (TMPL-25). */
 export const renderLayouts = (
   descriptors: SlideGenerationRequest['layoutDescriptors'],
-  level: DescriptorDetail,
-  /** Which boxes keep their instruction. Everything, unless a caller is
-   * spending a budget down (`fitLayouts`). */
-  show: (layoutType: string, slotName: string) => boolean = () => true,
 ): string =>
   descriptors
     .map(d => {
-      const slots = d.slots
-        .map(s => describeSlot(s, level, show(d.type, s.name)))
-        .join(', ')
+      const slots = d.slots.map(describeSlot).join(', ')
       return `- "${d.type}" (${d.label}): ${d.purpose}. Slots: ${slots}${
         d.constraints ? `. Constraints: ${JSON.stringify(d.constraints)}` : ''
       }`
@@ -579,112 +539,41 @@ export const renderLayouts = (
     .join('\n')
 
 /**
- * The fullest layout menu that fits the budget.
+ * How long a template's assembled menu is against the recommended budget
+ * (TMPL-25) — what the Design tab and the template editor show the author.
  *
- * Descriptors used to be all-or-nothing: one character over and every box's
- * instruction was dropped, so a template carrying guidance on most of its
- * boxes lost the lot and quietly produced worse slides. Shortening each
- * instruction to its first sentence recovers most of the guidance for a
- * fraction of the bytes, and dropping them stays the last rung rather than
- * the only one.
+ * Computed with the same `renderLayouts` the prompt is built from, so the
+ * number on screen and the number the prompt actually costs cannot disagree;
+ * the client is never asked to count the characters itself. Returns the
+ * shared `TemplateDescriptorStatus` — the action that serves this to the
+ * client (`template.descriptorStatus`) claims that type, so there is only one
+ * shape for the two to drift apart from.
  */
-/**
- * How much an instruction is worth keeping when the budget is short.
- *
- * A box whose kind already tells the model what to write — a `title` that
- * holds text — needs its sentence least. A `code` or `math` box needs it
- * most: nothing about the name "snippet" says the value is a listing rather
- * than a paragraph about one. A box the author named themselves sits between
- * the two, since its name is the only other thing describing it.
- */
-const CONVENTIONAL = new Set(['title', 'body', 'bullets', 'caption', 'image'])
-
-const instructionValue = (s: SlotSpec): number => {
-  if (s.kind === 'code' || s.kind === 'math' || s.kind === 'table') return 0
-  if (!CONVENTIONAL.has(s.name)) return 1
-  if (s.kind === 'image') return 2
-  return 3
-}
-
-/**
- * The fullest layout menu that fits the budget.
- *
- * Descriptors used to be all-or-nothing: one character over and every box's
- * instruction was dropped, so a template carrying guidance on most of its
- * boxes lost the lot and quietly produced worse slides.
- *
- * Shortening each instruction to its opening sentence is the first thing
- * tried. It is not enough on its own — an author who writes one-sentence
- * instructions saves almost nothing by it, and a template with many layouts
- * would still fall off the same cliff. So what follows is a spend rather than
- * a rung: instructions are given up one box at a time, least useful first,
- * until the menu fits. The budget comes back as full as it can be, instead of
- * empty.
- */
-export const fitLayouts = (
+export const descriptorStatus = (
   descriptors: SlideGenerationRequest['layoutDescriptors'],
-  budget = MAX_DESCRIPTOR_CHARS,
-): { menu: string; detail: DescriptorDetail; dropped: number } => {
-  const full = renderLayouts(descriptors, 'full')
-  if (full.length <= budget) return { menu: full, detail: 'full', dropped: 0 }
-
-  const brief = renderLayouts(descriptors, 'brief')
-  if (brief.length <= budget)
-    return { menu: brief, detail: 'brief', dropped: 0 }
-
-  // Least useful first, and by a stable order within a rank so the same
-  // template always renders the same menu — a prompt that varies per call
-  // would defeat caching for no benefit.
-  const ranked = descriptors
-    .flatMap(d => d.slots.map(s => ({ type: d.type, slot: s })))
-    .filter(e => e.slot.description)
-    .sort(
-      (a, b) =>
-        instructionValue(b.slot) - instructionValue(a.slot) ||
-        a.type.localeCompare(b.type) ||
-        a.slot.name.localeCompare(b.slot.name),
-    )
-
-  const givenUp = new Set<string>()
-  const key = (type: string, name: string) => `${type}\u0000${name}`
-  for (const entry of ranked) {
-    givenUp.add(key(entry.type, entry.slot.name))
-    const menu = renderLayouts(
-      descriptors,
-      'brief',
-      (type, name) => !givenUp.has(key(type, name)),
-    )
-    if (menu.length <= budget) {
-      return { menu, detail: 'brief', dropped: givenUp.size }
-    }
-  }
-
-  // Even with no instruction anywhere it does not fit: the names, kinds and
-  // limits are what is left, and they are never given up.
-  return {
-    menu: renderLayouts(descriptors, 'none'),
-    detail: 'none',
-    dropped: givenUp.size,
-  }
+): TemplateDescriptorStatus => {
+  const length = renderLayouts(descriptors).length
+  const max = descriptorBudget()
+  return { length, max, overBudget: length > max }
 }
 
 const instructions = (req: SlideGenerationRequest): string => {
-  const full = renderLayouts(req.layoutDescriptors, 'full')
-  const fitted = fitLayouts(req.layoutDescriptors)
-  let layouts = fitted.menu
-  if (fitted.detail !== 'full') {
-    // Said out loud rather than trimmed quietly: a template whose
-    // instructions stop reaching the model in full produces worse slides,
-    // and the author has no other way to find out.
+  // Rendered once and measured here, rather than once to measure and again
+  // for the prompt: this runs per phrase on the latency-sensitive generation
+  // path, and the whole point of the budget is prompt latency.
+  let layouts = renderLayouts(req.layoutDescriptors)
+  const max = descriptorBudget()
+  const menuLength = layouts.length
+  if (menuLength > max) {
+    // Said out loud rather than trimmed quietly: nothing here is dropped —
+    // the full menu still goes to the model — but a bigger prompt is latency
+    // an audience feels, and the author has no other way to find out. The
+    // template editor shows this same number (`descriptorStatus`) as advice,
+    // not an error.
     console.warn(
-      `Layout descriptors exceeded ${MAX_DESCRIPTOR_CHARS} chars ` +
-        `(${full.length}); ` +
-        (fitted.detail === 'none'
-          ? `dropped slot instructions`
-          : fitted.dropped
-            ? `shortened slot instructions and gave up ${fitted.dropped} of them`
-            : `shortened slot instructions to their first sentence`) +
-        ` for this request (now ${layouts.length}). ` +
+      `Layout descriptors are ${menuLength} chars, over the recommended ` +
+        `${max}; sending them in full so no authoring instruction is ` +
+        `dropped, but generation will run slower for it. ` +
         `Shorten them in the template editor.`,
     )
   }

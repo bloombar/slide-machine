@@ -481,6 +481,10 @@
       "confirmRemovedLayouts": "{count, plural, other {# 张幻灯片使用了新设计中已不存在的版式，将保持原样。}}",
       "confirmKept": "不会删除任何内容。没有对应位置的内容仍保留在幻灯片上，只是不再显示，你可以把它放回想要的位置。"
     },
+    "descriptorBudget": {
+      "heading": "此设计的说明文字过长",
+      "hint": "你各个框的说明文字共 {length} 个字符，超过建议的 {max} 个。请缩短说明文字，以保持生成速度和课堂的响应流畅。"
+    },
     "exportSlides": "将设计导出到 Google Slides",
     "exportSlidesHint": "把这个设计保存到你的云端硬盘，成为一份以它的版式为版式的演示文稿，每种版式配一张示例幻灯片。",
     "exportSlidesDone": "已保存到云端硬盘——在 Google Slides 中打开",
