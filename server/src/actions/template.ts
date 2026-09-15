@@ -22,9 +22,11 @@ import type {
   GenerationProvider,
   Layout,
   Template,
+  TemplateDescriptorStatus,
 } from '@slide-machine/shared'
 import { KEEP_EVERY_SLIDE_BY_DEFAULT } from '@slide-machine/shared'
 import { MAX_TEMPLATE_INSTRUCTIONS } from '@slide-machine/shared'
+import { descriptorStatus } from '../providers/gemini-generation'
 import { defineAction } from './define'
 import { registerAction, ActionValidationError } from './dispatch'
 import {
@@ -37,6 +39,7 @@ import { fetchAssets } from '../import/assets'
 import { TemplateModel, toTemplateDto } from '../models/template'
 import { UserModel } from '../models/user'
 import {
+  layoutDescriptors,
   layoutSchema,
   listBuiltinTemplates,
   normalizeSlot,
@@ -175,6 +178,29 @@ export const templateGet = defineAction<
       ? { ...template, owner: { id: owner.id, displayName: owner.displayName } }
       : template
   },
+})
+
+/**
+ * How long a template's generation menu is against the recommended budget,
+ * and whether it is over (TMPL-25).
+ *
+ * The client is never asked to count the characters itself — `layoutDescriptors`
+ * and `descriptorStatus` are the same pair the live prompt is assembled from
+ * (`gemini-generation.ts`), so the number this reports is the number
+ * generation actually costs. Read-only, and gated like a template read: the
+ * author sees it, and so does anyone this template is shared with, the same
+ * as `template.duplicate`/`template.export`.
+ */
+export const templateDescriptorStatus = defineAction<
+  { templateId: string },
+  TemplateDescriptorStatus,
+  TemplateAccess
+>({
+  name: 'template.descriptorStatus',
+  access: readableById,
+  input: z.object({ templateId: z.string().min(1) }),
+  execute: async (ctx, input, { template }) =>
+    descriptorStatus(layoutDescriptors(template)),
 })
 
 /**
@@ -688,6 +714,7 @@ export const templateImportFromDrive = defineAction<
 
 registerAction(templateList)
 registerAction(templateGet)
+registerAction(templateDescriptorStatus)
 registerAction(templateExport)
 registerAction(templatePreviewImage)
 registerAction(templateDuplicate)

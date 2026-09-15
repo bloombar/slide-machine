@@ -620,3 +620,17 @@ export interface TemplateUpdateStatus {
   /** Total slides whose content would need adjusting after the update. */
   affectedSlides: number
 }
+
+/**
+ * How long a template's generation menu is against the recommended budget
+ * (TMPL-25), and whether it is over — shown to the template's author at the
+ * top of the Design tab's template list and on the template's own editor
+ * page. Advisory only: the template generates slides at any length.
+ */
+export interface TemplateDescriptorStatus {
+  /** The assembled layout menu's length, in characters. */
+  length: number
+  /** The server's recommended ceiling (GENERATION_DESCRIPTOR_MAX_CHARS). */
+  max: number
+  overBudget: boolean
+}

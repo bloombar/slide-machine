@@ -93,6 +93,7 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
   'seedAsset.update': { resource: 'seedAsset', level: 'edit' },
   'system.echo': { resource: 'none', level: 'open' },
   'template.delete': { resource: 'template', level: 'author' },
+  'template.descriptorStatus': { resource: 'template', level: 'readable' },
   'template.duplicate': { resource: 'template', level: 'readable' },
   'template.export': { resource: 'template', level: 'readable' },
   'template.get': { resource: 'template', level: 'readable' },

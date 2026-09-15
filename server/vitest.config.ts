@@ -62,6 +62,10 @@ export default defineConfig({
       AUDIO_RETENTION_DAYS: '30',
       // Hermetic: the developer's local .env must not leak into tests
       GENERATION_FREEDOM: '2',
+      // Pinned to the code default: descriptor-budget.test.ts asserts a
+      // built-in genuinely exceeds it, which a developer's raised .env value
+      // would silently turn into a false pass.
+      GENERATION_DESCRIPTOR_MAX_CHARS: '5000',
       // Feature flags pinned to their code defaults; flag-variant tests
       // mock env per file instead
       GENERATION_VOICE_COMMANDS: 'false',
