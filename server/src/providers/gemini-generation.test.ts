@@ -364,6 +364,9 @@ describe('GeminiGenerationProvider', () => {
     // token that always appears in the JSON output shape).
     expect(prompt).not.toContain('keep the SAME layoutType')
     expect(prompt).not.toContain('Current slide content:')
+    // GEN-13 cheap-fix 3: the foreseeable whiteboard promotion asks the
+    // model for a title for the new slide it creates.
+    expect(prompt).toContain('give that new slide a "title" in slots')
   })
 
   it("pins a heading slide's layout and sends new content to a new slide", async () => {
@@ -397,6 +400,108 @@ describe('GeminiGenerationProvider', () => {
     expect(prompt).toContain('keep layoutType EXACTLY "title"')
     expect(prompt).toContain('never "refit" it to a different layout')
     expect(prompt).toContain('must be a "new" slide')
+    // GEN-13 cheap-fix 3: the foreseeable heading-slide promotion asks the
+    // model for a title for the new slide it creates.
+    expect(prompt).toContain('with a "title" in slots')
+  })
+
+  it('does not ask twice for the one "title" slot when a heading slide is both pinned and untitled (GEN-13)', async () => {
+    fetchMock.mockResolvedValue(geminiReply({ action: 'none' }))
+
+    // Untitled + pinned: the `untitled` fragment (title for the CURRENT
+    // slide) wins; `pinLayout`'s "with a title in slots" clause (which would
+    // ask for a title for a DIFFERENT slide — the one this promotion
+    // creates) must not also appear, or the model has one slot and two
+    // contradictory asks.
+    await provider.generateSlideContent(
+      request({
+        allowLayoutRefit: true,
+        pinLayout: true,
+        currentSlide: {
+          layoutType: 'title',
+          bulletCount: 0,
+          bodyChars: 0,
+          titled: false,
+        },
+      }),
+    )
+    const untitledPinned = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    expect(untitledPinned).toContain('The CURRENT slide has NO title yet')
+    expect(untitledPinned).not.toContain('with a "title" in slots')
+
+    // Titled + pinned: no self-heal in play, so the promoted-slide title ask
+    // is restored.
+    fetchMock.mockClear()
+    await provider.generateSlideContent(
+      request({
+        allowLayoutRefit: true,
+        pinLayout: true,
+        currentSlide: {
+          layoutType: 'title',
+          bulletCount: 0,
+          bodyChars: 0,
+          titled: true,
+        },
+      }),
+    )
+    const titledPinned = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    expect(titledPinned).not.toContain('The CURRENT slide has NO title yet')
+    expect(titledPinned).toContain('with a "title" in slots')
+  })
+
+  it('asks for a title only while the current slide has none (GEN-13)', async () => {
+    fetchMock.mockResolvedValue(geminiReply({ action: 'none' }))
+
+    // Untitled: the prompt asks for one, and says so even for "delta" mode.
+    await provider.generateSlideContent(
+      request({
+        currentSlide: {
+          layoutType: 'list',
+          bulletCount: 5,
+          bodyChars: 0,
+          titled: false,
+        },
+      }),
+    )
+    const untitledPrompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    expect(untitledPrompt).toContain('The CURRENT slide has NO title yet')
+    expect(untitledPrompt).toContain('even in "delta" mode')
+
+    // Titled: the fragment is absent.
+    fetchMock.mockClear()
+    await provider.generateSlideContent(
+      request({
+        currentSlide: {
+          layoutType: 'list',
+          bulletCount: 5,
+          bodyChars: 0,
+          titled: true,
+        },
+      }),
+    )
+    const titledPrompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    expect(titledPrompt).not.toContain('The CURRENT slide has NO title yet')
+
+    // Whiteboard canvas: never asked for a title (it can't be updated at all).
+    fetchMock.mockClear()
+    await provider.generateSlideContent(
+      request({
+        currentSlide: {
+          layoutType: 'whiteboard',
+          bulletCount: 0,
+          bodyChars: 0,
+          titled: false,
+        },
+      }),
+    )
+    const whiteboardPrompt = JSON.parse(
+      String(fetchMock.mock.calls[0]![1].body),
+    ).contents[0].parts[0].text as string
+    expect(whiteboardPrompt).not.toContain('The CURRENT slide has NO title yet')
   })
 
   it('tolerates responses that omit layoutType (none / delta updates)', async () => {

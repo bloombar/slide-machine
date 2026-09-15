@@ -349,12 +349,3 @@ export const clampToBudget = (
     ),
   }
 }
-
-/** A short title for updates promoted to new slides without one. */
-export const titleFromPhrase = (phrase: string, maxWords = 6): string =>
-  phrase
-    .trim()
-    .split(/\s+/)
-    .slice(0, maxWords)
-    .map(w => (w ? w[0]!.toUpperCase() + w.slice(1) : w))
-    .join(' ')

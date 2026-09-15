@@ -694,3 +694,47 @@ Two decisions taken together while building SHARE-3, both narrowing what an unco
 **Waived with no relay.** A deployment configured with no mail (`MAIL_PROVIDER=none`, or SMTP unset) can deliver neither a verification link nor a password reset, so `emailVerified` is unreachable there for password accounts — a gate would have been a permanent refusal offering a link that cannot be sent. Sharing therefore skips the check when `mailerAvailable()` is false: there is no relay to protect either, and such a deployment keeps exactly the behaviour it had before. Publishing publicly keeps its unconditional gate, because that refusal is about reaching the public rather than about sending mail.
 
 **Cost.** Both changes make a first share slower for someone who has not read their mail yet, and both are visible in tests: suites that shared with a never-confirmed collaborator now confirm that address first, which is what an ordinary user of a running app has done anyway.
+
+## A budget-overflow promotion goes untitled rather than paying for a second model call (2026-09-15)
+
+GEN-13 removed `titleFromPhrase` — the raw-speech fallback that headed a server-promoted slide with the
+capitalized first six words of the phrase that triggered it — and replaced it with two things: asking the
+model for a title *in the same call* wherever the promotion is foreseeable from the prompt (a heading slide
+or a whiteboard canvas, both told up front "this becomes a new slide"), and a self-heal fragment that asks
+again on whichever later phrase first reaches a slide that still has none.
+
+The third promotion site, `updateOverflows`, cannot use the first mechanism: whether an update overflows the
+current slide's budget is decided **after** the model's response comes back, by counting characters against
+the layout's limits server-side — the prompt has no way to know in advance that this particular update will
+be the one that tips a slide over, so there is nothing to ask the model for in that same call.
+
+**Choice.** Leave it untitled and let the self-heal fragment pick it up on the next phrase, rather than
+issuing a second, immediate model call once the server notices the overflow.
+
+**Why not a second call.** This decision runs on every spoken phrase of a live lecture — the same real-time
+budget GEN-8's capacity enforcement was built to respect in the first place. A second round-trip purely to
+title one promoted slide would add a full model call's latency to the phrase that happened to overflow,
+felt by the instructor as a stall exactly when they are mid-sentence. The self-heal path already exists for
+the "can't foresee it" case generally (it is also what covers a client-side promotion the prompt never saw),
+so paying for a dedicated repair call here would be solving a problem the slice already solves for free,
+merely a sentence or two later.
+
+**Correctness this relies on.** The overflowing delta itself can carry a title — the `untitled` fragment asks
+for one on every phrase while the current slide has none, including the one whose reply the overflow check
+then rewrites to `action: 'new'`. That title was written for the CURRENT slide's content, not the slide the
+overflow promotion creates, so it is redirected there (persisted on `lastSlide`, stripped before the new
+slide is built) at the heading-pin and overflow promotion sites before this decision's "leave it untitled,
+self-heal later" reasoning holds. Without that redirect a title arriving on the overflowing phrase would head
+the wrong slide and the original, no longer `lastSlide`, would never be asked again — making this entry's
+claim false.
+
+The whiteboard promotion site does the opposite, deliberately: the `untitled` fragment never asks for a
+title on a whiteboard canvas (it has no text slots), and the `capacity` fragment's whiteboard branch asks
+the model for the title of the NEW slide the promotion is about to create. A title on that response already
+belongs on the promoted slide, so it passes through unredirected — the earlier version of this entry, which
+claimed all three sites redirect, was wrong and has been corrected.
+
+**Cost.** An overflow-promoted slide is reliably blank for one phrase longer than a foreseeable promotion —
+acceptable per the instructor's own stated preference (a blank heading over one quoting spoken disfluency),
+and the gap closes itself as soon as the speaker continues past the slide that triggered the overflow, which
+in practice they always do (the overflow only fires because there was more to say).

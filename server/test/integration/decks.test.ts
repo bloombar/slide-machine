@@ -648,8 +648,11 @@ describe('session.phrase capacity enforcement', () => {
     const after = await act(ada, 'deck.get', { deckId })
     expect(after.body.slides).toHaveLength(2)
     expect(after.body.slides[0].bullets).toHaveLength(cap)
-    // The promoted slide gets a synthesized title
-    expect(after.body.slides[1].title).toBeTruthy()
+    // GEN-13: the promoted slide is left untitled rather than headed by a
+    // mechanical synthesis of the raw phrase — the budget-overflow decision
+    // is made server-side, after the model's response, so there is no title
+    // to ask it for. It self-heals from the next phrase that reaches it.
+    expect(after.body.slides[1].title).toBeFalsy()
   })
 })
 

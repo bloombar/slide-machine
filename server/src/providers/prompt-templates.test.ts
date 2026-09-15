@@ -22,6 +22,7 @@ const allSlots = {
   deckStructure: '',
   capacity: '',
   currentTranscript: '',
+  untitled: '',
   voiceCommands: '',
   updateRules: '',
   currentDeclared: '',

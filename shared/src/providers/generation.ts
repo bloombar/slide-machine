@@ -72,6 +72,12 @@ export interface SlideGenerationRequest {
     layoutType: string
     bulletCount: number
     bodyChars: number
+    /** Whether the slide already has a title (GEN-13). Sent whenever a
+     * current slide exists — unlike `content` below, it does not depend on
+     * layout re-fit being enabled — so the model can be asked to supply a
+     * title for a slide the server promoted without one, live, on whichever
+     * phrase reaches it first. */
+    titled?: boolean
     /** The slide's exact slot content. The conventional four are present
      * when layout re-fit is allowed, so the model can re-map them rather
      * than guess them from the rolling context. */
