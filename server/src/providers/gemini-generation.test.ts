@@ -337,6 +337,29 @@ describe('GeminiGenerationProvider', () => {
     expect(prompt).not.toContain('keep the SAME layoutType')
   })
 
+  it("tells the model not to restate the slide's current content (GEN-14)", async () => {
+    fetchMock.mockResolvedValue(geminiReply({ action: 'none' }))
+    await provider.generateSlideContent(
+      request({
+        allowLayoutRefit: true,
+        currentSlide: {
+          layoutType: 'list',
+          bulletCount: 2,
+          bodyChars: 0,
+          content: { title: 'T', bullets: ['a', 'b'] },
+        },
+      }),
+    )
+    const prompt = JSON.parse(String(fetchMock.mock.calls[0]![1].body))
+      .contents[0].parts[0].text as string
+    expect(prompt).toContain('Do NOT restate material already shown above')
+    // Unique to the GEN-14 sentence: the "capacity" fragment's own
+    // `answer "none"` text ("never answer 'none' merely because the box is
+    // full") also contains that substring, so it would pass even without
+    // GEN-14's instruction. Assert the clause that only GEN-14 writes.
+    expect(prompt).toContain('an update that adds nothing is not an update')
+  })
+
   it('forbids updating a whiteboard current slide and never surfaces its layout', async () => {
     fetchMock.mockResolvedValue(geminiReply({ action: 'none' }))
     await provider.generateSlideContent(
