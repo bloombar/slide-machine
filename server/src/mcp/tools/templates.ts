@@ -15,6 +15,7 @@ import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
 import { defineTool } from '../tool'
 import { registerTool } from '../registry'
 import { layoutDescriptors } from '../../templates/builtin'
+import { WRITABLE_FIELDS } from './fit-report'
 
 /** A layout's own type list, minus the manual drawing canvas — nothing on
  * this connection may target it (see slides.ts), so it never belongs in
@@ -24,9 +25,19 @@ const namedLayouts = (template: Pick<Template, 'layouts'>): string[] =>
     .filter(l => l.type !== WHITEBOARD_LAYOUT_TYPE)
     .map(l => l.type)
 
+/** Whether add_slide/add_slides/edit_slides can address this box at all —
+ * they only ever touch title/body/bullets/caption (fit-report.ts's
+ * WRITABLE_FIELDS), so a layout with a `figure` or `snippet` box has boxes
+ * this tool surface simply cannot reach, no matter what list_templates says
+ * about their kind or budget. */
+const isWritable = (slotName: string): boolean =>
+  (WRITABLE_FIELDS as readonly string[]).includes(slotName)
+
 /** One box's kind and budget, as a short phrase — the same numbers
  * `layoutDescriptors` hands the app's own generator, so a model is told
- * exactly what fits rather than a summary that could drift from it. */
+ * exactly what fits rather than a summary that could drift from it. Marked
+ * "app only" when add_slide/add_slides/edit_slides cannot write it at all,
+ * so a model does not spend a call finding that out the hard way. */
 const boxLine = (slot: {
   name: string
   kind: string
@@ -39,7 +50,8 @@ const boxLine = (slot: {
   ]
     .filter(Boolean)
     .join(', ')
-  return `${slot.name} (${slot.kind}${budget ? `, ${budget}` : ''})`
+  const suffix = isWritable(slot.name) ? '' : ', app only'
+  return `${slot.name} (${slot.kind}${budget ? `, ${budget}` : ''}${suffix})`
 }
 
 export const listTemplates = defineTool({
@@ -70,9 +82,14 @@ export const listTemplates = defineTool({
     if (input.templateId) {
       const template = templates.find(t => t.id === input.templateId)
       if (!template) {
+        // template.list is this account's OWN library (its templates plus
+        // the built-ins) — but a lecture can legitimately sit on a template
+        // outside it (deck.switchTemplate only checks the template exists at
+        // all, not that it is in this list). Absence here is not proof the
+        // id is wrong, so the id must not be called unknown.
         return {
           isError: true,
-          text: `No template with id "${input.templateId}" among this account’s templates. Call list_templates with no templateId to see the ids available.`,
+          text: `"${input.templateId}" is not among this account’s own templates (list_templates with no templateId lists those). It may still be a real template the account does not own — a lecture on it can be read with read_lecture, whose response includes its layouts and content either way.`,
           data: null,
         }
       }
@@ -80,7 +97,8 @@ export const listTemplates = defineTool({
       return {
         text: [
           `"${template.name}" (template id: ${template.id}) — ${descriptors.length} layout${descriptors.length === 1 ? '' : 's'}. ` +
-            'Text past a box’s budget is not rejected — it shrinks to a floor and then overflows the slide — so write to these limits.',
+            'Text past a box’s budget is not rejected — it shrinks to a floor and then overflows the slide — so write to these limits. ' +
+            `Boxes marked "app only" cannot be filled by add_slide, add_slides or edit_slides (they only ever write ${WRITABLE_FIELDS.join(', ')}) — fill those in the app instead.`,
           ...descriptors.map(
             d =>
               `- "${d.label}" (layoutType: "${d.type}") — ${d.purpose}. Boxes: ${d.slots.map(boxLine).join('; ')}`,
@@ -99,6 +117,7 @@ export const listTemplates = defineTool({
                 kind: s.kind,
                 maxChars: s.maxChars,
                 maxItems: s.maxItems,
+                writable: isWritable(s.name),
               })),
             })),
           },

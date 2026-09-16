@@ -110,11 +110,49 @@ describe('list_templates', () => {
     )
   })
 
-  it('refuses an unknown templateId rather than silently listing something else', async () => {
+  it('refuses an unresolvable templateId without claiming it does not exist', async () => {
+    // CHEAP fix: deck.switchTemplate only checks templateExists, not
+    // membership in this account's own template.list — a deck can
+    // legitimately sit on a template this lookup cannot enumerate, so the
+    // message must not call the id unknown.
     const call = fakeCall({ 'template.list': [nyuElegant] })
     const out = await listTemplates.run(call, { templateId: 'not-a-template' })
     expect(out.isError).toBe(true)
-    expect(out.text).toContain('No template with id "not-a-template"')
+    expect(out.text).toContain(
+      '"not-a-template" is not among this account’s own templates',
+    )
+    expect(out.text).not.toMatch(/does not exist|unknown template/i)
+  })
+
+  it('marks a box add_slide/add_slides/edit_slides cannot write as app only', async () => {
+    // big-number declares figure/label/caption; only caption is a
+    // conventional field these tools can address at all.
+    const call = fakeCall({ 'template.list': [nyuElegant] })
+    const out = await listTemplates.run(call, { templateId: 'nyu-elegant' })
+    expect(out.text).toContain('figure (text, ≤8 chars, app only)')
+    expect(out.text).toContain('label (text, ≤60 chars, app only)')
+    // caption is writable, so it carries no such marker.
+    expect(out.text).not.toContain('caption (text, ≤120 chars, app only)')
+    expect(out.text).toContain('app only')
+
+    const content = out.data as {
+      template: {
+        layouts: {
+          type: string
+          slots: { name: string; writable: boolean }[]
+        }[]
+      }
+    }
+    const bigNumberLayout = content.template.layouts.find(
+      l => l.type === 'big-number',
+    )
+    expect(bigNumberLayout?.slots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'figure', writable: false }),
+        expect.objectContaining({ name: 'label', writable: false }),
+        expect.objectContaining({ name: 'caption', writable: true }),
+      ]),
+    )
   })
 })
 

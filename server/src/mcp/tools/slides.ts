@@ -29,6 +29,7 @@ import { z } from 'zod'
 import type { Deck, Slide } from '@slide-machine/shared'
 import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
 import { defineTool } from '../tool'
+import type { ActionCaller } from '../tool'
 import { registerTool } from '../registry'
 import { openAt } from './prose'
 import { fetchDeckView } from './links'
@@ -47,12 +48,55 @@ import { fitIssues, fitReportText, type WrittenContent } from './fit-report'
 const WHITEBOARD_REFUSAL =
   '"whiteboard" is a manual drawing canvas with no text boxes, so it cannot be filled by this tool.'
 
+/**
+ * `available`, when the caller has a lecture id to fetch it with, names the
+ * lecture's actual layouts (add_slide, add_slides). `edit_slides` has none —
+ * an edit is addressed to a slide id, not a lecture — so it cannot enumerate
+ * anything itself; `read_lecture` cannot either, since it only lists the
+ * layouts the deck's EXISTING slides already use, not the template's whole
+ * catalogue (a deck of nothing but `content` slides would make `content`
+ * look like the only option). It is pointed at `list_templates` instead,
+ * using the templateId `read_lecture` does report — the one place that can
+ * actually answer.
+ */
 const whiteboardRefusalText = (available?: string[]): string =>
   `${WHITEBOARD_REFUSAL} ${
     available?.length
       ? `Layouts available for this lecture: ${available.join(', ')}.`
-      : 'Call read_lecture to see the layouts available for this lecture.'
+      : 'Call read_lecture for this lecture’s templateId, then list_templates ' +
+        'with that templateId to see the layouts available.'
   } Choose one of those instead.`
+
+/** One slide's conventional write, for the fit check below. */
+interface Written {
+  slideId: string
+  content: WrittenContent
+  layoutType: string
+}
+
+/**
+ * The deck view for a batch's fit check and link, fetched once no matter how
+ * many slides the batch touched — and the issues that check finds. `deckId`
+ * absent (nothing landed to read a lecture id off) skips the fetch entirely,
+ * matching the rest of this surface's one-read-per-call rule.
+ */
+const withFit = async (
+  call: ActionCaller,
+  deckId: string | undefined,
+  written: Written[],
+) => {
+  const view = deckId ? await fetchDeckView(call, deckId) : undefined
+  // `undefined` (template unreadable) is distinct from an empty array (read
+  // fine, layout just not in it) — fitIssues treats them differently, see
+  // its own docstring.
+  const descriptors = view?.template
+    ? layoutDescriptors(view.template)
+    : undefined
+  const issues = written.flatMap(w =>
+    fitIssues(w.slideId, w.content, w.layoutType, descriptors),
+  )
+  return { view, issues }
+}
 
 /**
  * The MCP-1 anti-hallucination clause (#381): nothing on this surface turns
@@ -154,9 +198,9 @@ export const editSlides = defineTool({
     'field you pass REPLACES what was there; fields you omit are left alone. ' +
     'Slide ids come from read_lecture.',
   readOnly: false,
-  // `deck.get` is here only to turn a slide's lecture id into the address the
-  // instructor can open it at (tools/links.ts). It reads nothing this tool
-  // reports beyond that link.
+  // `deck.get` turns a slide's lecture id into the address the instructor
+  // can open it at (tools/links.ts), and supplies the template the fit
+  // check below (undrawn boxes, over-budget text) reads real budgets from.
   uses: ['slide.editContent', 'slide.setLayout', 'deck.get'],
   input: {
     edits: z
@@ -188,11 +232,7 @@ export const editSlides = defineTool({
     // Every edit that wrote conventional content, with the layout it landed
     // on — the fit check below needs both, and neither is this call's input
     // alone: the layout may have just been switched by this same edit.
-    const written: {
-      slideId: string
-      content: WrittenContent
-      layoutType: string
-    }[] = []
+    const written: Written[] = []
     for (const [i, edit] of input.edits.entries()) {
       const { slideId, layoutType, ...content } = edit
       try {
@@ -221,35 +261,39 @@ export const editSlides = defineTool({
         const succeeded = done.length
           ? `Edited ${done.length} of ${input.edits.length} slide${input.edits.length === 1 ? '' : 's'}: ${done.join(', ')}.`
           : `Edited none of the ${input.edits.length} slides.`
+        // The failure prose is byte-identical to before this slice: it comes
+        // first and is what #382 pins. What is appended after it is new —
+        // the entries that DID land before this one failed may have written
+        // something undrawn or over budget, and that is not information a
+        // retry of the failed entry ever surfaces again.
+        const { issues } = await withFit(call, deckId, written)
         return {
           isError: true,
-          text: partialFailureText({
-            succeeded,
-            total: input.edits.length,
+          text:
+            partialFailureText({
+              succeeded,
+              total: input.edits.length,
+              failedIndex: i,
+              err,
+              // Nothing to warn against redoing when nothing has landed yet.
+              notRepeat: done.length
+                ? 'The edits already applied do not need to be repeated.'
+                : undefined,
+            }) + (fitReportText(issues) ?? ''),
+          data: {
+            edited: done,
             failedIndex: i,
-            err,
-            // Nothing to warn against redoing when nothing has landed yet.
-            notRepeat: done.length
-              ? 'The edits already applied do not need to be repeated.'
-              : undefined,
-          }),
-          data: { edited: done, failedIndex: i, url: null },
+            url: null,
+            ...(issues.length ? { fit: issues } : {}),
+          },
         }
       }
     }
     // One deck.get for the whole batch — for the link (pointed at the first
     // slide edited: a batch touching six slides has no one place to look) and
-    // for the template the fit check below reads real budgets from.
-    const view = deckId ? await fetchDeckView(call, deckId) : undefined
+    // for the template the fit check reads real budgets from.
+    const { view, issues } = await withFit(call, deckId, written)
     const url = view ? lectureUrl(view.deck.permalinkSlug, done[0]) : undefined
-    const descriptors = view?.template ? layoutDescriptors(view.template) : []
-    const issues = written.flatMap(w =>
-      fitIssues(
-        w.slideId,
-        w.content,
-        descriptors.find(d => d.type === w.layoutType),
-      ),
-    )
     return {
       text:
         `Edited ${done.length} slide${done.length === 1 ? '' : 's'}: ${done.join(', ')}` +
@@ -277,7 +321,9 @@ export const addSlide = defineTool({
   readOnly: false,
   // A fresh slide every call, not a value replaced — see McpTool.idempotent.
   idempotent: false,
-  // `deck.get` only supplies the lecture's address — see edit_slides.
+  // `deck.get` supplies the lecture's address and the template the fit check
+  // below (undrawn boxes, over-budget text) reads real budgets from — see
+  // edit_slides.
   uses: ['slide.add', 'slide.editContent', 'deck.get'],
   input: {
     lectureId: z.string().min(1).describe('The lecture id.'),
@@ -321,14 +367,12 @@ export const addSlide = defineTool({
       : slide
     // One deck.get for the link and for the template the fit check below
     // reads real budgets from — see edit_slides.
-    const view = await fetchDeckView(call, lectureId)
+    const { view, issues } = await withFit(call, lectureId, [
+      { slideId: filled.id, content, layoutType: filled.layoutType },
+    ])
     const url = view
       ? lectureUrl(view.deck.permalinkSlug, filled.id)
       : undefined
-    const layout = view?.template
-      ? layoutDescriptors(view.template).find(d => d.type === filled.layoutType)
-      : undefined
-    const issues = fitIssues(filled.id, content, layout)
     return {
       text:
         `Added slide ${filled.id} to lecture ${lectureId} as slide ${filled.index + 1}, ` +
@@ -414,11 +458,7 @@ export const addSlides = defineTool({
     // Every slide actually written, with the layout it landed on — the fit
     // check below needs both, and reads it after the whole batch rather than
     // fetching the template once per entry.
-    const written: {
-      slideId: string
-      content: WrittenContent
-      layoutType: string
-    }[] = []
+    const written: Written[] = []
     for (const [i, entry] of input.slides.entries()) {
       const { layoutType, ...content } = entry
       // Set once slide.add returns, so the catch block below can tell an
@@ -460,25 +500,37 @@ export const addSlides = defineTool({
         const entryNote = orphan
           ? `Entry ${i} already created slide ${orphan.id} before the content write failed — it exists in the lecture as a blank slide. Do not call add_slides or add_slide for it again; instead call edit_slides on ${orphan.id} to fill it in.`
           : undefined
+        // The failure prose is byte-identical to before this slice — see
+        // edit_slides for why what is appended after it is not optional: the
+        // entries that DID land before this one failed may hold something
+        // undrawn or over budget, and a retry of just the failed entry never
+        // surfaces that again.
+        const { issues } = await withFit(
+          call,
+          ids.length ? input.lectureId : undefined,
+          written,
+        )
         return {
           isError: true,
-          text: partialFailureText({
-            succeeded,
-            total: input.slides.length,
-            failedIndex: i,
-            err,
-            entryNote,
-            // Nothing to warn against redoing when nothing has landed yet.
-            notRepeat: ids.length
-              ? 'The slides already created must not be created again.'
-              : undefined,
-          }),
+          text:
+            partialFailureText({
+              succeeded,
+              total: input.slides.length,
+              failedIndex: i,
+              err,
+              entryNote,
+              // Nothing to warn against redoing when nothing has landed yet.
+              notRepeat: ids.length
+                ? 'The slides already created must not be created again.'
+                : undefined,
+            }) + (fitReportText(issues) ?? ''),
           data: {
             added: ids,
             count: currentCount,
             failedIndex: i,
             orphanedId: orphan?.id ?? null,
             url: null,
+            ...(issues.length ? { fit: issues } : {}),
           },
         }
       }
@@ -486,18 +538,12 @@ export const addSlides = defineTool({
     // One deck.get for the whole batch — the link, to the first slide added
     // (see edit_slides for why a batch does not return one URL per entry),
     // and the template the fit check below reads real budgets from.
-    const view = ids.length
-      ? await fetchDeckView(call, input.lectureId)
-      : undefined
-    const url = view ? lectureUrl(view.deck.permalinkSlug, ids[0]) : undefined
-    const descriptors = view?.template ? layoutDescriptors(view.template) : []
-    const issues = written.flatMap(w =>
-      fitIssues(
-        w.slideId,
-        w.content,
-        descriptors.find(d => d.type === w.layoutType),
-      ),
+    const { view, issues } = await withFit(
+      call,
+      ids.length ? input.lectureId : undefined,
+      written,
     )
+    const url = view ? lectureUrl(view.deck.permalinkSlug, ids[0]) : undefined
     return {
       text:
         `Added ${ids.length} slide${ids.length === 1 ? '' : 's'} to lecture ` +
