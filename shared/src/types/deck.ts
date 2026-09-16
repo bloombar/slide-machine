@@ -98,6 +98,10 @@ export interface Deck {
   language?: Locale
   /** Own narration voice id (TTS_VOICES); absent = inherit the project's. */
   ttsVoice?: string
+  /** True once a user sets the title by hand (deck.rename with a non-empty
+   * title); the app's own auto-titling then leaves it alone. Absent/false =
+   * still auto-titled. */
+  titleLocked?: boolean
   /** Free-text research-study tag (EVAL-3), e.g. "B1-SWE-treatment", used to
    * group lectures for later analysis. Set and seen only by allowlisted
    * admins; absent for unlabeled lectures and in non-admin shared views. */

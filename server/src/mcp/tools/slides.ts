@@ -26,8 +26,8 @@
  * never attempted — see `partialFailureText` below.
  */
 import { z } from 'zod'
-import type { Deck, Slide } from '@slide-machine/shared'
-import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
+import type { Deck, DeckSplitSlideResult, Slide } from '@slide-machine/shared'
+import { MAX_SPLIT_PARTS, WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
 import { defineTool } from '../tool'
 import type { ActionCaller } from '../tool'
 import { registerTool } from '../registry'
@@ -589,7 +589,198 @@ export const reorderSlides = defineTool({
   },
 })
 
+/**
+ * One slide's narration to set, as part of a set_slide_narration batch. The
+ * cap on how many can land in a call matches the other batch tools above —
+ * batching is the point (see the module docstring) — the 20,000-character
+ * cap on the narration itself belongs to slide.editTranscript and is
+ * reported by the action, not duplicated here.
+ */
+const narrationToSet = z.object({
+  slideId: z.string().min(1).describe('The slide id, from read_lecture.'),
+  narration: z
+    .string()
+    .describe(
+      'The full spoken narration for this slide — the words the app reads ' +
+        'aloud during playback (TTS). This is the lecture itself, not ' +
+        'speaker notes. REPLACES whatever narration was there. Leave it ' +
+        'empty (pass "") to clear it, which falls back to narrating the ' +
+        'slide’s own title/body/bullets instead — the audience then hears ' +
+        'the slide read aloud rather than a lecture. Up to 20,000 characters.',
+    ),
+})
+
+export const setSlideNarration = defineTool({
+  name: 'set_slide_narration',
+  title: 'Set slide narration',
+  description:
+    'Sets the spoken narration — what the app reads aloud during playback — ' +
+    'for one or more slides in one call. Prefer one call with several ' +
+    'narrations over several calls. A slide built through add_slide or ' +
+    'add_slides has NO narration until this is called, so the app falls ' +
+    'back to reading the slide’s own content aloud: the audience hears the ' +
+    'bullets read back to them instead of a lecture. This is not speaker ' +
+    'notes and is not the slide’s displayed text — it is the words spoken ' +
+    'while that slide is on screen. Each entry REPLACES the slide’s whole ' +
+    'narration.',
+  readOnly: false,
+  uses: ['slide.editTranscript'],
+  input: {
+    narrations: z
+      .array(narrationToSet)
+      .min(1)
+      .max(50)
+      .describe('The narrations to set, in order.'),
+  },
+  run: async (call, input) => {
+    const done: string[] = []
+    for (const [i, entry] of input.narrations.entries()) {
+      try {
+        await call<Slide>('slide.editTranscript', {
+          slideId: entry.slideId,
+          transcript: entry.narration,
+        })
+        // The id this entry addressed, not a field off the action's return —
+        // same convention edit_slides uses, so a batch's report names the
+        // slides the caller asked about rather than whatever came back.
+        done.push(entry.slideId)
+      } catch (err) {
+        // Same partial-failure convention as edit_slides/add_slides above —
+        // not a second one invented for this tool.
+        const succeeded = done.length
+          ? `Set narration on ${done.length} of ${input.narrations.length} slide${input.narrations.length === 1 ? '' : 's'}: ${done.join(', ')}.`
+          : `Set narration on none of the ${input.narrations.length} slides.`
+        return {
+          isError: true,
+          text: partialFailureText({
+            succeeded,
+            total: input.narrations.length,
+            failedIndex: i,
+            err,
+            notRepeat: done.length
+              ? 'The narrations already set do not need to be repeated.'
+              : undefined,
+          }),
+          data: { set: done, failedIndex: i },
+        }
+      }
+    }
+    return {
+      text: `Set narration on ${done.length} slide${done.length === 1 ? '' : 's'}: ${done.join(', ')}.`,
+      data: { set: done },
+    }
+  },
+})
+
+/** One part of a split_slide call — exactly the shape deck.splitSlide takes,
+ * restated here rather than imported so the tool's own input schema (what
+ * the SDK turns into JSON Schema for the model) is not tied to the action's
+ * internal zod object. */
+const splitSlidePart = z.object({
+  layoutType: z
+    .string()
+    .min(1)
+    .describe(
+      'A layout name from the lecture’s template. Falls back to the ' +
+        'original slide’s own layout if this name is not one of them.',
+    ),
+  slots: z
+    .object({
+      title: z.string().optional(),
+      body: z.string().optional(),
+      bullets: z.array(z.string()).optional(),
+      caption: z.string().optional(),
+    })
+    .describe('This part’s content — write it out in full.'),
+  imageGuidance: z
+    .object({
+      keywords: z
+        .array(z.string())
+        .describe('Search terms for this part’s own picture.'),
+      none: z
+        .boolean()
+        .optional()
+        .describe('Set true to skip finding an image for this part.'),
+    })
+    .optional()
+    .describe(
+      'Picture guidance for this part, if its layout has an image box.',
+    ),
+})
+
+export const splitSlide = defineTool({
+  name: 'split_slide',
+  title: 'Split a slide into several',
+  description:
+    'Breaks one slide into two or more, each with the content you supply — ' +
+    'the follow-up to a fit check (from add_slide, add_slides or ' +
+    'edit_slides) reporting a slide over budget, since slide.delete is not ' +
+    'available to just start over. The FIRST part replaces the original ' +
+    'slide and keeps its id, so its narration and anything else tied to ' +
+    'that id stays attached; the rest are inserted immediately after it. ' +
+    'Nothing here is generated for you — write each part’s content in ' +
+    'full, and expect the fit check to run again over what you wrote: a ' +
+    'part that is still over budget is reported, not silently accepted as ' +
+    'a fix.',
+  readOnly: false,
+  // Every call creates more slides — see McpTool.idempotent.
+  idempotent: false,
+  // deck.get supplies the template the fit check below reads real budgets
+  // from, same as edit_slides/add_slide/add_slides.
+  uses: ['deck.splitSlide', 'deck.get'],
+  input: {
+    lectureId: z.string().min(1).describe('The lecture id.'),
+    slideId: z
+      .string()
+      .min(1)
+      .describe('The slide id to split, from read_lecture.'),
+    parts: z
+      .array(splitSlidePart)
+      .min(2)
+      .max(MAX_SPLIT_PARTS)
+      .describe(
+        `The resulting slides, in order the first replaces the original. At least 2, at most ${MAX_SPLIT_PARTS}.`,
+      ),
+  },
+  run: async (call, input) => {
+    const result = await call<DeckSplitSlideResult>('deck.splitSlide', {
+      deckId: input.lectureId,
+      slideId: input.slideId,
+      parts: input.parts,
+    })
+    const all = [result.slide, ...result.added]
+    // Checked against what was actually asked to be written, in the order
+    // the parts land (first keeps the original id, the rest follow it) —
+    // same fit check add_slide/add_slides/edit_slides run over their own
+    // writes, so a part that is still over budget is reported here too.
+    const written: Written[] = all.map((slide, i) => ({
+      slideId: slide.id,
+      content: input.parts[i]!.slots,
+      layoutType: slide.layoutType,
+    }))
+    const { view, issues } = await withFit(call, input.lectureId, written)
+    const url = view
+      ? lectureUrl(view.deck.permalinkSlug, result.slide.id)
+      : undefined
+    const ids = all.map(s => s.id)
+    return {
+      text:
+        `Split slide ${input.slideId} into ${all.length} slides: ${ids.join(', ')}${openAt(url)}.` +
+        (fitReportText(issues) ?? ''),
+      data: {
+        slide: result.slide.id,
+        added: result.added.map(s => s.id),
+        slideOrder: result.slideOrder,
+        url: url ?? null,
+        ...(issues.length ? { fit: issues } : {}),
+      },
+    }
+  },
+})
+
 registerTool(editSlides)
 registerTool(addSlide)
 registerTool(addSlides)
 registerTool(reorderSlides)
+registerTool(setSlideNarration)
+registerTool(splitSlide)

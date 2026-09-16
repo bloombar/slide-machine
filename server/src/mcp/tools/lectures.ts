@@ -18,10 +18,13 @@ import type {
   Project,
   Slide,
 } from '@slide-machine/shared'
+import { LOCALES } from '@slide-machine/shared'
 import { defineTool } from '../tool'
 import { registerTool } from '../registry'
 import { onDay, openAt, projectName } from './prose'
 import { lectureUrl } from '../../lib/deck-link'
+import { ttsVoiceIdSchema } from '../../lib/tts-voice'
+import { WRITABLE_FIELDS } from './fit-report'
 
 /** One lecture as a line of prose, ids included. */
 const lectureLine = (deck: Deck, projectTitle: string | undefined): string =>
@@ -98,13 +101,40 @@ export const findLectures = defineTool({
   },
 })
 
-/** One slide as a line: enough to decide whether to edit it, and its id. */
+/** The slot names on a slide this tool surface cannot write — everything in
+ * its `slots` map besides the four conventional fields (WRITABLE_FIELDS,
+ * fit-report.ts). Read-only surfacing of what #383's fit check already
+ * enforces: an "image" box, or a template author's own box name
+ * (big-number's figure/label), exists and is filled in the app, not
+ * through add_slide/add_slides/edit_slides. */
+const otherSlotsOf = (slide: Slide): string[] =>
+  Object.keys(slide.slots ?? {}).filter(
+    n => !(WRITABLE_FIELDS as readonly string[]).includes(n),
+  )
+
+/** One slide as a line: enough to decide whether to edit it, and its id.
+ * Narration is reported by presence and length only — never the transcript
+ * text itself, which on a forty-slide lecture would bury everything else in
+ * the answer. */
 const slideLine = (slide: Slide, position: number): string => {
   const parts = [`${position}. [${slide.layoutType}] (slide id: ${slide.id})`]
   if (slide.title) parts.push(`title: ${slide.title}`)
   if (slide.bullets?.length) parts.push(`bullets: ${slide.bullets.join(' · ')}`)
   if (slide.body) parts.push(`body: ${slide.body}`)
   if (slide.caption) parts.push(`caption: ${slide.caption}`)
+  const narrationLength = slide.sourceTranscript?.length ?? 0
+  parts.push(
+    narrationLength
+      ? `narration: ${narrationLength} characters set (use set_slide_narration to replace it)`
+      : 'narration: none set — the app narrates this slide’s own content aloud instead',
+  )
+  const otherSlots = otherSlotsOf(slide)
+  if (otherSlots.length) {
+    parts.push(
+      `other boxes on this layout, not writable from here: ${otherSlots.join(', ')}`,
+    )
+  }
+  if (slide.manuallyEdited) parts.push('manually edited: yes')
   return parts.join('\n   ')
 }
 
@@ -112,10 +142,11 @@ export const readLecture = defineTool({
   name: 'read_lecture',
   title: 'Read a lecture',
   description:
-    'Returns one lecture in full: its settings, its seed notes, every slide in ' +
-    'order with the slide id, layout and content of each, and the address the ' +
-    'lecture can be opened at. This is the only way to get slide ids, so call ' +
-    'it before editing or reordering slides.',
+    'Returns one lecture in full: its settings (language, AI freedom, ' +
+    'narration voice), its seed notes, every slide in order with the slide ' +
+    'id, layout, content and narration status of each, and the address the ' +
+    'lecture can be opened at. This is the only way to get slide ids, so ' +
+    'call it before editing or reordering slides.',
   readOnly: true,
   uses: ['deck.get'],
   input: {
@@ -140,6 +171,18 @@ export const readLecture = defineTool({
       view.canEdit
         ? 'This account may edit this lecture.'
         : 'This account may only read this lecture; edits will be refused.',
+      // What an assistant is now expected to respect (this slice): the
+      // instructor's own settings, invisible until read here. `set` tells
+      // the model this connection can change them; the value governs the
+      // app's OWN later generation (Refine, Reformat, auto-narration), not
+      // what this connection writes directly — but it is still the
+      // instructor's standing policy, so treat it as one anyway.
+      `Language: ${deck.language ?? 'not set — inherits the project, then the owner’s profile, then the browser'}. Write new titles, bullets, body text and narration for this lecture in this language. Set with set_lecture_settings.`,
+      `AI content freedom: ${deck.generationFreedom ?? 'not set — inherits the project, or 5 by default'} on a 1-5 scale (1 = slides may contain only what the speaker explicitly said, 5 = the AI may elaborate freely). This governs the app’s own later generation, not what this connection writes directly, but it is the instructor’s standing policy — write and narrate to the same standard. Set with set_lecture_settings.`,
+      `Narration voice: ${deck.ttsVoice ?? 'not set — inherits the project’s'}. Set with set_lecture_settings.`,
+      deck.titleLocked
+        ? 'Title: locked by a hand-entered title; the app’s own auto-titling will not rename it.'
+        : 'Title: not locked; the app may auto-title this lecture until someone names it by hand.',
     ]
     // One address and the rule for pointing it at a slide, rather than a URL
     // on every slide line — a forty-slide lecture would spend most of this
@@ -171,6 +214,10 @@ export const readLecture = defineTool({
         templateId: deck.templateId,
         visibility: deck.visibility,
         canEdit: view.canEdit,
+        language: deck.language ?? null,
+        generationFreedom: deck.generationFreedom ?? null,
+        ttsVoice: deck.ttsVoice ?? null,
+        titleLocked: Boolean(deck.titleLocked),
         seedContext: deck.seedContext ?? null,
         slides: slides.map(slide => ({
           id: slide.id,
@@ -180,6 +227,10 @@ export const readLecture = defineTool({
           body: slide.body ?? null,
           bullets: slide.bullets ?? [],
           caption: slide.caption ?? null,
+          hasNarration: Boolean(slide.sourceTranscript),
+          narrationLength: slide.sourceTranscript?.length ?? 0,
+          otherSlots: otherSlotsOf(slide),
+          manuallyEdited: Boolean(slide.manuallyEdited),
           url: lectureUrl(deck.permalinkSlug, slide.id) ?? null,
         })),
       },
@@ -312,8 +363,106 @@ export const setLectureNotes = defineTool({
   },
 })
 
+/**
+ * One tool for the three settings an instructor sets on a lecture, rather
+ * than three tools each doing one field: three entries in every context
+ * window for something set once is a worse trade than one entry with three
+ * optional fields. Every field is optional; only the ones passed are
+ * applied, which is asserted call-for-call in the tests below.
+ */
+export const setLectureSettings = defineTool({
+  name: 'set_lecture_settings',
+  title: 'Set lecture settings',
+  description:
+    'Sets a lecture’s language, AI content freedom, and narration voice — ' +
+    'the instructor’s own policy for the app, invisible to an assistant ' +
+    'until set or read here. Every field is optional; only the fields you ' +
+    'pass are applied, and any left out are unchanged. One call handles ' +
+    'all three, since setting them once should not cost three tool calls. ' +
+    '`generationFreedom` is 1-5: 1 means the app’s own generation may add ' +
+    'only what the speaker explicitly said, 5 means it may elaborate ' +
+    'freely; it governs the app’s LATER generation (Refine, Reformat, ' +
+    'auto-narration), not what this tool itself writes, but it is the ' +
+    'instructor’s standing policy and every edit made on this connection ' +
+    'should honor it too. `language` is one of the app’s supported ' +
+    'locales. `ttsVoice` is one of the app’s narration voices.',
+  readOnly: false,
+  uses: ['deck.setLanguage', 'deck.setGenerationFreedom', 'deck.setTtsVoice'],
+  input: {
+    lectureId: z.string().min(1).describe('The lecture id.'),
+    language: z
+      .enum(LOCALES)
+      .optional()
+      .describe('The lecture’s language. Omit to leave it unchanged.'),
+    generationFreedom: z
+      .number()
+      .int()
+      .min(1)
+      .max(5)
+      .optional()
+      .describe(
+        'The lecture’s AI content freedom, 1 (only what was said) to 5 ' +
+          '(elaborate freely). Omit to leave it unchanged.',
+      ),
+    ttsVoice: ttsVoiceIdSchema
+      .optional()
+      .describe(
+        'The lecture’s narration voice id. Omit to leave it unchanged.',
+      ),
+  },
+  run: async (call, input) => {
+    const { lectureId, language, generationFreedom, ttsVoice } = input
+    const changes: string[] = []
+    // Whichever setter ran last already carries the full, current deck —
+    // no separate deck.get needed just for the link (unlike the batch
+    // tools in slides.ts, which have no such deck in hand until they ask).
+    let deck: Deck | undefined
+    if (language !== undefined) {
+      deck = await call<Deck>('deck.setLanguage', {
+        deckId: lectureId,
+        language,
+      })
+      changes.push(`language to "${language}"`)
+    }
+    if (generationFreedom !== undefined) {
+      deck = await call<Deck>('deck.setGenerationFreedom', {
+        deckId: lectureId,
+        freedom: generationFreedom,
+      })
+      changes.push(`AI freedom to ${generationFreedom}`)
+    }
+    if (ttsVoice !== undefined) {
+      deck = await call<Deck>('deck.setTtsVoice', {
+        deckId: lectureId,
+        voice: ttsVoice,
+      })
+      changes.push(`narration voice to "${ttsVoice}"`)
+    }
+    if (!changes.length) {
+      return {
+        text:
+          `No settings were passed for lecture ${lectureId}, so nothing ` +
+          'changed. Pass language, generationFreedom and/or ttsVoice to set them.',
+        data: { id: lectureId, changed: [] },
+      }
+    }
+    const url = deck ? lectureUrl(deck.permalinkSlug) : undefined
+    return {
+      text: `Updated lecture ${lectureId}: set ${changes.join(', ')}${openAt(url)}.`,
+      data: {
+        id: lectureId,
+        url: url ?? null,
+        language: deck?.language ?? null,
+        generationFreedom: deck?.generationFreedom ?? null,
+        ttsVoice: deck?.ttsVoice ?? null,
+      },
+    }
+  },
+})
+
 registerTool(findLectures)
 registerTool(readLecture)
 registerTool(createLecture)
 registerTool(renameLecture)
 registerTool(setLectureNotes)
+registerTool(setLectureSettings)

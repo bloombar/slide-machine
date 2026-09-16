@@ -14,6 +14,7 @@ import {
   readLecture,
   renameLecture,
   setLectureNotes,
+  setLectureSettings,
 } from './lectures'
 
 /** A `call` that answers from a table of canned results, and records calls. */
@@ -313,6 +314,222 @@ describe('read_lecture', () => {
     expect(out.text).toContain('no slides yet')
     expect(out.text).not.toContain('Seed notes')
   })
+
+  it('reports language, AI freedom, narration voice and title lock when set', async () => {
+    const call = fakeCall({
+      'deck.get': {
+        ...view,
+        deck: {
+          ...deck,
+          language: 'es',
+          generationFreedom: 2,
+          ttsVoice: 'nova',
+          titleLocked: true,
+        },
+      },
+    })
+    const out = await readLecture.run(call, { lectureId: 'deck-1' })
+
+    expect(out.text).toContain('Language: es')
+    expect(out.text).toContain('AI content freedom: 2 on a 1-5 scale')
+    expect(out.text).toContain('Narration voice: nova')
+    expect(out.text).toContain(
+      'Title: locked by a hand-entered title; the app’s own auto-titling will not rename it.',
+    )
+    expect(out.data).toMatchObject({
+      language: 'es',
+      generationFreedom: 2,
+      ttsVoice: 'nova',
+      titleLocked: true,
+    })
+  })
+
+  it('reports unset settings as inherited, and an unlocked title, rather than blank fields', async () => {
+    const call = fakeCall({ 'deck.get': view })
+    const out = await readLecture.run(call, { lectureId: 'deck-1' })
+
+    expect(out.text).toContain('Language: not set')
+    expect(out.text).toContain('AI content freedom: not set')
+    expect(out.text).toContain('Narration voice: not set')
+    expect(out.text).toContain(
+      'Title: not locked; the app may auto-title this lecture until someone names it by hand.',
+    )
+    expect(out.data).toMatchObject({
+      language: null,
+      generationFreedom: null,
+      ttsVoice: null,
+      titleLocked: false,
+    })
+  })
+
+  it('reports whether a slide has narration and how long it is, never the transcript text itself', async () => {
+    // MUST-FIX: a test that only checks the length is present would pass on
+    // an answer that also dumps the transcript — this one fails on that too.
+    const narration =
+      'This is the full spoken narration for the slide, several sentences ' +
+      'long, and it must never appear verbatim in a read_lecture answer.'
+    const call = fakeCall({
+      'deck.get': {
+        ...view,
+        slides: [
+          {
+            id: 'slide-1',
+            index: 0,
+            layoutType: 'content',
+            sourceTranscript: narration,
+            slots: {},
+          },
+          {
+            id: 'slide-2',
+            index: 1,
+            layoutType: 'content',
+            slots: {},
+          },
+        ],
+      },
+    })
+    const out = await readLecture.run(call, { lectureId: 'deck-1' })
+
+    expect(out.text).toContain(`narration: ${narration.length} characters set`)
+    expect(out.text).toContain(
+      'narration: none set — the app narrates this slide’s own content aloud instead',
+    )
+    // The control: the transcript text itself must be absent, from both the
+    // prose and the structured data.
+    expect(out.text).not.toContain(narration)
+    expect(JSON.stringify(out.data)).not.toContain(narration)
+    expect(out.data).toMatchObject({
+      slides: [
+        expect.objectContaining({
+          id: 'slide-1',
+          hasNarration: true,
+          narrationLength: narration.length,
+        }),
+        expect.objectContaining({
+          id: 'slide-2',
+          hasNarration: false,
+          narrationLength: 0,
+        }),
+      ],
+    })
+  })
+
+  it('reports a slide’s author-named slots and manual-edit status', async () => {
+    const call = fakeCall({
+      'deck.get': {
+        ...view,
+        slides: [
+          {
+            id: 'slide-1',
+            index: 0,
+            layoutType: 'big-number',
+            slots: {
+              figure: { kind: 'text', value: '42%' },
+              label: { kind: 'text', value: 'Growth' },
+              caption: { kind: 'text', value: 'YoY' },
+            },
+          },
+          {
+            id: 'slide-2',
+            index: 1,
+            layoutType: 'content',
+            manuallyEdited: true,
+            slots: { title: { kind: 'text', value: 'x' } },
+          },
+        ],
+      },
+    })
+    const out = await readLecture.run(call, { lectureId: 'deck-1' })
+
+    // "caption" is one of this surface's writable fields, so it is not
+    // listed as an "other box" even though it is in `slots` too.
+    expect(out.text).toContain(
+      'other boxes on this layout, not writable from here: figure, label',
+    )
+    expect(out.text).not.toContain('figure, label, caption')
+    expect(out.text).toContain('manually edited: yes')
+    expect(out.data).toMatchObject({
+      slides: [
+        expect.objectContaining({
+          id: 'slide-1',
+          otherSlots: ['figure', 'label'],
+        }),
+        expect.objectContaining({
+          id: 'slide-2',
+          manuallyEdited: true,
+          otherSlots: [],
+        }),
+      ],
+    })
+  })
+})
+
+describe('set_lecture_settings', () => {
+  it('applies only the field passed, dispatching nothing for the rest', async () => {
+    const call = fakeCall({
+      'deck.setLanguage': { ...deck, language: 'es' },
+    })
+    const out = await setLectureSettings.run(call, {
+      lectureId: 'deck-1',
+      language: 'es',
+    })
+
+    expect(call.calls).toEqual([
+      ['deck.setLanguage', { deckId: 'deck-1', language: 'es' }],
+    ])
+    expect(out.text).toContain('set language to "es"')
+    expect(out.data).toMatchObject({
+      language: 'es',
+      generationFreedom: null,
+      ttsVoice: null,
+    })
+  })
+
+  it('applies all three fields when all three are passed, dispatching exactly those calls', async () => {
+    const call = fakeCall({
+      'deck.setLanguage': { ...deck, language: 'fr' },
+      'deck.setGenerationFreedom': {
+        ...deck,
+        language: 'fr',
+        generationFreedom: 1,
+      },
+      'deck.setTtsVoice': {
+        ...deck,
+        language: 'fr',
+        generationFreedom: 1,
+        ttsVoice: 'leo',
+      },
+    })
+    const out = await setLectureSettings.run(call, {
+      lectureId: 'deck-1',
+      language: 'fr',
+      generationFreedom: 1,
+      ttsVoice: 'leo',
+    })
+
+    expect(call.calls).toEqual([
+      ['deck.setLanguage', { deckId: 'deck-1', language: 'fr' }],
+      ['deck.setGenerationFreedom', { deckId: 'deck-1', freedom: 1 }],
+      ['deck.setTtsVoice', { deckId: 'deck-1', voice: 'leo' }],
+    ])
+    expect(out.text).toContain(
+      'set language to "fr", AI freedom to 1, narration voice to "leo"',
+    )
+    expect(out.data).toMatchObject({
+      language: 'fr',
+      generationFreedom: 1,
+      ttsVoice: 'leo',
+    })
+  })
+
+  it('dispatches nothing and says so when no fields are passed', async () => {
+    const call = fakeCall({})
+    const out = await setLectureSettings.run(call, { lectureId: 'deck-1' })
+
+    expect(call.calls).toEqual([])
+    expect(out.text).toContain('nothing changed')
+    expect(out.data).toEqual({ id: 'deck-1', changed: [] })
+  })
 })
 
 describe('create_lecture', () => {
@@ -467,6 +684,9 @@ describe('every lecture tool', () => {
       'deck.create': deck,
       'deck.rename': deck,
       'deck.setSeedNotes': deck,
+      'deck.setLanguage': deck,
+      'deck.setGenerationFreedom': deck,
+      'deck.setTtsVoice': deck,
     })
     const inputs = [
       [findLectures, {}],
@@ -474,6 +694,7 @@ describe('every lecture tool', () => {
       [createLecture, { projectId: 'proj-1', title: 'x' }],
       [renameLecture, { lectureId: 'deck-1', title: 'x' }],
       [setLectureNotes, { lectureId: 'deck-1', notes: 'x' }],
+      [setLectureSettings, { lectureId: 'deck-1', language: 'es' }],
     ] as const
 
     for (const [tool, input] of inputs) {
