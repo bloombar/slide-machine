@@ -10,11 +10,25 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import type { ActionCaller } from '../tool'
 import { addSlide, addSlides, editSlides, reorderSlides } from './slides'
+import { listBuiltinTemplates } from '../../templates/builtin'
 
 /** The lecture the link-building read answers with. `PUBLIC_BASE_URL` is set
  * for the whole suite in vitest.config.ts, so the URLs below are the real
  * ones a tool would hand an assistant. */
 const deckView = { deck: { permalinkSlug: 'week-4-recursion' } }
+
+/**
+ * The real nyu-elegant template, read off disk exactly as the app's own
+ * generator sees it (server/templates/builtin.ts's layoutDescriptors) — the
+ * fit-check tests below assert against ITS budgets, not a fixture invented
+ * to match the assertion. Verified by hand against
+ * server/config/templates/nyu-elegant.json: `content` title maxChars 44,
+ * body maxChars 300; `list` title maxChars 44, bullets maxItems 5, maxChars
+ * 70 each; `big-number` declares only figure/label/caption — no title or
+ * body box at all.
+ */
+const nyuElegant = listBuiltinTemplates().find(t => t.id === 'nyu-elegant')!
+const deckViewWithTemplate = { ...deckView, template: nyuElegant }
 
 const fakeCall = (
   answers: Record<string, unknown>,
@@ -209,6 +223,170 @@ describe('edit_slides', () => {
     // Nothing succeeded, so there is nothing to warn against repeating.
     expect(out.text).not.toContain('do not need to be repeated')
   })
+
+  it('reports a field the slide’s layout does not declare, using the layout the edit switched to', async () => {
+    const call = fakeCall({
+      'slide.setLayout': { deckId: 'deck-1', layoutType: 'big-number' },
+      'slide.editContent': { deckId: 'deck-1', layoutType: 'big-number' },
+      'deck.get': deckViewWithTemplate,
+    })
+    const out = await editSlides.run(call, {
+      edits: [
+        {
+          slideId: 'slide-1',
+          layoutType: 'big-number',
+          title: 'Growth rate',
+        },
+      ],
+    })
+
+    expect(out.text).toContain(
+      '"title" will not be drawn: the "big-number" layout has no such box. ' +
+        'The boxes this tool can write on the "big-number" layout are: ' +
+        'caption. Its other boxes (figure, label) must be filled in the app.',
+    )
+    // figure and label are not addressable from this surface at all — a
+    // model must not be told to try writing them.
+    expect(out.text).not.toContain('Its boxes are: figure, label, caption')
+    expect(out.data).toMatchObject({
+      fit: [expect.objectContaining({ field: 'title', issue: 'undrawn' })],
+    })
+  })
+
+  it('reports every field written to a whiteboard slide as undrawn, even though it is already on that layout', async () => {
+    // MUST-FIX: layoutDescriptors drops whiteboard on purpose (GEN-6), so a
+    // slide ALREADY on it (no layoutType switch this call — read_lecture can
+    // hand out a whiteboard slide id same as any other) must not silently
+    // pass the fit check just because the layout can't be looked up there.
+    const call = fakeCall({
+      'slide.editContent': { deckId: 'deck-1', layoutType: 'whiteboard' },
+      'deck.get': deckViewWithTemplate,
+    })
+    const out = await editSlides.run(call, {
+      edits: [{ slideId: 'slide-1', title: 'Invisible', bullets: ['a', 'b'] }],
+    })
+
+    expect(out.text).toContain(
+      '"title" will not be drawn: this slide is on the "whiteboard" layout, ' +
+        'a manual drawing canvas with no text boxes at all.',
+    )
+    expect(out.text).toContain(
+      '"bullets" will not be drawn: this slide is on the "whiteboard" layout',
+    )
+    expect(out.data).toMatchObject({
+      fit: [
+        expect.objectContaining({ field: 'title', issue: 'undrawn' }),
+        expect.objectContaining({ field: 'bullets', issue: 'undrawn' }),
+      ],
+    })
+  })
+
+  it('says the check could not run when the slide’s layoutType is not in the template that was read, rather than staying silent', async () => {
+    const call = fakeCall({
+      'slide.editContent': { deckId: 'deck-1', layoutType: 'no-longer-exists' },
+      'deck.get': deckViewWithTemplate,
+    })
+    const out = await editSlides.run(call, {
+      edits: [{ slideId: 'slide-1', title: 'Orphaned layout' }],
+    })
+
+    expect(out.text).toContain(
+      'Fit check could not run for this slide: the "no-longer-exists" ' +
+        "layout was not found in this lecture's current template",
+    )
+    expect(out.data).toMatchObject({
+      fit: [expect.objectContaining({ issue: 'unchecked' })],
+    })
+  })
+
+  it('does not report a cleared field as undrawn', async () => {
+    const call = fakeCall({
+      'slide.editContent': { deckId: 'deck-1', layoutType: 'big-number' },
+      'deck.get': deckViewWithTemplate,
+    })
+    const out = await editSlides.run(call, {
+      edits: [{ slideId: 'slide-1', title: '' }],
+    })
+
+    expect(out.text).not.toContain('Fit check')
+    expect(out.data).not.toHaveProperty('fit')
+  })
+
+  it('points a whiteboard refusal at list_templates rather than read_lecture, which cannot answer', async () => {
+    // read_lecture only lists the layouts the deck's EXISTING slides already
+    // use, not the template's whole catalogue — a deck of nothing but
+    // `content` slides would make `content` look like the only option.
+    const call = fakeCall({})
+    const out = await editSlides.run(call, {
+      edits: [{ slideId: 'slide-1', layoutType: 'whiteboard' }],
+    })
+    expect(out.text).toContain(
+      'Call read_lecture for this lecture’s templateId, then list_templates ' +
+        'with that templateId to see the layouts available.',
+    )
+  })
+
+  it('appends the fit report for entries that already landed before a later entry failed', async () => {
+    // MUST-FIX: a 10-entry batch failing partway through must not discard
+    // what the entries that DID land already show — that information is
+    // otherwise gone for good, since nothing re-checks fit after the fact.
+    const call = (async (action: string, input: unknown) => {
+      if (action === 'slide.editContent') {
+        const slideId = (input as { slideId: string }).slideId
+        if (slideId === 'slide-2') throw new Error('boom')
+        return { deckId: 'deck-1', layoutType: 'big-number' }
+      }
+      if (action === 'deck.get') return deckViewWithTemplate
+      throw new Error(`unexpected action ${action}`)
+    }) as ActionCaller
+
+    const out = await editSlides.run(call, {
+      edits: [
+        { slideId: 'slide-1', title: 'Undrawn on purpose' },
+        { slideId: 'slide-2', title: 'x' },
+      ],
+    })
+
+    expect(out.isError).toBe(true)
+    // The failure prose comes first, byte-identical to #382 — asserted by
+    // its own tests; this only checks the fit report was appended after it.
+    expect(out.text).toContain('Entry 1 failed')
+    expect(out.text).toContain(
+      '"title" will not be drawn: the "big-number" layout has no such box',
+    )
+    expect(out.text.indexOf('Entry 1 failed')).toBeLessThan(
+      out.text.indexOf('Fit check:'),
+    )
+    expect(out.data).toMatchObject({
+      fit: [expect.objectContaining({ slideId: 'slide-1' })],
+    })
+  })
+
+  it('reports nothing when the write fits', async () => {
+    const call = fakeCall({
+      'slide.editContent': { deckId: 'deck-1', layoutType: 'content' },
+      'deck.get': deckViewWithTemplate,
+    })
+    const out = await editSlides.run(call, {
+      edits: [{ slideId: 'slide-1', title: 'A short title' }],
+    })
+
+    expect(out.text).not.toContain('Fit check')
+    expect(out.data).not.toHaveProperty('fit')
+  })
+
+  it('refuses a batch containing whiteboard before applying any edit', async () => {
+    const call = fakeCall({ 'slide.editContent': {} })
+    const out = await editSlides.run(call, {
+      edits: [{ slideId: 'slide-1', layoutType: 'whiteboard' }],
+    })
+
+    expect(out.isError).toBe(true)
+    expect(out.text).toContain(
+      '"whiteboard" is a manual drawing canvas with no text boxes',
+    )
+    expect(call.calls).toHaveLength(0)
+  })
 })
 
 describe('add_slide', () => {
@@ -326,6 +504,154 @@ describe('add_slide', () => {
     // Every call creates a new slide — a client that retries a dropped
     // response must not be told this is safe to repeat.
     expect(addSlide.idempotent).toBe(false)
+  })
+
+  it('reports a field written to a box the layout does not declare, and names the boxes it does have', async () => {
+    // big-number declares only figure/label/caption (verified against
+    // server/config/templates/nyu-elegant.json) — title and body are not
+    // boxes on it at all, so slide.editContent stores them but the layout
+    // has nothing to draw them with.
+    const call = fakeCall({
+      'slide.add': { id: 'slide-9', index: 8, layoutType: 'big-number' },
+      'slide.editContent': {
+        id: 'slide-9',
+        index: 8,
+        layoutType: 'big-number',
+      },
+      'deck.get': deckViewWithTemplate,
+    })
+    const out = await addSlide.run(call, {
+      lectureId: 'deck-1',
+      layoutType: 'big-number',
+      title: 'Growth rate',
+      body: 'It went up a lot this quarter.',
+    })
+
+    expect(out.text).toContain(
+      '"title" will not be drawn: the "big-number" layout has no such box. ' +
+        'The boxes this tool can write on the "big-number" layout are: ' +
+        'caption. Its other boxes (figure, label) must be filled in the app.',
+    )
+    expect(out.text).toContain(
+      '"body" will not be drawn: the "big-number" layout has no such box. ' +
+        'The boxes this tool can write on the "big-number" layout are: ' +
+        'caption. Its other boxes (figure, label) must be filled in the app.',
+    )
+    expect(out.data).toMatchObject({
+      fit: [
+        expect.objectContaining({ field: 'title', issue: 'undrawn' }),
+        expect.objectContaining({ field: 'body', issue: 'undrawn' }),
+      ],
+    })
+  })
+
+  it('reports text over its box budget with the used and allowed counts, using a real template’s real budgets', async () => {
+    // nyu-elegant's "content" layout: title maxChars 44, body maxChars 300
+    // — read off server/config/templates/nyu-elegant.json, not invented.
+    const title = 'A'.repeat(50)
+    const body = 'B'.repeat(310)
+    const call = fakeCall({
+      'slide.add': { id: 'slide-4', index: 3, layoutType: 'content' },
+      'slide.editContent': { id: 'slide-4', index: 3, layoutType: 'content' },
+      'deck.get': deckViewWithTemplate,
+    })
+    const out = await addSlide.run(call, {
+      lectureId: 'deck-1',
+      layoutType: 'content',
+      title,
+      body,
+    })
+
+    expect(out.text).toContain('"title" is over budget: 50 used, 44 allowed.')
+    expect(out.text).toContain('"body" is over budget: 310 used, 300 allowed.')
+    expect(out.text).toContain(
+      'Over-budget text shrinks to a floor and then scrolls on screen, or runs off the page in export.',
+    )
+    expect(out.data).toMatchObject({
+      fit: [
+        expect.objectContaining({
+          field: 'title',
+          issue: 'over-budget',
+          used: 50,
+          allowed: 44,
+        }),
+        expect.objectContaining({
+          field: 'body',
+          issue: 'over-budget',
+          used: 310,
+          allowed: 300,
+        }),
+      ],
+    })
+  })
+
+  it('reports a bullet list over its item count and one bullet over its character budget', async () => {
+    // nyu-elegant's "list" layout: bullets maxItems 5, maxChars 70 each —
+    // read off server/config/templates/nyu-elegant.json.
+    const bullets = ['a', 'b', 'c', 'd', 'e', 'Z'.repeat(80)]
+    const call = fakeCall({
+      'slide.add': { id: 'slide-5', index: 4, layoutType: 'list' },
+      'slide.editContent': { id: 'slide-5', index: 4, layoutType: 'list' },
+      'deck.get': deckViewWithTemplate,
+    })
+    const out = await addSlide.run(call, {
+      lectureId: 'deck-1',
+      layoutType: 'list',
+      bullets,
+    })
+
+    expect(out.text).toContain('"bullets" has 6 used, 5 allowed.')
+    expect(out.text).toContain('bullet 6 is over budget: 80 used, 70 allowed.')
+    expect(out.data).toMatchObject({
+      fit: [
+        expect.objectContaining({
+          field: 'bullets',
+          issue: 'over-budget',
+          used: 6,
+          allowed: 5,
+        }),
+        expect.objectContaining({
+          field: 'bullets[5]',
+          issue: 'over-budget',
+          used: 80,
+          allowed: 70,
+        }),
+      ],
+    })
+  })
+
+  it('reports nothing when the write fits — a clean write must not grow the result', async () => {
+    const call = fakeCall({
+      'slide.add': { id: 'slide-6', index: 5, layoutType: 'content' },
+      'slide.editContent': { id: 'slide-6', index: 5, layoutType: 'content' },
+      'deck.get': deckViewWithTemplate,
+    })
+    const out = await addSlide.run(call, {
+      lectureId: 'deck-1',
+      layoutType: 'content',
+      title: 'Short title',
+      body: 'A short body that easily fits the budget.',
+    })
+
+    expect(out.text).not.toContain('Fit check')
+    expect(out.data).not.toHaveProperty('fit')
+  })
+
+  it('refuses whiteboard rather than drawing an empty slide', async () => {
+    const call = fakeCall({ 'deck.get': deckViewWithTemplate })
+    const out = await addSlide.run(call, {
+      lectureId: 'deck-1',
+      layoutType: 'whiteboard',
+    })
+
+    expect(out.isError).toBe(true)
+    expect(out.text).toContain(
+      '"whiteboard" is a manual drawing canvas with no text boxes',
+    )
+    // Names the lecture's actual layouts rather than a generic apology.
+    expect(out.text).toContain('content')
+    // Never reaches slide.add — nothing is created.
+    expect(call.calls.map(([action]) => action)).not.toContain('slide.add')
   })
 })
 
@@ -513,6 +839,93 @@ describe('add_slides', () => {
 
     expect(out.text).toContain('Added none of the 2 slides')
     expect(out.text).not.toContain('must not be created again')
+  })
+
+  it('refuses a batch containing whiteboard before creating anything', async () => {
+    const call = fakeCall({ 'deck.get': deckViewWithTemplate })
+    const out = await addSlides.run(call, {
+      lectureId: 'deck-1',
+      slides: [{ title: 'Intro' }, { layoutType: 'whiteboard' }],
+    })
+
+    expect(out.isError).toBe(true)
+    expect(out.text).toContain(
+      '"whiteboard" is a manual drawing canvas with no text boxes',
+    )
+    expect(call.calls.map(([action]) => action)).not.toContain('slide.add')
+  })
+
+  it('reports a fit issue for a batch that fully succeeds — the shape add_slide and edit_slides share, exercised here too', async () => {
+    // MUST-FIX: add_slides shares the fit-report shape with the other two
+    // tools but not the code that wires it up — this is that wiring's own
+    // test, not just coverage inherited from add_slide's.
+    const call = fakeCall({
+      'slide.add': { id: 'slide-9', index: 8, layoutType: 'big-number' },
+      'slide.editContent': {
+        id: 'slide-9',
+        index: 8,
+        layoutType: 'big-number',
+      },
+      'deck.get': deckViewWithTemplate,
+    })
+    const out = await addSlides.run(call, {
+      lectureId: 'deck-1',
+      slides: [{ layoutType: 'big-number', title: 'Undrawn on purpose' }],
+    })
+
+    expect(out.text).toContain(
+      '"title" will not be drawn: the "big-number" layout has no such box',
+    )
+    expect(out.data).toMatchObject({
+      fit: [expect.objectContaining({ field: 'title', issue: 'undrawn' })],
+    })
+  })
+
+  it('appends the fit report for slides that already landed before a later entry failed', async () => {
+    let addCount = 0
+    const call = (async (action: string, input: unknown) => {
+      if (action === 'slide.add') {
+        addCount++
+        return {
+          id: `slide-${addCount}`,
+          deckId: 'deck-1',
+          index: addCount - 1,
+          layoutType: 'big-number',
+        }
+      }
+      if (action === 'slide.editContent') {
+        const slideId = (input as { slideId: string }).slideId
+        if (slideId === 'slide-2') throw new Error('boom')
+        return {
+          id: slideId,
+          deckId: 'deck-1',
+          index: addCount - 1,
+          layoutType: 'big-number',
+        }
+      }
+      if (action === 'deck.get') return deckViewWithTemplate
+      throw new Error(`unexpected action ${action}`)
+    }) as ActionCaller
+
+    const out = await addSlides.run(call, {
+      lectureId: 'deck-1',
+      slides: [
+        { layoutType: 'big-number', title: 'Undrawn on purpose' },
+        { layoutType: 'big-number', title: 'y' },
+      ],
+    })
+
+    expect(out.isError).toBe(true)
+    expect(out.text).toContain('Entry 1 failed')
+    expect(out.text).toContain(
+      '"title" will not be drawn: the "big-number" layout has no such box',
+    )
+    expect(out.text.indexOf('Entry 1 failed')).toBeLessThan(
+      out.text.indexOf('Fit check:'),
+    )
+    expect(out.data).toMatchObject({
+      fit: [expect.objectContaining({ slideId: 'slide-1' })],
+    })
   })
 })
 

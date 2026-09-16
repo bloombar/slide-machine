@@ -17,21 +17,35 @@ import type { ActionCaller } from '../tool'
 import { lectureUrl } from '../../lib/deck-link'
 
 /**
- * Where a lecture can be opened, looked up by id, optionally on one slide.
- * Undefined if the lookup fails or no app origin is configured.
+ * The full lecture view a write tool holds only an id for — deck, template
+ * and all. Best-effort, like `lectureUrlById` below: a lookup that fails
+ * must not turn a successful write into a failed tool call, only cost
+ * whatever this view would have supplied (the link, or a fit report against
+ * the deck's actual template).
  *
  * The caller must declare `deck.get` in its `uses`, or the fenced `call` will
  * refuse it — which is the exposure declaration working as intended.
+ */
+export const fetchDeckView = async (
+  call: ActionCaller,
+  deckId: string,
+): Promise<DeckViewResponse | undefined> => {
+  try {
+    return await call<DeckViewResponse>('deck.get', { deckId })
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Where a lecture can be opened, looked up by id, optionally on one slide.
+ * Undefined if the lookup fails or no app origin is configured.
  */
 export const lectureUrlById = async (
   call: ActionCaller,
   deckId: string,
   slideId?: string,
 ): Promise<string | undefined> => {
-  try {
-    const view = await call<DeckViewResponse>('deck.get', { deckId })
-    return lectureUrl(view.deck.permalinkSlug, slideId)
-  } catch {
-    return undefined
-  }
+  const view = await fetchDeckView(call, deckId)
+  return view ? lectureUrl(view.deck.permalinkSlug, slideId) : undefined
 }
