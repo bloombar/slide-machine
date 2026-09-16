@@ -9,7 +9,10 @@
  * between a usable tool and one an assistant gives up on.
  *
  * It is still a facade: each edit in the batch is a separate dispatch through
- * the same action, authorized and metered individually.
+ * the same action, authorized individually — and through the metering hook the
+ * action layer runs, which for every action this surface reaches is none. That
+ * "none" is a property the tool surface is held to, not a coincidence:
+ * mcp/forbidden.test.ts fails if any tool composes an action that meters.
  */
 import { z } from 'zod'
 import type { Deck, Slide } from '@slide-machine/shared'
@@ -140,9 +143,10 @@ export const addSlide = defineTool({
     return {
       text:
         `Added slide ${filled.id} to lecture ${lectureId} as slide ${filled.index + 1}, ` +
-        `using the "${filled.layoutType}" layout${openAt(url)}. Call add_slide ` +
-        'again for the next one — the lecture is not finished until every ' +
-        'planned slide exists.',
+        `using the "${filled.layoutType}" layout${openAt(url)}. If slides you ` +
+        'planned are still missing, call add_slide again for the next one — ' +
+        'the lecture is not finished until every one of them exists. If that ' +
+        'was the last, stop here and offer the instructor the link.',
       data: {
         id: filled.id,
         index: filled.index,

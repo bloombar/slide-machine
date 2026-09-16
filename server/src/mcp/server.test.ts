@@ -37,6 +37,22 @@ describe('createMcpServer', () => {
     )
   })
 
+  it('tells a client how a deck is built, not only how one is edited', () => {
+    // The instructions string is read by every client on every turn and is the
+    // strongest part of the guidance that stops an assistant reporting an empty
+    // lecture as a finished deck. Nothing else asserts on it, so a later edit
+    // trimming it back to deck-editing would otherwise stay green.
+    const server = createMcpServer(ctx, ALL_SCOPES)
+    const instructions = (
+      server as unknown as { server: { _instructions?: string } }
+    ).server._instructions
+    expect(instructions).toBeTruthy()
+    expect(instructions).toContain('add_slide')
+    expect(instructions).toMatch(/one call per slide/i)
+    expect(instructions).toMatch(/zero slides/i)
+    expect(instructions).toMatch(/read_lecture and check the slide count/i)
+  })
+
   it('wires each advertised tool to the tool of the same name', async () => {
     vi.spyOn(dispatch, 'dispatch').mockResolvedValue([])
     const server = createMcpServer(ctx, ALL_SCOPES)

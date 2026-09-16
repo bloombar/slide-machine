@@ -170,8 +170,16 @@ describe('add_slide', () => {
       'deck.get': deckView,
     })
     const out = await addSlide.run(call, { lectureId: 'deck-1' })
-    expect(out.text).toMatch(/call.*add_slide.*again|add_slide again/i)
-    expect(out.text).toMatch(/not finished|not complete|not done/i)
+    // Matched as exact phrases, not a loose pattern: /call.*add_slide.*again/
+    // matches "do NOT call add_slide again" just as happily, which is the
+    // defect this test exists to catch.
+    expect(out.text).toContain('call add_slide again for the next one')
+    expect(out.text).toContain(
+      'the lecture is not finished until every one of them exists',
+    )
+    expect(out.text).not.toMatch(
+      /do not call add_slide|the app will (fill|add)/i,
+    )
   })
 
   it('skips the content edit when there is no content to write', async () => {

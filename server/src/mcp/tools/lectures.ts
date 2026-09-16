@@ -198,8 +198,9 @@ export const createLecture = defineTool({
     'course is not something this tool can undo. The lecture starts with no ' +
     'slides and stays that way until add_slide is called, once per slide — ' +
     'that is how a deck gets built. set_lecture_notes is separate and ' +
-    'optional: it stores background material for the app to use later, and ' +
-    'does not itself produce slides.',
+    'optional: it stores background material for the instructor to use in the ' +
+    'app later, and nothing reachable on this connection turns it into ' +
+    'slides — not when you set it, and not afterwards.',
   readOnly: false,
   uses: ['deck.create'],
   input: {
