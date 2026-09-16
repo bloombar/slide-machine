@@ -35,34 +35,74 @@ import { lectureUrl } from '../../lib/deck-link'
 import { describeErrorForAgent } from '../../actions/agent-error'
 
 /**
- * Reports a batch that stopped at `failedIndex`: what the caller already
- * knows happened, why the batch stopped, and which entries were never
- * attempted. `describeErrorForAgent` supplies the "(code: …, retryable: …)"
- * clause for the underlying failure so that convention stays one vocabulary
- * across the server rather than a second one invented here; `notRepeat`
- * carries the reason retrying the succeeded entries would be wrong (or
- * merely wasted), since that reason differs between creating and editing.
+ * The MCP-1 anti-hallucination clause (#381): nothing on this surface turns
+ * notes, a topic or a title into slides by itself, so a model must not tell
+ * the instructor a deck exists until it has actually called one of these two
+ * tools enough times. Shared verbatim between `add_slide` and `add_slides` —
+ * and pinned by a test on both — because it went missing from `add_slide`
+ * once precisely because nothing was testing for it there.
  */
-const partialFailureText = (
-  succeeded: string,
-  total: number,
-  failedIndex: number,
-  err: unknown,
-  notRepeat: string,
-): string => {
+const NO_AUTO_GENERATION =
+  'Slides come into existence only through add_slide or add_slides — ' +
+  'nothing on this connection turns notes, a topic or a title into slides ' +
+  'automatically, and every slide’s content has to be given explicitly.'
+
+/**
+ * Reports a batch that stopped at `failedIndex`: what the caller already
+ * knows happened, why the batch stopped, and what is still left to do.
+ *
+ * `describeErrorForAgent` supplies the code/retryable pair for the underlying
+ * failure, so that vocabulary stays one across the server rather than a
+ * second one invented here — but only its first sentence. The rest of that
+ * prose is written for a call that changed nothing at all ("Nothing was
+ * changed. Trying once more is reasonable"), which is simply false once an
+ * earlier entry in this batch has already landed; splicing it in verbatim is
+ * exactly what told a model to retry the whole batch and duplicate work.
+ *
+ * The untouched range is `failedIndex + 1` onward — the entry that failed was
+ * attempted, just unsuccessfully, so it belongs in neither "succeeded" nor
+ * "never attempted"; it gets its own clause instead. `entryNote` carries a
+ * side effect specific to the failed entry (add_slides' orphaned blank slide,
+ * for instance); `notRepeat`, when there is anything already done, says why
+ * that part must not be redone.
+ */
+const partialFailureText = ({
+  succeeded,
+  total,
+  failedIndex,
+  err,
+  entryNote,
+  notRepeat,
+}: {
+  succeeded: string
+  total: number
+  failedIndex: number
+  err: unknown
+  entryNote?: string
+  notRepeat?: string
+}): string => {
   const described = describeErrorForAgent(err)
-  const lastIndex = total - 1
-  const single = failedIndex === lastIndex
-  const range = single
-    ? `entry ${failedIndex}`
-    : `entries ${failedIndex} through ${lastIndex}`
-  const verb = single ? 'was' : 'were'
-  const pronoun = single ? 'that entry' : 'those entries'
+  // The first sentence only: describeErrorForAgent's later sentences are
+  // written for a call that did nothing ("Nothing was changed", "the operation
+  // did not run"), which is false of a batch that already wrote some entries.
+  // Matched rather than split so a message that is one sentence keeps its own
+  // full stop instead of gaining a second.
+  const cause =
+    described.message.match(/^.*?\.(?=\s|$)/)?.[0] ?? `${described.message}.`
+  const untouched: number[] = []
+  for (let j = failedIndex + 1; j < total; j++) untouched.push(j)
   return (
-    `${succeeded} Entry at index ${failedIndex} failed: ${described.message} ` +
-    `(code: ${described.code}, retryable: ${described.retryable}). ` +
-    `The batch stopped there: ${range} ${verb} NOT attempted. Retry only ` +
-    `${pronoun}, not the whole batch — ${notRepeat}.`
+    `${succeeded} Entry ${failedIndex} failed: ${cause} ` +
+    `(code: ${described.code}, retryable: ${described.retryable}).` +
+    `${entryNote ? ` ${entryNote}` : ''} ` +
+    `${
+      untouched.length
+        ? `Entries never attempted: ${untouched.join(', ')}.`
+        : `No entries after entry ${failedIndex} remain.`
+    } ` +
+    `Retry entry ${failedIndex}${untouched.length ? ` and ${untouched.length === 1 ? 'entry' : 'entries'} ${untouched.join(', ')}` : ''} ` +
+    `— not the whole batch.` +
+    `${notRepeat ? ` ${notRepeat}` : ''}`
   )
 }
 
@@ -133,20 +173,22 @@ export const editSlides = defineTool({
       } catch (err) {
         // Stop rather than compound the failure — see the module docstring.
         // The edits already applied are real writes; the model must be told
-        // exactly which they are so it retries only the entries after this
-        // one, not the whole batch.
+        // exactly which they are so it retries only what is actually left.
         const succeeded = done.length
           ? `Edited ${done.length} of ${input.edits.length} slide${input.edits.length === 1 ? '' : 's'}: ${done.join(', ')}.`
           : `Edited none of the ${input.edits.length} slides.`
         return {
           isError: true,
-          text: partialFailureText(
+          text: partialFailureText({
             succeeded,
-            input.edits.length,
-            i,
+            total: input.edits.length,
+            failedIndex: i,
             err,
-            'the edits already applied do not need to be repeated',
-          ),
+            // Nothing to warn against redoing when nothing has landed yet.
+            notRepeat: done.length
+              ? 'The edits already applied do not need to be repeated.'
+              : undefined,
+          }),
           data: { edited: done, failedIndex: i, url: null },
         }
       }
@@ -168,11 +210,14 @@ export const addSlide = defineTool({
   title: 'Add a slide',
   description:
     'Appends one new slide to the end of a lecture and fills in its content. ' +
+    `${NO_AUTO_GENERATION} ` +
     'Use add_slides instead to build several slides in one call — that is ' +
     'the normal way a deck gets built; this tool is for adding a single slide ' +
     'to a lecture that already exists. Use reorder_slides afterwards if it ' +
     'belongs somewhere other than last.',
   readOnly: false,
+  // A fresh slide every call, not a value replaced — see McpTool.idempotent.
+  idempotent: false,
   // `deck.get` only supplies the lecture's address — see edit_slides.
   uses: ['slide.add', 'slide.editContent', 'deck.get'],
   input: {
@@ -209,8 +254,9 @@ export const addSlide = defineTool({
       text:
         `Added slide ${filled.id} to lecture ${lectureId} as slide ${filled.index + 1}, ` +
         `using the "${filled.layoutType}" layout${openAt(url)}. If slides you ` +
-        'planned are still missing, call add_slide again for the next one — ' +
-        'the lecture is not finished until every one of them exists. If that ' +
+        'planned are still missing, use add_slides to add the rest in one ' +
+        'call rather than calling add_slide again for each one — the ' +
+        'lecture is not finished until every one of them exists. If that ' +
         'was the last, stop here and offer the instructor the link.',
       data: {
         id: filled.id,
@@ -243,12 +289,14 @@ export const addSlides = defineTool({
   description:
     'Builds a lecture by appending several new slides in one call, in the ' +
     'order given, each with its own content. This is how a deck gets built — ' +
-    'a twelve-slide lecture is one call to this tool, not twelve. Use ' +
-    'add_slide instead only to add a single slide to a lecture that already ' +
-    'has its content. If a slide part-way through the list fails, the ones ' +
-    'before it are already created; the result says exactly which, and only ' +
-    'the slides after the failure should be retried.',
+    `a twelve-slide lecture is one call to this tool, not twelve. ${NO_AUTO_GENERATION} ` +
+    'Use add_slide instead only to add a single slide to a lecture that ' +
+    'already has its content. If a slide part-way through the list fails, ' +
+    'the ones before it are already created; the result says exactly which, ' +
+    'and only what is still left should be retried.',
   readOnly: false,
+  // A fresh slide every call, not a value replaced — see McpTool.idempotent.
+  idempotent: false,
   // Exactly add_slide's actions — see the module docstring on why this
   // surface may not reach anything new to batch creation.
   uses: ['slide.add', 'slide.editContent', 'deck.get'],
@@ -268,8 +316,12 @@ export const addSlides = defineTool({
     let count = 0
     for (const [i, entry] of input.slides.entries()) {
       const { layoutType, ...content } = entry
+      // Set once slide.add returns, so the catch block below can tell an
+      // orphan (the slide exists; only its content write failed) apart from
+      // a failure that created nothing.
+      let created: Slide | undefined
       try {
-        const slide = await call<Slide>('slide.add', {
+        created = await call<Slide>('slide.add', {
           deckId: input.lectureId,
           ...(layoutType ? { layoutType } : {}),
         })
@@ -277,31 +329,47 @@ export const addSlides = defineTool({
         // the same round trip add_slide accepts, once per entry here.
         const filled = Object.keys(content).length
           ? await call<Slide>('slide.editContent', {
-              slideId: slide.id,
+              slideId: created.id,
               ...content,
             })
-          : slide
+          : created
         ids.push(filled.id)
         count = filled.index + 1
       } catch (err) {
-        // Stop rather than compound the failure — see the module docstring.
-        // Retrying the whole batch here would duplicate every slide already
-        // created, which is why the text is explicit that only the remaining
-        // entries should be retried.
+        // A slide.add that succeeded before slide.editContent threw leaves a
+        // real, blank slide in the deck — it is not in `ids` or `count` above,
+        // but it exists and occupies a slot. Reported here rather than
+        // silently dropped: a model that does not know about it either
+        // re-adds a duplicate, or leaves a blank slide nobody ever fills.
+        const orphan = created
+        const currentCount = orphan ? orphan.index + 1 : count
         const succeeded = ids.length
           ? `Added ${ids.length} of ${input.slides.length} slides to lecture ` +
-            `${input.lectureId} (now ${count} slide${count === 1 ? '' : 's'}): ${ids.join(', ')}.`
-          : `Added none of the ${input.slides.length} slides to lecture ${input.lectureId}.`
+            `${input.lectureId} (now ${currentCount} slide${currentCount === 1 ? '' : 's'}): ${ids.join(', ')}.`
+          : `Added none of the ${input.slides.length} slides to lecture ${input.lectureId}${orphan ? ` (now ${currentCount} slide${currentCount === 1 ? '' : 's'})` : ''}.`
+        const entryNote = orphan
+          ? `Entry ${i} already created slide ${orphan.id} before the content write failed — it exists in the lecture as a blank slide. Do not call add_slides or add_slide for it again; instead call edit_slides on ${orphan.id} to fill it in.`
+          : undefined
         return {
           isError: true,
-          text: partialFailureText(
+          text: partialFailureText({
             succeeded,
-            input.slides.length,
-            i,
+            total: input.slides.length,
+            failedIndex: i,
             err,
-            'the slides already created must not be created again',
-          ),
-          data: { added: ids, count, failedIndex: i, url: null },
+            entryNote,
+            // Nothing to warn against redoing when nothing has landed yet.
+            notRepeat: ids.length
+              ? 'The slides already created must not be created again.'
+              : undefined,
+          }),
+          data: {
+            added: ids,
+            count: currentCount,
+            failedIndex: i,
+            orphanedId: orphan?.id ?? null,
+            url: null,
+          },
         }
       }
     }

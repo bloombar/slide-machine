@@ -160,9 +160,13 @@ export const createMcpServer = (
           // that is what mcp/forbidden.ts is for — so no tool is destructive,
           // and a client may say so when it asks the user to approve one.
           destructiveHint: false,
-          // Every write here replaces a value rather than accumulating, so
-          // repeating a call lands in the same place it did the first time.
-          idempotentHint: true,
+          // Most writes here replace a value rather than accumulating, so
+          // repeating a call lands in the same place it did the first time —
+          // but a handful create something new on every call, and declare
+          // that themselves (McpTool.idempotent) rather than being lumped in
+          // with the rest, since a client trusting a blanket `true` would
+          // retry a dropped create and duplicate whatever it made.
+          idempotentHint: tool.idempotent ?? true,
           openWorldHint: false,
         },
       },

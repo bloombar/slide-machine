@@ -100,6 +100,54 @@ describe('createMcpServer', () => {
       })
     }
   })
+
+  it('advertises idempotentHint false only for a tool that declares it, true by default', () => {
+    // A blanket `true` here would tell a client it is safe to retry a
+    // dropped response from a tool that creates something new every call —
+    // add_slide, add_slides, create_lecture, create_project — duplicating
+    // whatever the first, successful call already made.
+    registerTool(
+      defineTool({
+        name: 'zz_probe_accumulates',
+        title: 'Probe (accumulates)',
+        description:
+          'A tool that creates something new every call, for this test.',
+        readOnly: false,
+        idempotent: false,
+        uses: [],
+        input: {},
+        run: async () => ({ text: 'done' }),
+      }),
+    )
+    registerTool(
+      defineTool({
+        name: 'zz_probe_replaces',
+        title: 'Probe (replaces)',
+        description: 'A tool that replaces a value every call, for this test.',
+        readOnly: false,
+        uses: [],
+        input: {},
+        run: async () => ({ text: 'done' }),
+      }),
+    )
+
+    const server = createMcpServer(ctx, ALL_SCOPES)
+    const registered = (
+      server as unknown as {
+        _registeredTools: Record<
+          string,
+          { annotations?: Record<string, unknown> }
+        >
+      }
+    )._registeredTools
+
+    expect(registered.zz_probe_accumulates?.annotations).toMatchObject({
+      idempotentHint: false,
+    })
+    expect(registered.zz_probe_replaces?.annotations).toMatchObject({
+      idempotentHint: true,
+    })
+  })
 })
 
 describe('runTool', () => {
@@ -195,5 +243,67 @@ describe('runTool', () => {
     const [first] = result.content as { type: string; text: string }[]
     expect(first?.text).not.toContain('hunter2')
     expect(first?.text).toContain('code: internal_error')
+  })
+
+  it('marks a tool’s own isError result as a failed call, not a success', async () => {
+    // A batching tool (add_slides, edit_slides) that stops part-way returns
+    // this from its own run() rather than throwing — see ToolOutput.isError.
+    // Reverting the spread that reads it in runTool leaves every other test
+    // in this file green, since none of them exercise a tool returning
+    // isError itself; this is the one that would catch it.
+    registerTool(
+      defineTool({
+        name: 'zz_probe_partial_failure',
+        title: 'Probe (partial failure)',
+        description:
+          'A tool that stops part-way through a batch, for this test.',
+        readOnly: false,
+        uses: [],
+        input: {},
+        run: async () => ({
+          text: 'Did some of it, then stopped.',
+          data: { done: ['a'] },
+          isError: true,
+        }),
+      }),
+    )
+
+    const result = await runTool(
+      'zz_probe_partial_failure',
+      {},
+      ctx,
+      ALL_SCOPES,
+    )
+
+    expect(result.isError).toBe(true)
+    expect(result.content[0]).toEqual({
+      type: 'text',
+      text: 'Did some of it, then stopped.',
+    })
+    // The partial data still reaches the client — a half-finished batch is a
+    // failure, not one with nothing to show for it.
+    expect(result.structuredContent).toEqual({ done: ['a'] })
+  })
+
+  it('does not mark an ordinary success as an error', async () => {
+    registerTool(
+      defineTool({
+        name: 'zz_probe_ordinary_success',
+        title: 'Probe (ordinary success)',
+        description: 'A tool that just succeeds, for this test.',
+        readOnly: true,
+        uses: [],
+        input: {},
+        run: async () => ({ text: 'done' }),
+      }),
+    )
+
+    const result = await runTool(
+      'zz_probe_ordinary_success',
+      {},
+      ctx,
+      ALL_SCOPES,
+    )
+    expect(result.isError).toBeUndefined()
   })
 })

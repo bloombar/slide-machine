@@ -114,6 +114,8 @@ export const createProject = defineTool({
     'two places. Nothing here can delete a project, so one made by mistake ' +
     'has to be cleared up by hand in the app.',
   readOnly: false,
+  // A new project every call, not a value replaced — see McpTool.idempotent.
+  idempotent: false,
   uses: ['project.create'],
   input: {
     title: z

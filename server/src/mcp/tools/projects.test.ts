@@ -191,6 +191,10 @@ describe('create_project', () => {
     })
   })
 
+  it('is not idempotent — every call makes a new project', () => {
+    expect(createProject.idempotent).toBe(false)
+  })
+
   it('omits the optional fields rather than sending empty ones', async () => {
     // project.create stores what it is given; sending course: undefined
     // writes a key the app then has to treat as meaningful.

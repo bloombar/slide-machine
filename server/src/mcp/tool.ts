@@ -85,6 +85,16 @@ export interface McpTool<Shape extends ZodRawShape = ZodRawShape> {
    * in one sitting.
    */
   uses: readonly string[]
+  /**
+   * False when repeating the call accumulates rather than replaces —
+   * advertised to clients as MCP's `idempotentHint`. Most writes here replace
+   * a value (a rename, an edit) and repeating one lands in the same place it
+   * did the first time, so this defaults to true when omitted. A tool that
+   * creates something new every time it is called (`add_slide`, `add_slides`,
+   * `create_lecture`, `create_project`) must set it false, or a client that
+   * retries a dropped response duplicates whatever the call made.
+   */
+  idempotent?: boolean
   /** Does the work, by calling declared actions. */
   run: (
     call: ActionCaller,
