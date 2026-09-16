@@ -129,8 +129,12 @@ const NO_AUTO_GENERATION =
  * side effect specific to the failed entry (add_slides' orphaned blank slide,
  * for instance); `notRepeat`, when there is anything already done, says why
  * that part must not be redone.
+ *
+ * Exported so other batching tools (set_lecture_settings in lectures.ts,
+ * whose "batch" is a fixed sequence of settings rather than slides) use this
+ * one convention too, rather than inventing a second one.
  */
-const partialFailureText = ({
+export const partialFailureText = ({
   succeeded,
   total,
   failedIndex,
@@ -589,24 +593,30 @@ export const reorderSlides = defineTool({
   },
 })
 
-/**
- * One slide's narration to set, as part of a set_slide_narration batch. The
+/** Mirrors slide.editTranscript's own cap (server/src/actions/slide.ts,
+ * MAX_TRANSCRIPT_CHARS) — not imported since the action does not export it.
+ * Put in THIS schema too, rather than left to the action alone, so an
+ * over-long entry at position 8 of a batch is refused before anything is
+ * dispatched, the same trade #383 made for whiteboard: a mistake visible up
+ * front is caught up front, not partway through with the partial-failure
+ * machinery. */
+const MAX_NARRATION_CHARS = 20_000
+
+/** One slide's narration to set, as part of a set_slide_narration batch. The
  * cap on how many can land in a call matches the other batch tools above —
- * batching is the point (see the module docstring) — the 20,000-character
- * cap on the narration itself belongs to slide.editTranscript and is
- * reported by the action, not duplicated here.
- */
+ * batching is the point (see the module docstring). */
 const narrationToSet = z.object({
   slideId: z.string().min(1).describe('The slide id, from read_lecture.'),
   narration: z
     .string()
+    .max(MAX_NARRATION_CHARS)
     .describe(
       'The full spoken narration for this slide — the words the app reads ' +
         'aloud during playback (TTS). This is the lecture itself, not ' +
         'speaker notes. REPLACES whatever narration was there. Leave it ' +
         'empty (pass "") to clear it, which falls back to narrating the ' +
-        'slide’s own title/body/bullets instead — the audience then hears ' +
-        'the slide read aloud rather than a lecture. Up to 20,000 characters.',
+        `slide’s own title/body/bullets instead — the audience then hears ` +
+        `the slide read aloud rather than a lecture. Up to ${MAX_NARRATION_CHARS.toLocaleString()} characters.`,
     ),
 })
 
@@ -714,10 +724,14 @@ export const splitSlide = defineTool({
   description:
     'Breaks one slide into two or more, each with the content you supply — ' +
     'the follow-up to a fit check (from add_slide, add_slides or ' +
-    'edit_slides) reporting a slide over budget, since slide.delete is not ' +
-    'available to just start over. The FIRST part replaces the original ' +
-    'slide and keeps its id, so its narration and anything else tied to ' +
-    'that id stays attached; the rest are inserted immediately after it. ' +
+    'edit_slides) reporting a slide over budget, since there is no way to ' +
+    'delete a slide from here to just start over. The FIRST part replaces ' +
+    'the original slide and keeps its id, so its drawings and anything ' +
+    'else tied to that id stay attached to it. Narration does NOT: every ' +
+    'part, including the first, keeps a COPY of the original slide’s whole ' +
+    'spoken narration, and playback speaks it verbatim — so until you call ' +
+    'set_slide_narration on each resulting slide, every one of them ' +
+    'narrates the entire original lecture, not just its own share of it. ' +
     'Nothing here is generated for you — write each part’s content in ' +
     'full, and expect the fit check to run again over what you wrote: a ' +
     'part that is still over budget is reported, not silently accepted as ' +
@@ -763,13 +777,30 @@ export const splitSlide = defineTool({
       ? lectureUrl(view.deck.permalinkSlug, result.slide.id)
       : undefined
     const ids = all.map(s => s.id)
+    const addedIds = result.added.map(s => s.id)
+    // Every part, including the first, still carries a COPY of the
+    // original slide's whole narration (deck.splitSlide/reconcile.ts) —
+    // playback speaks it verbatim, so this is not cosmetic: the added
+    // slides narrate the entire original lecture until replaced, tripling
+    // (or more) both the audio and the TTS spend a listener actually hears.
+    // Named here rather than left to the description alone, since this is
+    // the turn a model could otherwise report the split as finished.
+    // The first part is named here too, not just the added ones: it kept the
+    // original id and the original narration, while its content shrank to one
+    // part's worth. Its narration is as stale as theirs.
+    const narrationNote =
+      ` Note: every one of these slides, ${input.slideId} included, carries a ` +
+      `COPY of the original slide’s whole narration, so each narrates the ` +
+      `entire original lecture until replaced. Call set_slide_narration on ` +
+      `${ids.join(', ')} to give each its own.`
     return {
       text:
         `Split slide ${input.slideId} into ${all.length} slides: ${ids.join(', ')}${openAt(url)}.` +
+        narrationNote +
         (fitReportText(issues) ?? ''),
       data: {
         slide: result.slide.id,
-        added: result.added.map(s => s.id),
+        added: addedIds,
         slideOrder: result.slideOrder,
         url: url ?? null,
         ...(issues.length ? { fit: issues } : {}),
