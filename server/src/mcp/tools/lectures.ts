@@ -196,12 +196,15 @@ export const createLecture = defineTool({
     'in. Do not pick one yourself, and do not reuse a project id from an ' +
     'earlier lecture without checking — filing a lecture under the wrong ' +
     'course is not something this tool can undo. The lecture starts with no ' +
-    'slides and stays that way until add_slide is called, once per slide — ' +
-    'that is how a deck gets built. set_lecture_notes is separate and ' +
-    'optional: it stores background material for the instructor to use in the ' +
-    'app later, and nothing reachable on this connection turns it into ' +
-    'slides — not when you set it, and not afterwards.',
+    'slides and stays that way until add_slides (or add_slide, once per ' +
+    'slide) is called — add_slides in one call is the normal way a deck gets ' +
+    'built. set_lecture_notes is separate and optional: it stores background ' +
+    'material for the instructor to use in the app later, and nothing ' +
+    'reachable on this connection turns it into slides — not when you set ' +
+    'it, and not afterwards.',
   readOnly: false,
+  // A new lecture every call, not a value replaced — see McpTool.idempotent.
+  idempotent: false,
   uses: ['deck.create'],
   input: {
     projectId: z
@@ -226,9 +229,9 @@ export const createLecture = defineTool({
       text:
         `Created lecture "${deck.title || 'Untitled lecture'}" (lecture id: ${deck.id}) ` +
         `in project ${deck.projectId}${openAt(url)}. It has no slides yet, and ` +
-        'nothing will add any on its own: call add_slide once for each slide ' +
-        'the lecture should have. Do not tell the instructor it is ready before ' +
-        'those calls are made.',
+        'nothing will add any on its own: call add_slides to add them all in ' +
+        'one call, or add_slide once per slide for just one. Do not tell the ' +
+        'instructor it is ready before those calls are made.',
       data: {
         id: deck.id,
         title: deck.title,
@@ -272,8 +275,9 @@ export const setLectureNotes = defineTool({
     'app, and when refining slides that already exist. This is the tool for ' +
     'handing over a syllabus section, a reading summary, or an outline the ' +
     'app has never seen — not a way to build a deck. Building a deck means ' +
-    'calling add_slide once per slide. It REPLACES the existing notes rather ' +
-    'than appending, so read the lecture first if you mean to add to them.',
+    'calling add_slides (or add_slide, once per slide). It REPLACES the ' +
+    'existing notes rather than appending, so read the lecture first if you ' +
+    'mean to add to them.',
   readOnly: false,
   uses: ['deck.setSeedNotes'],
   input: {

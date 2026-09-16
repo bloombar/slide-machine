@@ -1,18 +1,29 @@
 /**
  * Adding, editing and reordering slides (docs/MCP.md §4.1).
  *
- * `edit_slides` is batched on purpose, and it is the clearest illustration of
- * why tools are not actions. Rewriting six slides is six `slide.editContent`
- * calls, which through the app is six clicks and through an agent is six full
- * model round-trips — six turns of latency, six repetitions of the whole tool
- * list in context. Batching is not a convenience here; it is the difference
- * between a usable tool and one an assistant gives up on.
+ * Batching is a rule of this surface, not an `edit_slides` quirk: rewriting or
+ * building six slides one at a time is six action calls, which through the app
+ * is six clicks and through an agent is six full model round-trips — six turns
+ * of latency, six repetitions of the whole tool list in context. That cost is
+ * exactly the same whether the six calls edit existing slides or create new
+ * ones, so `add_slides` gets the same treatment as `edit_slides`: batching is
+ * not a convenience here; it is the difference between a usable tool and one
+ * an assistant gives up on partway through a lecture.
  *
- * It is still a facade: each edit in the batch is a separate dispatch through
+ * It is still a facade: each entry in a batch is a separate dispatch through
  * the same action, authorized individually — and through the metering hook the
  * action layer runs, which for every action this surface reaches is none. That
  * "none" is a property the tool surface is held to, not a coincidence:
  * mcp/forbidden.test.ts fails if any tool composes an action that meters.
+ *
+ * A batch also has to be honest about a failure partway through. Letting the
+ * first error propagate — the original `edit_slides` behaviour — tells the
+ * model only that something failed, not which of the earlier entries already
+ * landed. For `add_slides` that ambiguity is dangerous: an agent that retries
+ * the whole batch on that report duplicates every slide that had already been
+ * created. Both batching tools below stop at the first failure and report
+ * exactly what succeeded, which entry failed and why, and that the rest were
+ * never attempted — see `partialFailureText` below.
  */
 import { z } from 'zod'
 import type { Deck, Slide } from '@slide-machine/shared'
@@ -21,6 +32,79 @@ import { registerTool } from '../registry'
 import { openAt } from './prose'
 import { lectureUrlById } from './links'
 import { lectureUrl } from '../../lib/deck-link'
+import { describeErrorForAgent } from '../../actions/agent-error'
+
+/**
+ * The MCP-1 anti-hallucination clause (#381): nothing on this surface turns
+ * notes, a topic or a title into slides by itself, so a model must not tell
+ * the instructor a deck exists until it has actually called one of these two
+ * tools enough times. Shared verbatim between `add_slide` and `add_slides` —
+ * and pinned by a test on both — because it went missing from `add_slide`
+ * once precisely because nothing was testing for it there.
+ */
+const NO_AUTO_GENERATION =
+  'Slides come into existence only through add_slide or add_slides — ' +
+  'nothing on this connection turns notes, a topic or a title into slides ' +
+  'automatically, and every slide’s content has to be given explicitly.'
+
+/**
+ * Reports a batch that stopped at `failedIndex`: what the caller already
+ * knows happened, why the batch stopped, and what is still left to do.
+ *
+ * `describeErrorForAgent` supplies the code/retryable pair for the underlying
+ * failure, so that vocabulary stays one across the server rather than a
+ * second one invented here — but only its first sentence. The rest of that
+ * prose is written for a call that changed nothing at all ("Nothing was
+ * changed. Trying once more is reasonable"), which is simply false once an
+ * earlier entry in this batch has already landed; splicing it in verbatim is
+ * exactly what told a model to retry the whole batch and duplicate work.
+ *
+ * The untouched range is `failedIndex + 1` onward — the entry that failed was
+ * attempted, just unsuccessfully, so it belongs in neither "succeeded" nor
+ * "never attempted"; it gets its own clause instead. `entryNote` carries a
+ * side effect specific to the failed entry (add_slides' orphaned blank slide,
+ * for instance); `notRepeat`, when there is anything already done, says why
+ * that part must not be redone.
+ */
+const partialFailureText = ({
+  succeeded,
+  total,
+  failedIndex,
+  err,
+  entryNote,
+  notRepeat,
+}: {
+  succeeded: string
+  total: number
+  failedIndex: number
+  err: unknown
+  entryNote?: string
+  notRepeat?: string
+}): string => {
+  const described = describeErrorForAgent(err)
+  // The first sentence only: describeErrorForAgent's later sentences are
+  // written for a call that did nothing ("Nothing was changed", "the operation
+  // did not run"), which is false of a batch that already wrote some entries.
+  // Matched rather than split so a message that is one sentence keeps its own
+  // full stop instead of gaining a second.
+  const cause =
+    described.message.match(/^.*?\.(?=\s|$)/)?.[0] ?? `${described.message}.`
+  const untouched: number[] = []
+  for (let j = failedIndex + 1; j < total; j++) untouched.push(j)
+  return (
+    `${succeeded} Entry ${failedIndex} failed: ${cause} ` +
+    `(code: ${described.code}, retryable: ${described.retryable}).` +
+    `${entryNote ? ` ${entryNote}` : ''} ` +
+    `${
+      untouched.length
+        ? `Entries never attempted: ${untouched.join(', ')}.`
+        : `No entries after entry ${failedIndex} remain.`
+    } ` +
+    `Retry entry ${failedIndex}${untouched.length ? ` and ${untouched.length === 1 ? 'entry' : 'entries'} ${untouched.join(', ')}` : ''} ` +
+    `— not the whole batch.` +
+    `${notRepeat ? ` ${notRepeat}` : ''}`
+  )
+}
 
 /** One slide's edit — every field optional, since a caller may change one. */
 const slideEdit = z.object({
@@ -66,25 +150,48 @@ export const editSlides = defineTool({
     // Which lecture was edited is not an input here — an edit is addressed to
     // slide ids — so it comes back off the slides the actions return.
     let deckId: string | undefined
-    for (const edit of input.edits) {
+    for (const [i, edit] of input.edits.entries()) {
       const { slideId, layoutType, ...content } = edit
-      // Layout first: switching layout remaps the slide's slots, so applying
-      // content afterwards writes into the boxes the new layout actually has.
-      if (layoutType) {
-        const slide = await call<Slide>('slide.setLayout', {
-          slideId,
-          layoutType,
-        })
-        deckId ??= slide.deckId
+      try {
+        // Layout first: switching layout remaps the slide's slots, so applying
+        // content afterwards writes into the boxes the new layout actually has.
+        if (layoutType) {
+          const slide = await call<Slide>('slide.setLayout', {
+            slideId,
+            layoutType,
+          })
+          deckId ??= slide.deckId
+        }
+        if (Object.keys(content).length > 0) {
+          const slide = await call<Slide>('slide.editContent', {
+            slideId,
+            ...content,
+          })
+          deckId ??= slide.deckId
+        }
+        done.push(slideId)
+      } catch (err) {
+        // Stop rather than compound the failure — see the module docstring.
+        // The edits already applied are real writes; the model must be told
+        // exactly which they are so it retries only what is actually left.
+        const succeeded = done.length
+          ? `Edited ${done.length} of ${input.edits.length} slide${input.edits.length === 1 ? '' : 's'}: ${done.join(', ')}.`
+          : `Edited none of the ${input.edits.length} slides.`
+        return {
+          isError: true,
+          text: partialFailureText({
+            succeeded,
+            total: input.edits.length,
+            failedIndex: i,
+            err,
+            // Nothing to warn against redoing when nothing has landed yet.
+            notRepeat: done.length
+              ? 'The edits already applied do not need to be repeated.'
+              : undefined,
+          }),
+          data: { edited: done, failedIndex: i, url: null },
+        }
       }
-      if (Object.keys(content).length > 0) {
-        const slide = await call<Slide>('slide.editContent', {
-          slideId,
-          ...content,
-        })
-        deckId ??= slide.deckId
-      }
-      done.push(slideId)
     }
     // Pointed at the first slide edited: a batch touching six slides has no
     // one place to look, and the first is where a reader would start.
@@ -102,13 +209,15 @@ export const addSlide = defineTool({
   name: 'add_slide',
   title: 'Add a slide',
   description:
-    'Appends a new slide to the end of a lecture and fills in its content. ' +
-    'This is the only way a slide comes into existence on this connection — ' +
-    'there is no bulk or automatic generation from notes, a topic or a title. ' +
-    'A ten-slide lecture is ten calls to this tool, and that is expected, not ' +
-    'a shortcut being missed. Use reorder_slides afterwards if it belongs ' +
-    'somewhere other than last.',
+    'Appends one new slide to the end of a lecture and fills in its content. ' +
+    `${NO_AUTO_GENERATION} ` +
+    'Use add_slides instead to build several slides in one call — that is ' +
+    'the normal way a deck gets built; this tool is for adding a single slide ' +
+    'to a lecture that already exists. Use reorder_slides afterwards if it ' +
+    'belongs somewhere other than last.',
   readOnly: false,
+  // A fresh slide every call, not a value replaced — see McpTool.idempotent.
+  idempotent: false,
   // `deck.get` only supplies the lecture's address — see edit_slides.
   uses: ['slide.add', 'slide.editContent', 'deck.get'],
   input: {
@@ -123,6 +232,7 @@ export const addSlide = defineTool({
     title: z.string().optional().describe('The slide’s title.'),
     body: z.string().optional().describe('The slide’s body text.'),
     bullets: z.array(z.string()).optional().describe('The slide’s bullets.'),
+    caption: z.string().optional().describe('The image caption.'),
   },
   run: async (call, input) => {
     const { lectureId, layoutType, ...content } = input
@@ -144,8 +254,9 @@ export const addSlide = defineTool({
       text:
         `Added slide ${filled.id} to lecture ${lectureId} as slide ${filled.index + 1}, ` +
         `using the "${filled.layoutType}" layout${openAt(url)}. If slides you ` +
-        'planned are still missing, call add_slide again for the next one — ' +
-        'the lecture is not finished until every one of them exists. If that ' +
+        'planned are still missing, use add_slides to add the rest in one ' +
+        'call rather than calling add_slide again for each one — the ' +
+        'lecture is not finished until every one of them exists. If that ' +
         'was the last, stop here and offer the instructor the link.',
       data: {
         id: filled.id,
@@ -153,6 +264,126 @@ export const addSlide = defineTool({
         layoutType: filled.layoutType,
         url: url ?? null,
       },
+    }
+  },
+})
+
+/** One slide to append, as part of an add_slides batch. */
+const slideToAdd = z.object({
+  layoutType: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'A layout name from the lecture’s template. Omit for the default content layout.',
+    ),
+  title: z.string().optional().describe('The slide’s title.'),
+  body: z.string().optional().describe('The slide’s body text.'),
+  bullets: z.array(z.string()).optional().describe('The slide’s bullets.'),
+  caption: z.string().optional().describe('The image caption.'),
+})
+
+export const addSlides = defineTool({
+  name: 'add_slides',
+  title: 'Add several slides',
+  description:
+    'Builds a lecture by appending several new slides in one call, in the ' +
+    'order given, each with its own content. This is how a deck gets built — ' +
+    `a twelve-slide lecture is one call to this tool, not twelve. ${NO_AUTO_GENERATION} ` +
+    'Use add_slide instead only to add a single slide to a lecture that ' +
+    'already has its content. If a slide part-way through the list fails, ' +
+    'the ones before it are already created; the result says exactly which, ' +
+    'and only what is still left should be retried.',
+  readOnly: false,
+  // A fresh slide every call, not a value replaced — see McpTool.idempotent.
+  idempotent: false,
+  // Exactly add_slide's actions — see the module docstring on why this
+  // surface may not reach anything new to batch creation.
+  uses: ['slide.add', 'slide.editContent', 'deck.get'],
+  input: {
+    lectureId: z.string().min(1).describe('The lecture id.'),
+    slides: z
+      .array(slideToAdd)
+      .min(1)
+      .max(50)
+      .describe('The slides to append, in order.'),
+  },
+  run: async (call, input) => {
+    const ids: string[] = []
+    // The running total, from the index of the last slide actually created —
+    // an extra deck.get just to count slides would be a second read for a
+    // number the create calls already carry.
+    let count = 0
+    for (const [i, entry] of input.slides.entries()) {
+      const { layoutType, ...content } = entry
+      // Set once slide.add returns, so the catch block below can tell an
+      // orphan (the slide exists; only its content write failed) apart from
+      // a failure that created nothing.
+      let created: Slide | undefined
+      try {
+        created = await call<Slide>('slide.add', {
+          deckId: input.lectureId,
+          ...(layoutType ? { layoutType } : {}),
+        })
+        // A new slide starts empty, so the content edit is a second call —
+        // the same round trip add_slide accepts, once per entry here.
+        const filled = Object.keys(content).length
+          ? await call<Slide>('slide.editContent', {
+              slideId: created.id,
+              ...content,
+            })
+          : created
+        ids.push(filled.id)
+        count = filled.index + 1
+      } catch (err) {
+        // A slide.add that succeeded before slide.editContent threw leaves a
+        // real, blank slide in the deck — it is not in `ids` or `count` above,
+        // but it exists and occupies a slot. Reported here rather than
+        // silently dropped: a model that does not know about it either
+        // re-adds a duplicate, or leaves a blank slide nobody ever fills.
+        const orphan = created
+        const currentCount = orphan ? orphan.index + 1 : count
+        const succeeded = ids.length
+          ? `Added ${ids.length} of ${input.slides.length} slides to lecture ` +
+            `${input.lectureId} (now ${currentCount} slide${currentCount === 1 ? '' : 's'}): ${ids.join(', ')}.`
+          : `Added none of the ${input.slides.length} slides to lecture ${input.lectureId}${orphan ? ` (now ${currentCount} slide${currentCount === 1 ? '' : 's'})` : ''}.`
+        const entryNote = orphan
+          ? `Entry ${i} already created slide ${orphan.id} before the content write failed — it exists in the lecture as a blank slide. Do not call add_slides or add_slide for it again; instead call edit_slides on ${orphan.id} to fill it in.`
+          : undefined
+        return {
+          isError: true,
+          text: partialFailureText({
+            succeeded,
+            total: input.slides.length,
+            failedIndex: i,
+            err,
+            entryNote,
+            // Nothing to warn against redoing when nothing has landed yet.
+            notRepeat: ids.length
+              ? 'The slides already created must not be created again.'
+              : undefined,
+          }),
+          data: {
+            added: ids,
+            count: currentCount,
+            failedIndex: i,
+            orphanedId: orphan?.id ?? null,
+            url: null,
+          },
+        }
+      }
+    }
+    // One link for the whole batch, to the first slide added — see
+    // edit_slides for why a batch does not return one URL per entry.
+    const url = ids.length
+      ? await lectureUrlById(call, input.lectureId, ids[0])
+      : undefined
+    return {
+      text:
+        `Added ${ids.length} slide${ids.length === 1 ? '' : 's'} to lecture ` +
+        `${input.lectureId} (now ${count} slide${count === 1 ? '' : 's'}): ` +
+        `${ids.join(', ')}${openAt(url)}.`,
+      data: { added: ids, count, url: url ?? null },
     }
   },
 })
@@ -188,4 +419,5 @@ export const reorderSlides = defineTool({
 
 registerTool(editSlides)
 registerTool(addSlide)
+registerTool(addSlides)
 registerTool(reorderSlides)

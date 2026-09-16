@@ -280,10 +280,10 @@ Three things about it are deliberate:
   resource (`<issuer>/api/mcp`), which is not where the SPA is in dev. With
   neither set the link is left out rather than guessed at.
 
-Read tools have the lecture in hand and build links directly. `edit_slides`
-and `add_slide` are addressed to slide ids, so they spend one extra `deck.get`
-per call — per call, not per edit — which is on the agent audit trail (§6) like
-any other read.
+Read tools have the lecture in hand and build links directly. `edit_slides`,
+`add_slide` and `add_slides` are addressed to slide ids (or, for `add_slides`,
+create them), so they spend one extra `deck.get` per call — per call, not per
+edit or per slide — which is on the agent audit trail (§6) like any other read.
 
 ## 5. The OAuth work — the real cost
 

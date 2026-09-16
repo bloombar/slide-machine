@@ -330,15 +330,16 @@ describe('create_lecture', () => {
     expect(out.text).toContain('no slides yet')
   })
 
-  it('tells the caller add_slide is what fills it, and not to call it done yet', async () => {
+  it('tells the caller add_slides is what fills it, and not to call it done yet', async () => {
     // MCP-1: the failure this guards against is a client declaring the deck
-    // "ready" right after create_lecture, having never called add_slide.
+    // "ready" right after create_lecture, having never called add_slides.
     const call = fakeCall({ 'deck.create': deck })
     const out = await createLecture.run(call, {
       projectId: 'proj-1',
       title: 'Week 4 — Recursion',
     })
-    expect(out.text).toContain('add_slide')
+    // Points at the batch tool for building the deck, not just at add_slide.
+    expect(out.text).toContain('call add_slides')
     expect(out.text).toMatch(/do not tell.*ready/i)
   })
 
@@ -349,6 +350,10 @@ describe('create_lecture', () => {
       title: '',
     })
     expect(out.text).toContain('Untitled lecture')
+  })
+
+  it('is not idempotent — every call makes a new lecture', () => {
+    expect(createLecture.idempotent).toBe(false)
   })
 })
 

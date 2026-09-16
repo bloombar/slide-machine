@@ -78,6 +78,10 @@ export const runTool = async (
   try {
     const output = await tool.run(callerFor(tool, ctx), args as never)
     return {
+      // A batching tool that stopped part-way (add_slides, edit_slides) hands
+      // back composed prose rather than a thrown error, but it is still a
+      // failure — see the `isError` doc on ToolOutput.
+      ...(output.isError ? { isError: true } : {}),
       content: [{ type: 'text', text: output.text }],
       ...(output.data === undefined
         ? {}
@@ -125,9 +129,11 @@ export const createMcpServer = (
         'publishing and anything that spends money are deliberately not ' +
         'available here; if the user asks for one of those, tell them to do ' +
         'it in the app. Slides are created only by add_slide, one call per ' +
-        'slide — nothing here turns notes, a topic or a title into slides on ' +
-        'its own. A lecture starts with zero slides and stays there until you ' +
-        'make them. Before telling the instructor a deck is ready, call ' +
+        'slide, or add_slides for several at once — nothing here turns notes, ' +
+        'a topic or a title into slides on its own. Prefer add_slides to ' +
+        'build a whole lecture in one call rather than calling add_slide ' +
+        'repeatedly. A lecture starts with zero slides and stays there until ' +
+        'you make them. Before telling the instructor a deck is ready, call ' +
         'read_lecture and check the slide count matches what you promised.',
     },
   )
@@ -154,9 +160,13 @@ export const createMcpServer = (
           // that is what mcp/forbidden.ts is for — so no tool is destructive,
           // and a client may say so when it asks the user to approve one.
           destructiveHint: false,
-          // Every write here replaces a value rather than accumulating, so
-          // repeating a call lands in the same place it did the first time.
-          idempotentHint: true,
+          // Most writes here replace a value rather than accumulating, so
+          // repeating a call lands in the same place it did the first time —
+          // but a handful create something new on every call, and declare
+          // that themselves (McpTool.idempotent) rather than being lumped in
+          // with the rest, since a client trusting a blanket `true` would
+          // retry a dropped create and duplicate whatever it made.
+          idempotentHint: tool.idempotent ?? true,
           openWorldHint: false,
         },
       },
