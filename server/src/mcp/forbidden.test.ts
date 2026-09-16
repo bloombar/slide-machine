@@ -91,6 +91,35 @@ describe('the registered tool surface', () => {
     expect(liars).toEqual([])
   })
 
+  it('never composes an action that meters (BILL-3)', () => {
+    // docs/MCP.md §6 claims "no action an assistant can reach spends anything
+    // today". Nothing else enforces that: `deck.import` and `deck.refine` are
+    // both metered and both absent from forbidden.ts, so a tool could be
+    // wired to either and the rest of the suite would stay green. This is
+    // the check that would catch it — the opt-out list below starts empty on
+    // purpose, and stays empty unless a metered action is deliberately
+    // approved for the agent surface.
+    const noMeterExempt: readonly string[] = []
+    const metered = new Set(
+      listActions()
+        .filter(action => action.meter)
+        .map(action => action.name),
+    )
+    const violations = listTools().flatMap(tool =>
+      tool.uses
+        .filter(
+          action => metered.has(action) && !noMeterExempt.includes(action),
+        )
+        .map(
+          action =>
+            `${tool.name} -> ${action}: exposes a metered action; this needs ` +
+            'a deliberate decision (add it to the opt-out list with a reason), ' +
+            'not a test edit',
+        ),
+    )
+    expect(violations).toEqual([])
+  })
+
   it('gives every tool a name a model can tell apart from the others', () => {
     const names = listTools().map(tool => tool.name)
     expect(new Set(names).size).toBe(names.length)

@@ -161,6 +161,27 @@ describe('add_slide', () => {
     ])
   })
 
+  it('steers the caller toward the next call rather than declaring the lecture done', async () => {
+    // MCP-1: add_slide is the only way a slide comes to exist; the result
+    // text must say to call it again, not read as though one call finishes
+    // a multi-slide lecture.
+    const call = fakeCall({
+      'slide.add': { id: 'slide-3', index: 2, layoutType: 'content' },
+      'deck.get': deckView,
+    })
+    const out = await addSlide.run(call, { lectureId: 'deck-1' })
+    // Matched as exact phrases, not a loose pattern: /call.*add_slide.*again/
+    // matches "do NOT call add_slide again" just as happily, which is the
+    // defect this test exists to catch.
+    expect(out.text).toContain('call add_slide again for the next one')
+    expect(out.text).toContain(
+      'the lecture is not finished until every one of them exists',
+    )
+    expect(out.text).not.toMatch(
+      /do not call add_slide|the app will (fill|add)/i,
+    )
+  })
+
   it('skips the content edit when there is no content to write', async () => {
     const call = fakeCall({
       'slide.add': { id: 'slide-3', index: 2, layoutType: 'content' },

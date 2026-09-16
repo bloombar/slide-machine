@@ -330,6 +330,18 @@ describe('create_lecture', () => {
     expect(out.text).toContain('no slides yet')
   })
 
+  it('tells the caller add_slide is what fills it, and not to call it done yet', async () => {
+    // MCP-1: the failure this guards against is a client declaring the deck
+    // "ready" right after create_lecture, having never called add_slide.
+    const call = fakeCall({ 'deck.create': deck })
+    const out = await createLecture.run(call, {
+      projectId: 'proj-1',
+      title: 'Week 4 — Recursion',
+    })
+    expect(out.text).toContain('add_slide')
+    expect(out.text).toMatch(/do not tell.*ready/i)
+  })
+
   it('names an untitled lecture the way the app displays it', async () => {
     const call = fakeCall({ 'deck.create': { ...deck, title: '' } })
     const out = await createLecture.run(call, {
@@ -387,6 +399,38 @@ describe('set_lecture_notes', () => {
       notes: '',
     })
     expect(out.text).toContain('Cleared')
+  })
+
+  it('reports zero slides and that none were created, on a slide-less lecture', async () => {
+    // MCP-1: the tool an instructor's assistant reached for after set_notes,
+    // expecting slides to now exist. They do not, and the reply must say so
+    // at the exact turn the caller might otherwise declare victory.
+    const call = fakeCall({
+      'deck.setSeedNotes': { ...deck, slideOrder: [] },
+    })
+    const out = await setLectureNotes.run(call, {
+      lectureId: 'deck-1',
+      notes: 'Chapter 6.',
+    })
+    expect(out.text).toContain('0 slides')
+    expect(out.text).toContain('no slides were created')
+  })
+
+  it('reads the live slide count off the deck rather than hardcoding it', async () => {
+    // Same tool, a lecture that already has slides — the count must be read,
+    // not a constant that happens to satisfy the zero-slide case above.
+    const call = fakeCall({
+      'deck.setSeedNotes': {
+        ...deck,
+        slideOrder: ['slide-1', 'slide-2', 'slide-3'],
+      },
+    })
+    const out = await setLectureNotes.run(call, {
+      lectureId: 'deck-1',
+      notes: 'Chapter 6.',
+    })
+    expect(out.text).toContain('3 slides')
+    expect(out.text).toContain('no slides were created')
   })
 })
 

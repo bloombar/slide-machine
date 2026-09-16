@@ -9,7 +9,10 @@
  * between a usable tool and one an assistant gives up on.
  *
  * It is still a facade: each edit in the batch is a separate dispatch through
- * the same action, authorized and metered individually.
+ * the same action, authorized individually — and through the metering hook the
+ * action layer runs, which for every action this surface reaches is none. That
+ * "none" is a property the tool surface is held to, not a coincidence:
+ * mcp/forbidden.test.ts fails if any tool composes an action that meters.
  */
 import { z } from 'zod'
 import type { Deck, Slide } from '@slide-machine/shared'
@@ -100,7 +103,11 @@ export const addSlide = defineTool({
   title: 'Add a slide',
   description:
     'Appends a new slide to the end of a lecture and fills in its content. ' +
-    'Use reorder_slides afterwards if it belongs somewhere other than last.',
+    'This is the only way a slide comes into existence on this connection — ' +
+    'there is no bulk or automatic generation from notes, a topic or a title. ' +
+    'A ten-slide lecture is ten calls to this tool, and that is expected, not ' +
+    'a shortcut being missed. Use reorder_slides afterwards if it belongs ' +
+    'somewhere other than last.',
   readOnly: false,
   // `deck.get` only supplies the lecture's address — see edit_slides.
   uses: ['slide.add', 'slide.editContent', 'deck.get'],
@@ -136,7 +143,10 @@ export const addSlide = defineTool({
     return {
       text:
         `Added slide ${filled.id} to lecture ${lectureId} as slide ${filled.index + 1}, ` +
-        `using the "${filled.layoutType}" layout${openAt(url)}.`,
+        `using the "${filled.layoutType}" layout${openAt(url)}. If slides you ` +
+        'planned are still missing, call add_slide again for the next one — ' +
+        'the lecture is not finished until every one of them exists. If that ' +
+        'was the last, stop here and offer the instructor the link.',
       data: {
         id: filled.id,
         index: filled.index,
