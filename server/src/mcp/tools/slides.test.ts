@@ -7,8 +7,9 @@
  * not have. That is invisible in the types and would be a silent data loss.
  */
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import type { ActionCaller } from '../tool'
-import { addSlide, editSlides, reorderSlides } from './slides'
+import { addSlide, addSlides, editSlides, reorderSlides } from './slides'
 
 /** The lecture the link-building read answers with. `PUBLIC_BASE_URL` is set
  * for the whole suite in vitest.config.ts, so the URLs below are the real
@@ -119,6 +120,57 @@ describe('edit_slides', () => {
     })
     expect(out.text).toContain('1 slide:')
   })
+
+  it('stops at the first failure and reports what happened, not a bare error', async () => {
+    // A batch of three edits where the third fails: the model must be told
+    // the first two really landed, exactly which entry failed and why, and
+    // that the rest were never attempted — so it retries only entry 2.
+    const calls: [string, unknown][] = []
+    let editCount = 0
+    const call = (async (action: string, input: unknown) => {
+      calls.push([action, input])
+      if (action === 'slide.editContent') {
+        editCount++
+        if (editCount === 3) throw new Error('editContent exploded')
+        return { deckId: 'deck-1' }
+      }
+      throw new Error(`unexpected action ${action}`)
+    }) as ActionCaller
+
+    const out = await editSlides.run(call, {
+      edits: [
+        { slideId: 'slide-1', title: 'a' },
+        { slideId: 'slide-2', title: 'b' },
+        { slideId: 'slide-3', title: 'c' },
+      ],
+    })
+
+    expect(out.isError).toBe(true)
+    expect(out.text).toContain('Edited 2 of 3 slides: slide-1, slide-2.')
+    expect(out.text).toContain('Entry at index 2 failed')
+    expect(out.text).toContain('(code: internal_error, retryable: true)')
+    expect(out.text).toContain('entry 2 was NOT attempted')
+    expect(out.text).toContain('not the whole batch')
+    expect(out.text).not.toContain('slide-3')
+    expect(out.data).toEqual({
+      edited: ['slide-1', 'slide-2'],
+      failedIndex: 2,
+      url: null,
+    })
+    // The two edits that succeeded really were dispatched — a model that
+    // retries the whole batch would repeat calls that already happened.
+    expect(
+      calls.filter(([action]) => action === 'slide.editContent'),
+    ).toHaveLength(3)
+    expect(calls[0]).toEqual([
+      'slide.editContent',
+      { slideId: 'slide-1', title: 'a' },
+    ])
+    expect(calls[1]).toEqual([
+      'slide.editContent',
+      { slideId: 'slide-2', title: 'b' },
+    ])
+  })
 })
 
 describe('add_slide', () => {
@@ -194,6 +246,154 @@ describe('add_slide', () => {
       'deck.get',
     ])
     expect(out.data).toMatchObject({ id: 'slide-3' })
+  })
+
+  it('accepts a caption in its input schema, the same as edit_slides already can', () => {
+    // The schema is the part that matters: the SDK parses a call's arguments
+    // against it before run() ever sees them, so a field missing from the
+    // shape is stripped before this test's run()-based assertion below would
+    // ever notice.
+    const parsed = z.object(addSlide.input).parse({
+      lectureId: 'deck-1',
+      caption: 'Figure 1: a binary tree',
+    })
+    expect(parsed.caption).toBe('Figure 1: a binary tree')
+  })
+
+  it('writes a caption, the same as edit_slides already can', async () => {
+    const call = fakeCall({
+      'slide.add': { id: 'slide-3', index: 2, layoutType: 'picture' },
+      'slide.editContent': { id: 'slide-3', index: 2, layoutType: 'picture' },
+      'deck.get': deckView,
+    })
+    await addSlide.run(call, {
+      lectureId: 'deck-1',
+      layoutType: 'picture',
+      caption: 'Figure 1: a binary tree',
+    })
+
+    expect(call.calls[1]).toEqual([
+      'slide.editContent',
+      { slideId: 'slide-3', caption: 'Figure 1: a binary tree' },
+    ])
+  })
+})
+
+describe('add_slides', () => {
+  it('appends several slides in one call, in the order given, and reports the resulting count', async () => {
+    // The lecture already has 4 slides, so the new ones land at indexes 4-6.
+    const calls: [string, unknown][] = []
+    let nextIndex = 4
+    const call = (async (action: string, input: unknown) => {
+      calls.push([action, input])
+      if (action === 'slide.add') {
+        const id = `slide-${nextIndex + 1}`
+        const index = nextIndex
+        nextIndex += 1
+        return { id, deckId: 'deck-1', index, layoutType: 'content' }
+      }
+      if (action === 'slide.editContent') {
+        const slideId = (input as { slideId: string }).slideId
+        return {
+          id: slideId,
+          deckId: 'deck-1',
+          index: nextIndex - 1,
+          layoutType: 'content',
+        }
+      }
+      if (action === 'deck.get') return deckView
+      throw new Error(`unexpected action ${action}`)
+    }) as ActionCaller
+
+    const out = await addSlides.run(call, {
+      lectureId: 'deck-1',
+      slides: [{ title: 'Intro' }, { title: 'Trees' }, { title: 'Graphs' }],
+    })
+
+    expect(calls.map(([action]) => action)).toEqual([
+      'slide.add',
+      'slide.editContent',
+      'slide.add',
+      'slide.editContent',
+      'slide.add',
+      'slide.editContent',
+      // One lecture read for the link, after the whole batch — not one per slide.
+      'deck.get',
+    ])
+    expect(out.text).toContain('Added 3 slides')
+    expect(out.text).toContain('now 7 slides')
+    expect(out.data).toEqual({
+      added: ['slide-5', 'slide-6', 'slide-7'],
+      count: 7,
+      url: 'http://localhost:3000/d/week-4-recursion?slide=slide-5',
+    })
+  })
+
+  it('composes exactly add_slide’s actions, so the metering gate stays satisfied', () => {
+    expect(addSlides.uses).toEqual([
+      'slide.add',
+      'slide.editContent',
+      'deck.get',
+    ])
+  })
+
+  it('stops at the first failure, reports what was created, and says the rest were not attempted', async () => {
+    // Three slides, the third failing on its slide.add call. This is the
+    // dangerous case: a model that retries the whole batch on a bare error
+    // would create slide-1 and slide-2 a second time.
+    const calls: [string, unknown][] = []
+    let addCount = 0
+    const call = (async (action: string, input: unknown) => {
+      calls.push([action, input])
+      if (action === 'slide.add') {
+        addCount++
+        if (addCount === 3) throw new Error('slide.add exploded')
+        return {
+          id: `slide-${addCount}`,
+          deckId: 'deck-1',
+          index: addCount - 1,
+          layoutType: 'content',
+        }
+      }
+      if (action === 'slide.editContent') {
+        const slideId = (input as { slideId: string }).slideId
+        return {
+          id: slideId,
+          deckId: 'deck-1',
+          index: addCount - 1,
+          layoutType: 'content',
+        }
+      }
+      throw new Error(`unexpected action ${action}`)
+    }) as ActionCaller
+
+    const out = await addSlides.run(call, {
+      lectureId: 'deck-1',
+      slides: [{ title: 'a' }, { title: 'b' }, { title: 'c' }],
+    })
+
+    expect(out.isError).toBe(true)
+    expect(out.text).toContain(
+      'Added 2 of 3 slides to lecture deck-1 (now 2 slides): slide-1, slide-2.',
+    )
+    expect(out.text).toContain('Entry at index 2 failed')
+    expect(out.text).toContain('(code: internal_error, retryable: true)')
+    expect(out.text).toContain('entry 2 was NOT attempted')
+    expect(out.text).toContain('not the whole batch')
+    expect(out.text).not.toContain('slide-3')
+    expect(out.data).toEqual({
+      added: ['slide-1', 'slide-2'],
+      count: 2,
+      failedIndex: 2,
+      url: null,
+    })
+    // The first two slides really were created — the calls happened.
+    expect(calls.filter(([action]) => action === 'slide.add')).toHaveLength(3)
+    expect(
+      calls.filter(([action]) => action === 'slide.editContent'),
+    ).toHaveLength(2)
+    expect(calls[0]).toEqual(['slide.add', { deckId: 'deck-1' }])
+    expect(calls[2]).toEqual(['slide.add', { deckId: 'deck-1' }])
   })
 })
 

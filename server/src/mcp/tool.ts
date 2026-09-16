@@ -51,6 +51,15 @@ export interface ToolOutput {
    * it worth repeating.
    */
   data?: unknown
+  /**
+   * Set when a batching tool stopped part-way through: some of the work
+   * happened, some did not, and the model needs to be told which is which
+   * rather than shown a bare thrown error. `runTool` marks the MCP result
+   * `isError` when this is true, same as a thrown failure — a batch that got
+   * halfway is a failure, not a success with a footnote, even though `text`
+   * here is composed prose rather than `describeErrorForAgent`'s output.
+   */
+  isError?: boolean
 }
 
 /** A hand-designed agent tool over one or more actions. */
