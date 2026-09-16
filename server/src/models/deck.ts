@@ -429,6 +429,7 @@ export const toDeckDto = (
   refineTranscriptLevel: doc.refineTranscriptLevel,
   language: doc.language,
   ttsVoice: doc.ttsVoice,
+  titleLocked: doc.titleLocked,
   studyLabel: doc.studyLabel,
   transcript: doc.transcript,
   hasRecordings: (doc.recordings?.length ?? 0) > 0,

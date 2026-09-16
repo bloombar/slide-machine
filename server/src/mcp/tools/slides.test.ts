@@ -9,7 +9,14 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import type { ActionCaller } from '../tool'
-import { addSlide, addSlides, editSlides, reorderSlides } from './slides'
+import {
+  addSlide,
+  addSlides,
+  editSlides,
+  reorderSlides,
+  setSlideNarration,
+  splitSlide,
+} from './slides'
 import { listBuiltinTemplates } from '../../templates/builtin'
 
 /** The lecture the link-building read answers with. `PUBLIC_BASE_URL` is set
@@ -953,5 +960,249 @@ describe('reorder_slides', () => {
     ])
     expect(out.text).toContain('2 slides')
     expect(out.text).toContain('http://localhost:3000/d/week-4-recursion')
+  })
+})
+
+describe('set_slide_narration', () => {
+  it('sets narration on several slides in one call', async () => {
+    const call = fakeCall({ 'slide.editTranscript': { id: 'slide-1' } })
+    const out = await setSlideNarration.run(call, {
+      narrations: [
+        { slideId: 'slide-1', narration: 'Today we cover recursion.' },
+        { slideId: 'slide-2', narration: 'Base cases stop the descent.' },
+      ],
+    })
+
+    expect(call.calls).toEqual([
+      [
+        'slide.editTranscript',
+        { slideId: 'slide-1', transcript: 'Today we cover recursion.' },
+      ],
+      [
+        'slide.editTranscript',
+        { slideId: 'slide-2', transcript: 'Base cases stop the descent.' },
+      ],
+    ])
+    expect(out.text).toBe('Set narration on 2 slides: slide-1, slide-2.')
+    expect(out.data).toEqual({ set: ['slide-1', 'slide-2'] })
+  })
+
+  it('clears a narration with an empty string', async () => {
+    const call = fakeCall({ 'slide.editTranscript': { id: 'slide-1' } })
+    const out = await setSlideNarration.run(call, {
+      narrations: [{ slideId: 'slide-1', narration: '' }],
+    })
+
+    expect(call.calls).toEqual([
+      ['slide.editTranscript', { slideId: 'slide-1', transcript: '' }],
+    ])
+    expect(out.text).toBe('Set narration on 1 slide: slide-1.')
+  })
+
+  it('refuses an over-long narration in the schema, before any entry is dispatched', () => {
+    // CHEAP: the 20,000-character cap used to live in prose only, so an
+    // over-long entry at position 8 of a batch would fail after seven
+    // writes had already landed instead of being refused up front — the
+    // same trade #383 made for whiteboard.
+    const tooLong = 'a'.repeat(20_001)
+    const result = z
+      .object(setSlideNarration.input)
+      .safeParse({ narrations: [{ slideId: 'slide-1', narration: tooLong }] })
+    expect(result.success).toBe(false)
+
+    const fits = z.object(setSlideNarration.input).safeParse({
+      narrations: [{ slideId: 'slide-1', narration: 'a'.repeat(20_000) }],
+    })
+    expect(fits.success).toBe(true)
+  })
+
+  it('stops at the first failure and reports what landed, in the established wording', async () => {
+    let count = 0
+    const call = (async (action: string) => {
+      if (action === 'slide.editTranscript') {
+        count++
+        if (count === 2) throw new Error('editTranscript exploded')
+        return { id: `slide-${count}` }
+      }
+      throw new Error(`unexpected action ${action}`)
+    }) as ActionCaller
+
+    const out = await setSlideNarration.run(call, {
+      narrations: [
+        { slideId: 'slide-1', narration: 'a' },
+        { slideId: 'slide-2', narration: 'b' },
+        { slideId: 'slide-3', narration: 'c' },
+      ],
+    })
+
+    expect(out.isError).toBe(true)
+    // Byte-identical partial-failure convention as edit_slides/add_slides —
+    // this is the same partialFailureText helper, not a second one.
+    expect(out.text).toBe(
+      'Set narration on 1 of 3 slides: slide-1. Entry 1 failed: Something ' +
+        'went wrong on the server and the operation did not run. (code: ' +
+        'internal_error, retryable: true). Entries never attempted: 2. ' +
+        'Retry entry 1 and entry 2 — not the whole batch. The narrations ' +
+        'already set do not need to be repeated.',
+    )
+    expect(out.text).not.toContain('slide-3')
+    expect(out.data).toEqual({ set: ['slide-1'], failedIndex: 1 })
+  })
+})
+
+describe('split_slide', () => {
+  it('splits a slide into parts and reports the resulting slides', async () => {
+    const call = fakeCall({
+      'deck.splitSlide': {
+        slide: { id: 'slide-1', layoutType: 'content' },
+        added: [{ id: 'slide-2', layoutType: 'content' }],
+        slideOrder: ['slide-1', 'slide-2'],
+      },
+      'deck.get': deckViewWithTemplate,
+    })
+    const out = await splitSlide.run(call, {
+      lectureId: 'deck-1',
+      slideId: 'slide-1',
+      parts: [
+        { layoutType: 'content', slots: { title: 'Part one' } },
+        { layoutType: 'content', slots: { title: 'Part two' } },
+      ],
+    })
+
+    expect(call.calls[0]).toEqual([
+      'deck.splitSlide',
+      {
+        deckId: 'deck-1',
+        slideId: 'slide-1',
+        parts: [
+          { layoutType: 'content', slots: { title: 'Part one' } },
+          { layoutType: 'content', slots: { title: 'Part two' } },
+        ],
+      },
+    ])
+    expect(out.text).toContain(
+      'Split slide slide-1 into 2 slides: slide-1, slide-2',
+    )
+    expect(out.text).toContain(
+      'http://localhost:3000/d/week-4-recursion?slide=slide-1',
+    )
+    expect(out.data).toMatchObject({
+      slide: 'slide-1',
+      added: ['slide-2'],
+      slideOrder: ['slide-1', 'slide-2'],
+    })
+    expect(out.text).not.toContain('Fit check')
+    expect(out.data).not.toHaveProperty('fit')
+  })
+
+  it('warns that the new slides start with a copy of the whole narration, naming them by id', async () => {
+    // MUST-FIX: deck.splitSlide copies the ORIGINAL slide's sourceTranscript
+    // onto every new part (reconcile.ts), so without this warning a split
+    // reads as finished while every added slide still narrates the entire
+    // original lecture.
+    const call = fakeCall({
+      'deck.splitSlide': {
+        slide: { id: 'slide-1', layoutType: 'content' },
+        added: [
+          { id: 'slide-2', layoutType: 'content' },
+          { id: 'slide-3', layoutType: 'content' },
+        ],
+        slideOrder: ['slide-1', 'slide-2', 'slide-3'],
+      },
+      'deck.get': deckViewWithTemplate,
+    })
+    const out = await splitSlide.run(call, {
+      lectureId: 'deck-1',
+      slideId: 'slide-1',
+      parts: [
+        { layoutType: 'content', slots: { title: 'One' } },
+        { layoutType: 'content', slots: { title: 'Two' } },
+        { layoutType: 'content', slots: { title: 'Three' } },
+      ],
+    })
+
+    expect(out.text).toContain(
+      'every one of these slides, slide-1 included, carries a COPY of the ' +
+        'original slide’s whole narration, so each narrates the entire ' +
+        'original lecture until replaced',
+    )
+    expect(out.text).toContain(
+      'Call set_slide_narration on slide-1, slide-2, slide-3 to give each its own.',
+    )
+  })
+
+  it('names the original slide too, whose narration is as stale as the new ones', async () => {
+    const call = fakeCall({
+      'deck.splitSlide': {
+        slide: { id: 'slide-1', layoutType: 'content' },
+        added: [{ id: 'slide-2', layoutType: 'content' }],
+        slideOrder: ['slide-1', 'slide-2'],
+      },
+      'deck.get': deckViewWithTemplate,
+    })
+    const out = await splitSlide.run(call, {
+      lectureId: 'deck-1',
+      slideId: 'slide-1',
+      parts: [
+        { layoutType: 'content', slots: { title: 'One' } },
+        { layoutType: 'content', slots: { title: 'Two' } },
+      ],
+    })
+
+    // slide-1 kept the original id and the original narration while its
+    // content shrank to one part's worth, so a note naming only the added
+    // slides would leave the model believing slide-1 was already correct.
+    expect(out.text).toContain(
+      'Call set_slide_narration on slide-1, slide-2 to give each its own.',
+    )
+  })
+
+  it('reports a part still over budget rather than reading as a fix', async () => {
+    // nyu-elegant's "content" title maxChars 44 (see the fixture note above).
+    const overTitle = 'A'.repeat(50)
+    const call = fakeCall({
+      'deck.splitSlide': {
+        slide: { id: 'slide-1', layoutType: 'content' },
+        added: [{ id: 'slide-2', layoutType: 'content' }],
+        slideOrder: ['slide-1', 'slide-2'],
+      },
+      'deck.get': deckViewWithTemplate,
+    })
+    const out = await splitSlide.run(call, {
+      lectureId: 'deck-1',
+      slideId: 'slide-1',
+      parts: [
+        { layoutType: 'content', slots: { title: overTitle } },
+        { layoutType: 'content', slots: { title: 'Fine' } },
+      ],
+    })
+
+    expect(out.text).toContain('"title" is over budget: 50 used, 44 allowed.')
+    expect(out.data).toMatchObject({
+      fit: [
+        expect.objectContaining({
+          slideId: 'slide-1',
+          field: 'title',
+          issue: 'over-budget',
+        }),
+      ],
+    })
+  })
+
+  it('is not idempotent, since every call creates more slides', () => {
+    expect(splitSlide.idempotent).toBe(false)
+  })
+
+  it('says a copy, not that narration stays attached, and never names an internal action', () => {
+    // MUST-FIX: "stays attached" read as the opposite of what happens —
+    // every part gets a COPY, not a move. And "slide.delete" is an internal
+    // action name that appears on no tool here; a model could try calling
+    // it directly.
+    expect(splitSlide.description).toMatch(/COPY/)
+    expect(splitSlide.description).not.toContain('stays attached')
+    expect(splitSlide.description).not.toContain('slide.delete')
+    expect(splitSlide.description).toContain(
+      'there is no way to delete a slide from here',
+    )
   })
 })
