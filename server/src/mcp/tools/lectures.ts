@@ -245,7 +245,10 @@ export const createLecture = defineTool({
 export const renameLecture = defineTool({
   name: 'rename_lecture',
   title: 'Rename a lecture',
-  description: 'Changes a lecture’s title. Nothing else about it changes.',
+  description:
+    'Changes a lecture’s title. A non-empty title locks it: the app’s own ' +
+    'auto-titling will not rename the lecture again. Clearing the title back ' +
+    'to an empty string hands that control back to auto-titling.',
   readOnly: false,
   uses: ['deck.rename'],
   input: {

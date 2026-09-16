@@ -381,6 +381,17 @@ describe('rename_lecture', () => {
     })
     expect(out.text).toContain('Untitled lecture')
   })
+
+  it('says what a non-empty title actually does, rather than claiming nothing else changes', () => {
+    // deck.rename sets titleLocked whenever the title is non-empty
+    // (server/src/actions/deck.ts), permanently disabling the app's own
+    // auto-titling — "Nothing else about it changes" was false.
+    expect(renameLecture.description).not.toContain(
+      'Nothing else about it changes',
+    )
+    expect(renameLecture.description).toMatch(/lock/i)
+    expect(renameLecture.description).toMatch(/auto-titl/i)
+  })
 })
 
 describe('set_lecture_notes', () => {
