@@ -161,6 +161,19 @@ describe('add_slide', () => {
     ])
   })
 
+  it('steers the caller toward the next call rather than declaring the lecture done', async () => {
+    // MCP-1: add_slide is the only way a slide comes to exist; the result
+    // text must say to call it again, not read as though one call finishes
+    // a multi-slide lecture.
+    const call = fakeCall({
+      'slide.add': { id: 'slide-3', index: 2, layoutType: 'content' },
+      'deck.get': deckView,
+    })
+    const out = await addSlide.run(call, { lectureId: 'deck-1' })
+    expect(out.text).toMatch(/call.*add_slide.*again|add_slide again/i)
+    expect(out.text).toMatch(/not finished|not complete|not done/i)
+  })
+
   it('skips the content edit when there is no content to write', async () => {
     const call = fakeCall({
       'slide.add': { id: 'slide-3', index: 2, layoutType: 'content' },

@@ -72,7 +72,8 @@ export const findLectures = defineTool({
       return {
         text: needle
           ? `No lecture of this account matches "${input.query}". There are ${decks.length} lectures in total; call again without a query to see them.`
-          : 'This account has no lectures yet. Use create_lecture to make one.',
+          : 'This account has no lectures yet. Use create_lecture to make one ' +
+            '— it starts empty, with no slides, until add_slide is called.',
         data: { lectures: [] },
       }
     }
@@ -195,8 +196,10 @@ export const createLecture = defineTool({
     'in. Do not pick one yourself, and do not reuse a project id from an ' +
     'earlier lecture without checking — filing a lecture under the wrong ' +
     'course is not something this tool can undo. The lecture starts with no ' +
-    'slides; use set_lecture_notes to give it the material it should be ' +
-    'built from.',
+    'slides and stays that way until add_slide is called, once per slide — ' +
+    'that is how a deck gets built. set_lecture_notes is separate and ' +
+    'optional: it stores background material for the app to use later, and ' +
+    'does not itself produce slides.',
   readOnly: false,
   uses: ['deck.create'],
   input: {
@@ -221,7 +224,10 @@ export const createLecture = defineTool({
     return {
       text:
         `Created lecture "${deck.title || 'Untitled lecture'}" (lecture id: ${deck.id}) ` +
-        `in project ${deck.projectId}${openAt(url)}. It has no slides yet.`,
+        `in project ${deck.projectId}${openAt(url)}. It has no slides yet, and ` +
+        'nothing will add any on its own: call add_slide once for each slide ' +
+        'the lecture should have. Do not tell the instructor it is ready before ' +
+        'those calls are made.',
       data: {
         id: deck.id,
         title: deck.title,
@@ -259,11 +265,14 @@ export const setLectureNotes = defineTool({
   name: 'set_lecture_notes',
   title: 'Set a lecture’s seed notes',
   description:
-    'Replaces a lecture’s seed notes — the background material the app uses ' +
-    'when generating and refining its slides. This is the tool for handing ' +
-    'over a syllabus section, a reading summary, or an outline the app has ' +
-    'never seen. It REPLACES the existing notes rather than appending, so read ' +
-    'the lecture first if you mean to add to them.',
+    'Replaces a lecture’s seed notes. Setting them creates no slides, and ' +
+    'nothing reachable on this connection generates slides from them: the ' +
+    'notes are only read when the instructor teaches the lecture live in the ' +
+    'app, and when refining slides that already exist. This is the tool for ' +
+    'handing over a syllabus section, a reading summary, or an outline the ' +
+    'app has never seen — not a way to build a deck. Building a deck means ' +
+    'calling add_slide once per slide. It REPLACES the existing notes rather ' +
+    'than appending, so read the lecture first if you mean to add to them.',
   readOnly: false,
   uses: ['deck.setSeedNotes'],
   input: {
@@ -281,10 +290,15 @@ export const setLectureNotes = defineTool({
       seedContext: input.notes,
     })
     const url = lectureUrl(deck.permalinkSlug)
+    // The count comes off the deck this call returned, not a cached read, so
+    // a caller that expected notes to add slides sees the true number here —
+    // at the exact turn a client might otherwise report the deck as done.
+    const slideCount = deck.slideOrder.length
+    const slideNote = `Lecture ${deck.id} has ${slideCount} slide${slideCount === 1 ? '' : 's'}; no slides were created by this call.`
     return {
       text: input.notes
-        ? `Set ${input.notes.length} characters of seed notes on lecture ${deck.id}, replacing whatever was there${openAt(url)}.`
-        : `Cleared the seed notes on lecture ${deck.id}${openAt(url)}.`,
+        ? `Set ${input.notes.length} characters of seed notes on lecture ${deck.id}, replacing whatever was there${openAt(url)}. ${slideNote}`
+        : `Cleared the seed notes on lecture ${deck.id}${openAt(url)}. ${slideNote}`,
       data: { id: deck.id, url: url ?? null },
     }
   },

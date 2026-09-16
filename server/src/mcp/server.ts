@@ -124,7 +124,11 @@ export const createMcpServer = (
         'them to be signed in to the app, as usual. Deleting, sharing, ' +
         'publishing and anything that spends money are deliberately not ' +
         'available here; if the user asks for one of those, tell them to do ' +
-        'it in the app.',
+        'it in the app. Slides are created only by add_slide, one call per ' +
+        'slide — nothing here turns notes, a topic or a title into slides on ' +
+        'its own. A lecture starts with zero slides and stays there until you ' +
+        'make them. Before telling the instructor a deck is ready, call ' +
+        'read_lecture and check the slide count matches what you promised.',
     },
   )
 
