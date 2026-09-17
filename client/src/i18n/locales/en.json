@@ -1162,11 +1162,11 @@
         "studyLabelPlaceholder": "e.g. B1-SWE-treatment",
         "newSlideOverrides": {
           "heading": "New-slide overrides",
-          "hint": "During live generation the server sometimes overrules the AI's \"update the current slide\" decision. Switch any of these off to see generation without it. Visible to admins only.",
+          "hint": "During live generation the server sometimes overrules the AI's \"update the current slide\" decision. Tick or untick any of these to change how it overrides the AI. Visible to admins only.",
           "headerLabel": "Title/section slide promotion",
           "headerDescription": "New content spoken over a title or section slide becomes a new slide instead of being added to it.",
           "overflowLabel": "Overflow promotion",
-          "overflowDescription": "An update too long for its slide becomes a new slide instead of overflowing it. Also turns off trimming during Refine.",
+          "overflowDescription": "An update too long for its slide becomes a new slide instead of overflowing it. Also trims text to the box limits during Refine.",
           "whiteboardLabel": "Whiteboard promotion",
           "whiteboardDescription": "Speaking over a whiteboard slide becomes a new slide instead of adding text the canvas cannot show.",
           "drawingLabel": "Drawing-in-progress hold",

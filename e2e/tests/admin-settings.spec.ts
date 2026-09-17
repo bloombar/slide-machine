@@ -269,18 +269,20 @@ test('the admin sees the new-slide overrides (GEN-8) and a toggle persists', asy
   await expect(page).toHaveURL(/\/d\//)
 
   const modal = await openSettingsAsAdmin(page, 'Lecture settings')
+  // GEN-8: overflow promotion defaults off (unlike the other three
+  // switches), so this one starts unchecked.
   const overflow = modal.getByRole('checkbox', { name: /Overflow promotion/ })
-  await expect(overflow).toBeChecked()
+  await expect(overflow).not.toBeChecked()
   const saved = page.waitForResponse(
     res =>
       res.url().includes('deck.setNewSlideOverrides') && res.status() === 200,
   )
   // The checkbox is controlled by the saved deck, so it only flips once the
-  // save round-trips — a plain click, not uncheck() (which verifies the
+  // save round-trips — a plain click, not check() (which verifies the
   // state synchronously and would race the request).
   await overflow.click()
   await saved
-  await expect(overflow).not.toBeChecked()
+  await expect(overflow).toBeChecked()
 
   // Survives a reload, so it really was stored.
   await page.reload()
@@ -288,7 +290,7 @@ test('the admin sees the new-slide overrides (GEN-8) and a toggle persists', asy
   await page.getByRole('button', { name: 'Edit settings' }).click()
   await expect(
     page.getByRole('checkbox', { name: /Overflow promotion/ }),
-  ).not.toBeChecked()
+  ).toBeChecked()
 })
 
 test('every edit is recorded in the audit log', async ({ page }) => {

@@ -19,6 +19,7 @@ import { Trans, useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import {
   findTtsVoice,
+  NEW_SLIDE_OVERRIDE_DEFAULTS,
   type Deck,
   type DeckRefineResult,
   type DeckRefineStatusResult,
@@ -275,9 +276,11 @@ export default function DeckSettingsModal({
   }
 
   // Admin-only (GEN-8): per-lecture switches for the server's automatic
-  // update->new-slide overrides, for experimentation. Absent = on, like
-  // every other lecture-level toggle. Saved immediately, one field at a
-  // time, so an admin sees each change take effect right away.
+  // update->new-slide overrides, for experimentation. Absent falls back to
+  // each switch's own default (NEW_SLIDE_OVERRIDE_DEFAULTS — overflow
+  // promotion and the Refine trimming it also gates default off; the other
+  // three default on). Saved immediately, one field at a time, so an admin
+  // sees each change take effect right away.
   const saveNewSlideOverride = (
     patch: Partial<
       Pick<
@@ -769,7 +772,10 @@ export default function DeckSettingsModal({
                   description={t(
                     'deck.settings.general.newSlideOverrides.headerDescription',
                   )}
-                  checked={deck.newSlideOverrideHeader ?? true}
+                  checked={
+                    deck.newSlideOverrideHeader ??
+                    NEW_SLIDE_OVERRIDE_DEFAULTS.header
+                  }
                   onChange={checked =>
                     saveNewSlideOverride({ header: checked })
                   }
@@ -781,7 +787,10 @@ export default function DeckSettingsModal({
                   description={t(
                     'deck.settings.general.newSlideOverrides.overflowDescription',
                   )}
-                  checked={deck.newSlideOverrideOverflow ?? true}
+                  checked={
+                    deck.newSlideOverrideOverflow ??
+                    NEW_SLIDE_OVERRIDE_DEFAULTS.overflow
+                  }
                   onChange={checked =>
                     saveNewSlideOverride({ overflow: checked })
                   }
@@ -793,7 +802,10 @@ export default function DeckSettingsModal({
                   description={t(
                     'deck.settings.general.newSlideOverrides.whiteboardDescription',
                   )}
-                  checked={deck.newSlideOverrideWhiteboard ?? true}
+                  checked={
+                    deck.newSlideOverrideWhiteboard ??
+                    NEW_SLIDE_OVERRIDE_DEFAULTS.whiteboard
+                  }
                   onChange={checked =>
                     saveNewSlideOverride({ whiteboard: checked })
                   }
@@ -805,7 +817,10 @@ export default function DeckSettingsModal({
                   description={t(
                     'deck.settings.general.newSlideOverrides.drawingDescription',
                   )}
-                  checked={deck.newSlideOverrideDrawing ?? true}
+                  checked={
+                    deck.newSlideOverrideDrawing ??
+                    NEW_SLIDE_OVERRIDE_DEFAULTS.drawing
+                  }
                   onChange={checked =>
                     saveNewSlideOverride({ drawing: checked })
                   }

@@ -70,7 +70,10 @@ import { planReformat } from '../lib/reformat-plan'
 import { imageSlotNames, layoutHasImageSlot } from '../lib/image-layout'
 import { layoutDisplaysContent } from '../lib/layout-refit'
 import { clampToBudget, layoutFitsBudget } from '../lib/slide-fit'
-import { isNewSlideOverrideOn } from '../lib/new-slide-overrides'
+import {
+  isNewSlideOverrideOn,
+  NEW_SLIDE_OVERRIDE_DEFAULTS,
+} from '../lib/new-slide-overrides'
 import { enrichSlideImages } from '../enrichment/enrich'
 import type { SlideImageContext } from '../enrichment/types'
 import { deriveImageKeywords } from '../enrichment/keywords'
@@ -645,10 +648,14 @@ const refineOneSlide = async (
   if (!want.text && !want.layout && !want.imagery) return { changed: false }
 
   // GEN-8 admin override: the lecture's overflow switch also governs
-  // Refine's box-limit trimming (GEN-4) — off means text refine and split
-  // parts skip clampToBudget, and the layout-only switch skips the
-  // fit-first gate below (layoutDisplaysContent still applies).
-  const trimToBudget = isNewSlideOverrideOn(deck.newSlideOverrideOverflow)
+  // Refine's box-limit trimming (GEN-4), and defaults OFF like the
+  // promotion it mirrors — text refine and split parts skip clampToBudget,
+  // and the layout-only switch skips the fit-first gate below
+  // (layoutDisplaysContent still applies), unless an admin turns it on.
+  const trimToBudget = isNewSlideOverrideOn(
+    deck.newSlideOverrideOverflow,
+    NEW_SLIDE_OVERRIDE_DEFAULTS.overflow,
+  )
 
   // Splitting is a claim about the WORDS — that they are two ideas, or more
   // than a slide can hold. A layout- or imagery-only refine never looked at

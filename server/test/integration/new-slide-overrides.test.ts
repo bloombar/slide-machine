@@ -1,11 +1,12 @@
 /**
  * Integration tests for the GEN-8 admin overrides: per-lecture switches that
- * turn off the server's automatic update->new-slide promotions (header,
- * overflow, whiteboard, drawing-in-progress), for experimentation. Covers
- * the authorization gate (admin-only, both sides of the ACL) and, for each
- * switch, that "off" leaves the update in place while "on"/unset keeps the
- * existing promotion behaviour. Drives a scripted generation provider so
- * each model decision is exact. MongoDB real.
+ * turn the server's automatic update->new-slide promotions (header,
+ * overflow, whiteboard, drawing-in-progress) on or off, for experimentation.
+ * Covers the authorization gate (admin-only, both sides of the ACL) and,
+ * for each switch, its own default plus the explicit opposite: header,
+ * whiteboard and drawing-in-progress default on (unset promotes); overflow
+ * defaults off (unset leaves the update in place). Drives a scripted
+ * generation provider so each model decision is exact. MongoDB real.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import request from 'supertest'
@@ -138,7 +139,7 @@ describe('deck.setNewSlideOverrides authorization', () => {
     })
   })
 
-  it('re-inherits (on) when set to null', async () => {
+  it('re-inherits the default when set to null', async () => {
     await act(admin, 'deck.setNewSlideOverrides', { deckId, header: false })
     const res = await act(admin, 'deck.setNewSlideOverrides', {
       deckId,
@@ -284,7 +285,26 @@ describe('overflow override (GEN-8)', () => {
     expect(next.body.slide.body).toBe(`${INTRO} ${addition}`)
   })
 
-  it('on (unset): the same overflowing update is promoted to a new slide', async () => {
+  it('unset: the same overflowing update lands in place, unclamped (GEN-8 default off)', async () => {
+    const slideId = await openContentSlide()
+
+    const addition = 'y'.repeat(2000)
+    scripted.push({
+      action: 'update',
+      layoutType: 'content',
+      slots: { body: addition },
+    })
+    const next = await act(ada, 'session.phrase', {
+      deckId,
+      phrase: 'more content',
+    })
+    expect(next.body.kind).toBe('slide.update')
+    expect(next.body.slide.id).toBe(slideId)
+    expect(next.body.slide.body).toBe(`${INTRO} ${addition}`)
+  })
+
+  it('on (explicit): the same overflowing update is promoted to a new slide', async () => {
+    await act(admin, 'deck.setNewSlideOverrides', { deckId, overflow: true })
     const slideId = await openContentSlide()
 
     const addition = 'y'.repeat(2000)

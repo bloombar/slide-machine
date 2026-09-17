@@ -1162,11 +1162,11 @@
         "studyLabelPlaceholder": "p. ex. B1-SWE-treatment",
         "newSlideOverrides": {
           "heading": "Dérogations de nouvelle diapositive",
-          "hint": "Pendant la génération en direct, le serveur outrepasse parfois la décision de l'IA de \"mettre à jour la diapositive actuelle\". Désactivez l'une de ces options pour voir la génération sans elle. Visible uniquement par les administrateurs.",
+          "hint": "Pendant la génération en direct, le serveur outrepasse parfois la décision de l'IA de \"mettre à jour la diapositive actuelle\". Cochez ou décochez l'une de ces options pour changer la façon dont il outrepasse l'IA. Visible uniquement par les administrateurs.",
           "headerLabel": "Promotion des diapositives de titre/section",
           "headerDescription": "Un nouveau contenu prononcé sur une diapositive de titre ou de section devient une nouvelle diapositive au lieu d'y être ajouté.",
           "overflowLabel": "Promotion par débordement",
-          "overflowDescription": "Une mise à jour trop longue pour sa diapositive devient une nouvelle diapositive au lieu de la faire déborder. Désactive aussi la découpe pendant Affiner.",
+          "overflowDescription": "Une mise à jour trop longue pour sa diapositive devient une nouvelle diapositive au lieu de la faire déborder. Découpe aussi le texte selon les limites de la zone pendant Affiner.",
           "whiteboardLabel": "Promotion du tableau blanc",
           "whiteboardDescription": "Parler sur une diapositive de tableau blanc devient une nouvelle diapositive au lieu d'ajouter un texte que le canevas ne peut pas afficher.",
           "drawingLabel": "Pause pendant le dessin",
