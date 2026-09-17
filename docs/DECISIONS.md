@@ -1081,3 +1081,52 @@ works; a `Link` would have meant leaving the modal and reopening it on the Desig
 admins only") was redundant once the whole section sits behind an admin-gated disclosure, so the explanation
 of what the switches do, the overflow/Refine coupling, and the pointer to the Design tab's box limits were
 folded into a single paragraph instead of stacking two explanations above the checkboxes.
+
+## TMPL-12: 3-bullet caps raised to 4 across built-ins, content-list title narrowed to 35 (2026-09-17)
+
+**User decision**: every built-in whose bullet box was capped at 3 should be raised — to 4, not the 5 first
+tried — and `nyu-elegant`'s `content-list` title budget narrowed from 44 to 35 characters to make 4 hold at
+full size. A simulation over the shipped designs found the 3-bullet cap was behind most of that layout's
+overflow promotions, and a browser render at a handful of short bullets plus a modest body drew at full size
+with nothing clipped — the cap looked tighter than the box needed.
+
+**Only one cap existed.** `nyu-elegant`'s `content-list` ("Text and points") was the sole built-in slot,
+layout constraint, or text-role default anywhere at 3; every other design's bullet caps are already 4, 5, 6 or
+9. Changed `maxItems` on that slot from 3 to 4 (`server/config/templates/nyu-elegant.json`); its description
+already read "What follows..." rather than naming a count, so no wording changed.
+
+**The title budget is per-layout, not shared** — `content-list`'s title slot states its own `maxChars: 44`
+(now 35); the theme's `heading` text style, which the slot's tree node also names, separately states 44 and
+is what the title falls back to on a layout with no slot-level number of its own. The slot's own value always
+wins ([`slotLimits`](../shared/src/types/slot-limits.ts)), so narrowing only this layout's slot leaves the
+`heading` style's 44 — and every other layout's own 44-character title slot (`content`, `list`, `code`, each
+states its own copy) — untouched.
+
+**Why 4-and-narrow-the-title rather than 5, or leaving the title at 44.** Reported to the user as a browser-
+measured table (`fitScale`; the app's own pass threshold is 0.975 — `MIN_HONEST_SCALE`,
+`e2e/tests/slide-boxes.ts`), title and bullets always at their own character budget, filled and read the way
+`template-load-limits.spec.ts` does:
+
+| items | bulletChars | title | body | bullets fitScale | result |
+|---|---|---|---|---|---|
+| 4 | 65 | 44 (2 lines) | 146 | 0.75 | FAIL |
+| 4 | 65 | 44 | 120 | 0.95 | FAIL |
+| 4 | 65 | 44 | 60 (1 line) | 1.00 | PASS |
+| 4 | 65 | **35 (1 line)** | **146** | **1.00** | **PASS** |
+| 5 | 65 | 44 | 146…60 | 0.60…0.925 | FAIL at every body tried |
+| 4 | 35–65 | 44 | 146 | 0.75 (constant) | bullet chars irrelevant |
+| 3 | 65 | 44 | 146 | 1.00 | PASS (original, unmodified) |
+
+Lowering the bullet or body character budgets did not help on their own: at this box's width and font size
+every bullet from 10 to 65 characters already wraps to a single line, so the per-bullet cost is fixed
+regardless of `maxChars` — only item count, the body's own line count, or the title's own line count move the
+sum (the title's own row has `shrink: 0` and does not give up room on its own, but a 2-line title costs the
+column a full extra line that a 1-line title returns to the `grow: 1` bullets box below it). **5 bullets never
+reaches 1.00 in this sweep, even with the body cut to 60 characters** — worse than 4 in every configuration
+tried. **4 bullets reaches 1.00** either by cutting the body to ≤60 characters (from 146) or by cutting the
+title to ≤35 (from 44, 2 lines → 1 line) while leaving the body at its full 146. The user chose the title cut:
+`content-list`'s title slot `maxChars` 44 → 35, body and bullet character budgets left exactly as they were.
+
+Left `budget-set-fit.test.ts`'s arithmetic check and `template-load-limits.spec.ts`'s browser check red at
+every intermediate step of this rather than loosen either or add a known fault — both are green again at the
+final numbers (4 bullets, 35-char title, 146-char body, 65-char bullets).
