@@ -109,13 +109,20 @@ const clampWords = (
   return words.slice(0, max).join(' ')
 }
 
-/** Effective budgets: a box's own limits (the WYSIWYG-ready form)
- * override the layout-level constraint for that box. */
-const budgetsFor = (
-  result: SlideGenerationResult,
+/**
+ * Effective budgets: a box's own limits (the WYSIWYG-ready form) override
+ * the layout-level constraint for that box (GEN-4). Exported so callers
+ * outside this file — the refine prompt's "how full" fragment, the
+ * layout-only fit gate — read the same effective limits `clampToBudget`
+ * enforces, rather than the layout constraint alone (which nyu-elegant's
+ * "list"/"content-list" layouts leave unset, keeping their limits on the
+ * bullets/body slots instead).
+ */
+export const budgetsFor = (
+  layoutType: string,
   descriptors: LayoutDescriptor[],
 ): LayoutConstraints => {
-  const layout = descriptors.find(d => d.type === result.layoutType)
+  const layout = descriptors.find(d => d.type === layoutType)
   const constraints = layout?.constraints ?? {}
   const slotChars = (name: string): number | undefined =>
     layout?.slots.find(s => s.name === name)?.maxChars
@@ -136,10 +143,10 @@ const budgetsFor = (
  * character budgets because it is counted rather than measured, and only a
  * box states one — no style or layout constraint speaks in words (TMPL-10). */
 const wordBudgetsFor = (
-  result: SlideGenerationResult,
+  layoutType: string,
   descriptors: LayoutDescriptor[],
 ): Record<string, number | undefined> => {
-  const layout = descriptors.find(d => d.type === result.layoutType)
+  const layout = descriptors.find(d => d.type === layoutType)
   const words = (name: string) =>
     layout?.slots.find(s => s.name === name)?.maxWords
   return {
@@ -166,7 +173,7 @@ export const updateOverflows = (
   descriptors: LayoutDescriptor[],
 ): boolean => {
   if (result.action !== 'update') return false
-  const limits = budgetsFor(result, descriptors)
+  const limits = budgetsFor(result.layoutType, descriptors)
   const bullets = current.bulletCount + (result.slots.bullets?.length ?? 0)
   if (limits.maxBullets && bullets > limits.maxBullets) return true
   const bodyChars = current.bodyChars + charCount(result.slots.body)
@@ -223,12 +230,69 @@ export const refitOverflows = (
   result: SlideGenerationResult,
   descriptors: LayoutDescriptor[],
 ): boolean => {
-  const limits = budgetsFor(result, descriptors)
+  const limits = budgetsFor(result.layoutType, descriptors)
   const bullets = result.slots.bullets?.length ?? 0
   if (limits.maxBullets && bullets > limits.maxBullets) return true
   const bodyChars = charCount(result.slots.body)
   if (limits.maxBodyChars && bodyChars > limits.maxBodyChars) return true
   return false
+}
+
+/**
+ * True when a slide's EXISTING content already fits a layout's budgets
+ * (GEN-4) — the gate for a layout-ONLY refine, where the words are not
+ * allowed to change. `layoutDisplaysContent` (layout-refit.ts) only checks
+ * that every populated box has somewhere to go on the new layout; it says
+ * nothing about whether what's already written is short enough for that
+ * box. A layout switch that passes both is a layout the content can move to
+ * as-is — one that fails this is offered a layout it would have to trim
+ * into, which a layout-only refine must not do.
+ *
+ * Word ceilings (TMPL-10) are checked alongside the character ones: a box
+ * `clampToBudget` would shorten for words is a box this gate must also
+ * reject, or a layout-only refine could offer a layout whose title slot
+ * reads "max 3 words" while leaving a 4-word title untouched.
+ */
+const wordCount = (text: string | undefined): number =>
+  text ? text.trim().split(/\s+/).length : 0
+
+export const layoutFitsBudget = (
+  content: {
+    title?: string
+    body?: string
+    bullets?: string[]
+    caption?: string
+  },
+  layoutType: string,
+  descriptors: LayoutDescriptor[],
+): boolean => {
+  const limits = budgetsFor(layoutType, descriptors)
+  const words = wordBudgetsFor(layoutType, descriptors)
+  if (limits.maxBullets && (content.bullets?.length ?? 0) > limits.maxBullets)
+    return false
+  if (
+    limits.maxBulletChars &&
+    content.bullets?.some(b => charCount(b) > limits.maxBulletChars!)
+  )
+    return false
+  if (
+    words.bullets &&
+    content.bullets?.some(b => wordCount(b) > words.bullets!)
+  )
+    return false
+  if (limits.maxBodyChars && charCount(content.body) > limits.maxBodyChars)
+    return false
+  if (words.body && wordCount(content.body) > words.body) return false
+  if (limits.maxTitleChars && charCount(content.title) > limits.maxTitleChars)
+    return false
+  if (words.title && wordCount(content.title) > words.title) return false
+  if (
+    limits.maxCaptionChars &&
+    charCount(content.caption) > limits.maxCaptionChars
+  )
+    return false
+  if (words.caption && wordCount(content.caption) > words.caption) return false
+  return true
 }
 
 /** Clamps a result's slots to its layout's character budgets (new slides). */
@@ -314,12 +378,31 @@ const fitDeclared = (
   return Object.keys(out).length ? out : undefined
 }
 
-export const clampToBudget = (
-  result: SlideGenerationResult,
+/**
+ * Content shaped like a generation result, generic enough for the three
+ * callers that clamp it: a new SlideGenerationResult, a SlideRefineResult
+ * (GEN-4 — text refine has no `action` or `declared`), and a
+ * SlideSplitPart. `T` keeps whichever of those the caller passed in,
+ * `declared` included when present, so the shape is never widened or
+ * narrowed by going through the clamp.
+ */
+interface Clampable {
+  layoutType: string
+  slots: {
+    title?: string
+    body?: string
+    bullets?: string[]
+    caption?: string
+  }
+  declared?: Record<string, SlotValue>
+}
+
+export const clampToBudget = <T extends Clampable>(
+  result: T,
   descriptors: LayoutDescriptor[],
-): SlideGenerationResult => {
-  const limits = budgetsFor(result, descriptors)
-  const words = wordBudgetsFor(result, descriptors)
+): T => {
+  const limits = budgetsFor(result.layoutType, descriptors)
+  const words = wordBudgetsFor(result.layoutType, descriptors)
   // Both bind where both are given: words first, so a whole-word cut is what
   // a character ceiling then measures. A cut that shortened the text is then
   // tidied, so no half of a Markdown delimiter reaches the slide.

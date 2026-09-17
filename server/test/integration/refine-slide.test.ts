@@ -26,6 +26,7 @@ import { UserModel } from '../../src/models/user'
 import { ProjectModel } from '../../src/models/project'
 import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
+import { TemplateModel } from '../../src/models/template'
 import { TranscriptSegmentModel } from '../../src/models/transcript-segment'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
 
@@ -80,6 +81,7 @@ beforeEach(async () => {
     ProjectModel.deleteMany({}),
     DeckModel.deleteMany({}),
     SlideModel.deleteMany({}),
+    TemplateModel.deleteMany({}),
     TranscriptSegmentModel.deleteMany({}),
     RefreshTokenModel.deleteMany({}),
   ])
@@ -596,6 +598,219 @@ describe('deck.refineSlide', () => {
         })
       ).status,
     ).toBe(403)
+  })
+})
+
+/**
+ * A refine's content is clamped to its layout's limits before it is stored
+ * (GEN-4) — the same protection a live new slide gets from `clampToBudget`,
+ * now also applied to the post-lecture Refine pass. Production evidence was
+ * slides with 100-160-char bullets against a 65/70-char limit, and layout
+ * switches onto boxes the words did not fit: the model is prompted with the
+ * limits (the richer layout menu), but never trusted with them.
+ */
+describe('deck.refineSlide clamps to the layout’s limits (GEN-4)', () => {
+  // The deck's default template is "nyu-elegant" (DEFAULT_TEMPLATE_ID):
+  // its "list" layout puts the limits on the SLOTS (title maxChars 44,
+  // bullets maxItems 5/maxChars 70) rather than on layout `constraints` —
+  // exactly the shape budgetsFor/clampToBudget exist to read.
+  it('trims an over-long title and bullets, and drops bullets past the count', async () => {
+    const target = await SlideModel.create({
+      deckId,
+      index: 0,
+      layoutType: 'list',
+      title: 'Stages',
+      bullets: ['one', 'two', 'three'],
+    })
+    const gen = registry.get<GenerationProvider>('generation')
+    const refine = vi.spyOn(gen, 'refineSlide').mockResolvedValueOnce({
+      layoutType: 'list',
+      slots: {
+        title: 'This title definitely runs on for far too many characters', // over the 44-char title budget
+        bullets: [
+          'this bullet runs on for far longer than the seventy character budget allows it to',
+          ...Array.from({ length: 7 }, (_, i) => `bullet ${i}`), // 8 total, over maxItems 5
+        ],
+      },
+    })
+
+    const res = await act(ada, 'deck.refineSlide', {
+      deckId,
+      slideId: target._id.toString(),
+    })
+    expect(res.status).toBe(200)
+
+    const t = await SlideModel.findById(target._id)
+    expect(t?.title!.length).toBeLessThanOrEqual(44)
+    expect(t?.bullets).toHaveLength(5)
+    for (const b of t?.bullets ?? []) expect(b.length).toBeLessThanOrEqual(70)
+    refine.mockRestore()
+  })
+
+  it('clamps a text-only refine against the slide’s OWN layout, not the model’s', async () => {
+    const target = await SlideModel.create({
+      deckId,
+      index: 0,
+      layoutType: 'list',
+      title: 'Stages',
+      bullets: ['one'],
+    })
+    const gen = registry.get<GenerationProvider>('generation')
+    const refine = vi.spyOn(gen, 'refineSlide').mockResolvedValueOnce({
+      // The model may echo a different layout, but text-only refine forces
+      // the slide's own layout back in before clamping (the code already
+      // ignores this layoutType for anything but the budget it clamps to).
+      layoutType: 'content',
+      slots: {
+        bullets: Array.from(
+          { length: 10 },
+          () =>
+            'this bullet has words enough to run well past the seventy character limit',
+        ), // over list's 70-char bullets and 5-count cap
+      },
+    })
+
+    await act(ada, 'deck.refineSlide', {
+      deckId,
+      slideId: target._id.toString(),
+      options: { parts: { text: true, layout: false, imagery: false } },
+    })
+
+    const t = await SlideModel.findById(target._id)
+    expect(t?.layoutType).toBe('list') // layout untouched, as the option asked
+    expect(t?.bullets).toHaveLength(5) // list's maxItems
+    for (const b of t?.bullets ?? []) expect(b.length).toBeLessThanOrEqual(70)
+    refine.mockRestore()
+  })
+
+  it('clamps each part of a split to its own layout’s limits', async () => {
+    const target = await SlideModel.create({
+      deckId,
+      index: 0,
+      layoutType: 'content', // maxTitleChars 44, body maxChars 300
+      title: 'Stages',
+      body: 'Absorption, transfer, then fixation.',
+    })
+    const gen = registry.get<GenerationProvider>('generation')
+    const refine = vi.spyOn(gen, 'refineSlide').mockResolvedValueOnce({
+      layoutType: 'content',
+      slots: { title: 'Stages', body: 'Absorption, transfer, then fixation.' },
+      splitProposal: {
+        reason: 'three separate stages',
+        parts: [
+          {
+            layoutType: 'list', // maxItems 5, maxChars 70
+            slots: {
+              title: 'Absorption',
+              bullets: Array.from(
+                { length: 8 },
+                () =>
+                  'a bullet with words enough to run well past the seventy character limit',
+              ),
+            },
+          },
+          { layoutType: 'content', slots: { title: 'Transfer', body: 'y' } },
+        ],
+      },
+    })
+
+    await act(ada, 'deck.refineSlide', {
+      deckId,
+      slideId: target._id.toString(),
+      options: { allowSplit: true },
+    })
+
+    const parts = await SlideModel.find({ deckId }).sort({ index: 1 })
+    expect(parts).toHaveLength(2)
+    const withBullets = parts.find(p => p.layoutType === 'list')!
+    expect(withBullets.bullets).toHaveLength(5)
+    for (const b of withBullets.bullets ?? [])
+      expect(b.length).toBeLessThanOrEqual(70)
+    refine.mockRestore()
+  })
+
+  it('keeps the current layout when the switch would need a trim the layout-only pass may not make', async () => {
+    // Two layouts with the SAME slots (so layoutDisplaysContent alone would
+    // allow the switch), but the target's body budget is far too small for
+    // what this slide already holds — the layout-only fit gate this slice
+    // adds.
+    const owner = await UserModel.findOne({ email: 'ada@example.com' })
+    const template = await TemplateModel.create({
+      ownerId: owner!._id,
+      name: 'Two bodies',
+      permalinkSlug: `two-bodies-${Date.now()}`,
+      theme: { background: '#ffffff', text: '#111111', accent: '#0055ff' },
+      layouts: [
+        {
+          type: 'wide',
+          label: 'Wide',
+          purpose: 'a roomy body',
+          slots: [
+            { name: 'title', kind: 'text', label: 'Title' },
+            { name: 'body', kind: 'text', label: 'Body', maxChars: 300 },
+          ],
+          elementPositions: {},
+        },
+        {
+          type: 'narrow',
+          label: 'Narrow',
+          purpose: 'a tight body',
+          slots: [
+            { name: 'title', kind: 'text', label: 'Title' },
+            { name: 'body', kind: 'text', label: 'Body', maxChars: 40 },
+          ],
+          elementPositions: {},
+        },
+        {
+          type: 'whiteboard',
+          label: 'Whiteboard',
+          purpose: 'a blank slate',
+          slots: [],
+          elementPositions: {},
+        },
+      ],
+      visibility: 'private',
+    })
+    const project = await act(ada, 'project.create', { title: 'Two bodies' })
+    const created = await act(ada, 'deck.create', {
+      projectId: project.body.id,
+      title: 'Lecture',
+      templateId: String(template._id),
+    })
+    const customDeckId = created.body.id as string
+    await DeckModel.updateOne(
+      { _id: customDeckId },
+      {
+        $set: { templateId: String(template._id) },
+        $unset: { templateVersionId: '' },
+      },
+    )
+    const target = await SlideModel.create({
+      deckId: customDeckId,
+      index: 0,
+      layoutType: 'wide',
+      title: 'Long body',
+      body: 'y'.repeat(200), // fits "wide" (300), far over "narrow" (40)
+    })
+
+    const gen = registry.get<GenerationProvider>('generation')
+    const refine = vi.spyOn(gen, 'refineSlide').mockResolvedValueOnce({
+      layoutType: 'narrow',
+      slots: {},
+    })
+
+    await act(ada, 'deck.refineSlide', {
+      deckId: customDeckId,
+      slideId: target._id.toString(),
+      options: { parts: { text: false, layout: true, imagery: false } },
+    })
+
+    const t = await SlideModel.findById(target._id)
+    // The switch is refused: the body would need trimming to fit "narrow",
+    // and a layout-only refine must not change the words.
+    expect(t?.layoutType).toBe('wide')
+    expect(t?.body).toBe('y'.repeat(200))
+    refine.mockRestore()
   })
 })
 

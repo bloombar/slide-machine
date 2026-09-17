@@ -858,3 +858,34 @@ suite that still reads green either way.
 `template.get` actually uses the narrower `templateReadableBySlug` rule; the action's own `readableById` gate
 matches `template.duplicate`/`template.export`/`template.previewImage` instead. The gate itself was already
 correct — only the citation was wrong — so the docstring now names those three.
+
+## GEN-4 refine holds slides to their layout's box limits (2026-09-17)
+
+**Reformat gets the richer menu too.** The brief left it optional; switching `reformatPrompt` from the bare
+`- type: purpose` menu to `renderLayouts` (the same one live generation and refine now share) turned out to be
+a one-line change with no test churn — nothing in `refine-prompts.test.ts` or `gemini-generation.test.ts` asserts
+the old bare form. Reformat writes the same four fields refine does, so it gets the same benefit for free;
+`layoutMenu` was deleted rather than kept for a caller that no longer exists.
+
+**Dropping bullets past the count is the same judgement `clampToBudget` already makes for new slides**: refine
+accepts the same bullet-dropping clamp that live new slides use (GEN-8/TMPL-6), rather than treating an update or
+a split as needing gentler handling.
+
+**Layout-only fit gate.** `layoutFitsBudget` (slide-fit.ts) checks the slide's EXISTING content against the
+target layout's bullet count/per-bullet/body/title/caption limits; `refineOneSlide` (reconcile.ts) requires it
+alongside the existing `layoutDisplaysContent` check before taking a layout-only switch. A layout that can
+display every slot but not at its current length is refused — the slide keeps its layout rather than accept a
+switch a layout-only pass is not allowed to trim into.
+
+**`clampToBudget`'s signature widened to a generic** (`<T extends Clampable>`) rather than staying pinned to
+`SlideGenerationResult`, so it can clamp a `SlideRefineResult` (no `action`) and a `SlideSplitPart` (no
+`declared`) without a cast at each call site. `budgetsFor`/`wordBudgetsFor` were changed to take a bare
+`layoutType: string` for the same reason, and `budgetsFor` is exported so the refine prompt's "how full" fragment
+(`slideLoadFragment` in gemini-generation.ts) reads the same effective limits — a box's own `maxChars`/`maxItems`
+overriding the layout's `constraints` — that the clamp itself enforces, rather than the layout constraint alone
+(nyu-elegant's "list"/"content-list" put their limits on the slots, which the old `constraints`-only read missed
+entirely).
+
+**Split parts clamped in `splitSlideIntoParts`**, shared by both `deck.refineSlide`'s applied split and
+`deck.splitSlide` (the manual/MCP caller) — the brief called this intended, so no separate path was added for
+either caller.

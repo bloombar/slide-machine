@@ -12,6 +12,7 @@ import {
   charCount,
   clampToBudget,
   closeMarkdown,
+  layoutFitsBudget,
   updateOverflows,
 } from './slide-fit'
 
@@ -128,6 +129,87 @@ describe('clampToBudget', () => {
       slots: { title: 'Short', body: 'Fits fine.' },
     })
     expect(clampToBudget(r, descriptors).slots).toEqual(r.slots)
+  })
+})
+
+describe('layoutFitsBudget (GEN-4 layout-only refine gate)', () => {
+  it('passes content that already fits the target layout', () => {
+    expect(
+      layoutFitsBudget(
+        { title: 'Short', bullets: ['one', 'two'] },
+        'list',
+        descriptors,
+      ),
+    ).toBe(true)
+  })
+
+  it('fails when the target layout has too few bullet slots', () => {
+    expect(
+      layoutFitsBudget(
+        { bullets: ['a', 'b', 'c', 'd'] }, // list caps at 3
+        'list',
+        descriptors,
+      ),
+    ).toBe(false)
+  })
+
+  it('fails when a bullet is longer than the target’s per-bullet limit', () => {
+    expect(
+      layoutFitsBudget(
+        { bullets: ['this bullet is far too long for the budget'] },
+        'list', // maxBulletChars: 20
+        descriptors,
+      ),
+    ).toBe(false)
+  })
+
+  it('fails when the body is longer than the target’s slot-level maxChars', () => {
+    expect(
+      layoutFitsBudget(
+        { body: 'w1 w2 w3 w4 w5 w6 w7 w8 w9 w10 w11 w12 w13' }, // content body: 40 chars
+        'content',
+        descriptors,
+      ),
+    ).toBe(false)
+  })
+
+  it('fails when the title is longer than the target’s title budget', () => {
+    expect(
+      layoutFitsBudget(
+        { title: 'a very long slide title with too many words' },
+        'list', // maxTitleChars: 25
+        descriptors,
+      ),
+    ).toBe(false)
+  })
+
+  // A word ceiling (TMPL-10) is a slot-level rule with no character
+  // equivalent, so it needs a layout whose title slot states one.
+  const wordLimited: LayoutDescriptor[] = [
+    {
+      type: 'title-only',
+      label: 'Title only',
+      purpose: 'a short heading',
+      slots: [
+        { name: 'title', kind: 'text', label: 'Slide title', maxWords: 3 },
+      ],
+    },
+  ]
+
+  it('fails when the title has more words than the target’s word limit', () => {
+    expect(
+      layoutFitsBudget(
+        { title: 'one two three four' }, // 4 words against maxWords: 3
+        'title-only',
+        wordLimited,
+      ),
+    ).toBe(false)
+  })
+
+  it('passes a title within the target’s word limit', () => {
+    expect(
+      layoutFitsBudget({ title: 'one two three' }, 'title-only', wordLimited),
+    ).toBe(true)
   })
 })
 

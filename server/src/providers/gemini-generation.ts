@@ -42,6 +42,7 @@ import {
 import type { HealthComponent } from '@slide-machine/shared'
 import { env } from '../config/env'
 import { hasContent, splitGeneratedSlots } from '../lib/generated-slots'
+import { budgetsFor, charCount } from '../lib/slide-fit'
 import { importSemanticsPrompt } from './import-semantics-prompt'
 import { registry } from './registry'
 import { meterGeminiUsage, type GeminiUsageMetadata } from './usage-metadata'
@@ -525,7 +526,15 @@ const describeSlot = (s: SlotSpec): string => {
 export const descriptorBudget = (): number =>
   env.GENERATION_DESCRIPTOR_MAX_CHARS
 
-/** The layout menu, carrying every author's instruction in full (TMPL-25). */
+/**
+ * The layout menu, carrying every author's instruction in full (TMPL-25).
+ *
+ * Shared with the refine and reformat prompts (GEN-4): those passes write
+ * the same four slots live generation does, so they are shown the same
+ * per-box kinds and limits rather than a bare `- type: purpose` line — a
+ * refine that cannot see a box's limit cannot choose a layout that fits
+ * the content into it.
+ */
 export const renderLayouts = (
   descriptors: SlideGenerationRequest['layoutDescriptors'],
 ): string =>
@@ -859,11 +868,6 @@ const partHasContent = (part: {
     part.slots.bullets?.some(b => b.trim()),
   )
 
-/** The `- type: purpose` layout menu shared by the refine/reformat prompts. */
-const layoutMenu = (
-  descriptors: SlideReformatRequest['layoutDescriptors'],
-): string => descriptors.map(d => `- ${d.type}: ${d.purpose}`).join('\n')
-
 /** The optional "Lecture context" fragment (empty when there is no seed). */
 const contextFragment = (
   seedContext: SlideReformatRequest['seedContext'],
@@ -893,7 +897,7 @@ const reformatPrompt = (req: SlideReformatRequest): string =>
       .join('\n'),
     context: contextFragment(req.seedContext),
     language: languageFragment(req.language),
-    layouts: layoutMenu(req.layoutDescriptors),
+    layouts: renderLayouts(req.layoutDescriptors),
   })
 
 /** POSTs a JSON-output prompt to Gemini and returns the candidate text; maps
@@ -957,13 +961,15 @@ const callGemini = async (prompt: string, label: string): Promise<string> => {
  * So it is stated as arithmetic instead, the way the generation prompt states
  * the current slide's load. Empty when the layout declares no limits, which
  * is nothing to say rather than a slide with room.
+ *
+ * Reads the effective limits `budgetsFor` computes — a box's own limit
+ * (maxChars/maxItems) overriding the layout constraint (GEN-4) — rather than
+ * the layout constraint alone: nyu-elegant's "list"/"content-list" layouts
+ * put their body/bullet limits on the slots, not on `constraints`, so
+ * reading `constraints` directly missed half of what a slide can hold.
  */
 const slideLoadFragment = (req: SlideRefineRequest): string => {
-  const layout = req.layoutDescriptors.find(
-    d => d.type === req.current.layoutType,
-  )
-  const limits = layout?.constraints
-  if (!limits) return ''
+  const limits = budgetsFor(req.current.layoutType, req.layoutDescriptors)
   const parts: string[] = []
   const bullets = req.current.bullets?.length ?? 0
   if (limits.maxBullets && bullets)
@@ -971,6 +977,18 @@ const slideLoadFragment = (req: SlideRefineRequest): string => {
   const body = req.current.body?.trim().length ?? 0
   if (limits.maxBodyChars && body)
     parts.push(`${body} of about ${limits.maxBodyChars} body characters`)
+  // Bullets already past their OWN per-bullet limit are named directly
+  // rather than left for the model to notice — the count above says how
+  // many bullets there are, not that some are individually too long to fit.
+  const overLong = limits.maxBulletChars
+    ? (req.current.bullets ?? []).filter(
+        b => charCount(b) > limits.maxBulletChars!,
+      ).length
+    : 0
+  if (overLong)
+    parts.push(
+      `${overLong} of ${bullets} bullets over the ${limits.maxBulletChars}-char limit`,
+    )
   if (!parts.length) return ''
 
   // Named as a threshold rather than left for the model to infer: "at or over"
@@ -1010,7 +1028,7 @@ const refinePrompt = (req: SlideRefineRequest): string =>
     ),
     context: contextFragment(req.seedContext),
     language: languageFragment(req.language),
-    layouts: layoutMenu(req.layoutDescriptors),
+    layouts: renderLayouts(req.layoutDescriptors),
     load: slideLoadFragment(req),
     split: req.allowSplit
       ? `\n${renderRefineSplitPrompt({ maxSplitParts: String(MAX_SPLIT_PARTS) })}`
