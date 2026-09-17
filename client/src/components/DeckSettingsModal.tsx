@@ -22,6 +22,7 @@ import {
   type Deck,
   type DeckRefineResult,
   type DeckRefineStatusResult,
+  type DeckSetNewSlideOverridesInput,
   type DeckSetRefineSettingsInput,
   type Locale,
   type Project,
@@ -270,6 +271,28 @@ export default function DeckSettingsModal({
       .then(onDeckChange)
       .catch(() => {
         // Quiet failure: the field reverts to the saved label on re-render
+      })
+  }
+
+  // Admin-only (GEN-8): per-lecture switches for the server's automatic
+  // update->new-slide overrides, for experimentation. Absent = on, like
+  // every other lecture-level toggle. Saved immediately, one field at a
+  // time, so an admin sees each change take effect right away.
+  const saveNewSlideOverride = (
+    patch: Partial<
+      Pick<
+        DeckSetNewSlideOverridesInput,
+        'header' | 'overflow' | 'whiteboard' | 'drawing'
+      >
+    >,
+  ) => {
+    dispatchAction<Deck>('deck.setNewSlideOverrides', {
+      deckId: deck.id,
+      ...patch,
+    })
+      .then(onDeckChange)
+      .catch(() => {
+        // Quiet failure: the checkbox reverts on the next reload
       })
   }
 
@@ -728,6 +751,66 @@ export default function DeckSettingsModal({
                 maxLength={200}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
+            </div>
+          )}
+          {viewerIsAdmin && (
+            <div>
+              <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                {t('deck.settings.general.newSlideOverrides.heading')}
+              </h3>
+              <p className="mb-3 text-sm text-slate-500">
+                {t('deck.settings.general.newSlideOverrides.hint')}
+              </p>
+              <div className="flex flex-col gap-3">
+                <RefineOption
+                  label={t(
+                    'deck.settings.general.newSlideOverrides.headerLabel',
+                  )}
+                  description={t(
+                    'deck.settings.general.newSlideOverrides.headerDescription',
+                  )}
+                  checked={deck.newSlideOverrideHeader ?? true}
+                  onChange={checked =>
+                    saveNewSlideOverride({ header: checked })
+                  }
+                />
+                <RefineOption
+                  label={t(
+                    'deck.settings.general.newSlideOverrides.overflowLabel',
+                  )}
+                  description={t(
+                    'deck.settings.general.newSlideOverrides.overflowDescription',
+                  )}
+                  checked={deck.newSlideOverrideOverflow ?? true}
+                  onChange={checked =>
+                    saveNewSlideOverride({ overflow: checked })
+                  }
+                />
+                <RefineOption
+                  label={t(
+                    'deck.settings.general.newSlideOverrides.whiteboardLabel',
+                  )}
+                  description={t(
+                    'deck.settings.general.newSlideOverrides.whiteboardDescription',
+                  )}
+                  checked={deck.newSlideOverrideWhiteboard ?? true}
+                  onChange={checked =>
+                    saveNewSlideOverride({ whiteboard: checked })
+                  }
+                />
+                <RefineOption
+                  label={t(
+                    'deck.settings.general.newSlideOverrides.drawingLabel',
+                  )}
+                  description={t(
+                    'deck.settings.general.newSlideOverrides.drawingDescription',
+                  )}
+                  checked={deck.newSlideOverrideDrawing ?? true}
+                  onChange={checked =>
+                    saveNewSlideOverride({ drawing: checked })
+                  }
+                />
+              </div>
             </div>
           )}
           {isOwner && (

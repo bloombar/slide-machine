@@ -815,6 +815,285 @@ describe('deck.refineSlide clamps to the layout’s limits (GEN-4)', () => {
 })
 
 /**
+ * GEN-8: the lecture's overflow override switch also governs this trimming.
+ * Off means Refine no longer protects the layout's limits — an admin
+ * experiment, not something an ordinary owner can reach.
+ */
+describe('the overflow override turns off Refine’s box-limit trimming (GEN-8)', () => {
+  const ADMIN_EMAIL = 'admin@example.com'
+
+  beforeAll(() => {
+    process.env.ADMIN_EMAILS = ADMIN_EMAIL
+  })
+  afterAll(() => {
+    delete process.env.ADMIN_EMAILS
+  })
+
+  it('stores over-long bullets untrimmed when the override is off', async () => {
+    const admin = await registerUser(ADMIN_EMAIL)
+    const off = await act(admin, 'deck.setNewSlideOverrides', {
+      deckId,
+      overflow: false,
+    })
+    expect(off.status).toBe(200)
+
+    const target = await SlideModel.create({
+      deckId,
+      index: 0,
+      layoutType: 'list',
+      title: 'Stages',
+      bullets: ['one', 'two', 'three'],
+    })
+    const gen = registry.get<GenerationProvider>('generation')
+    const refine = vi.spyOn(gen, 'refineSlide').mockResolvedValueOnce({
+      layoutType: 'list',
+      slots: {
+        title: 'This title definitely runs on for far too many characters',
+        bullets: [
+          'this bullet runs on for far longer than the seventy character budget allows it to',
+          ...Array.from({ length: 7 }, (_, i) => `bullet ${i}`), // 8 total
+        ],
+      },
+    })
+
+    const res = await act(ada, 'deck.refineSlide', {
+      deckId,
+      slideId: target._id.toString(),
+    })
+    expect(res.status).toBe(200)
+
+    const t = await SlideModel.findById(target._id)
+    // Untrimmed: the over-long title survives, all 8 bullets survive, and at
+    // least one is over the layout's 70-char bullet budget.
+    expect(t?.title!.length).toBeGreaterThan(44)
+    expect(t?.bullets).toHaveLength(8)
+    expect(t?.bullets?.some(b => b.length > 70)).toBe(true)
+    refine.mockRestore()
+  })
+
+  it('lets a layout-only switch through even when the target does not fit (fit gate skipped)', async () => {
+    const admin = await registerUser(ADMIN_EMAIL)
+    await act(admin, 'deck.setNewSlideOverrides', { deckId, overflow: false })
+
+    const owner = await UserModel.findOne({ email: 'ada@example.com' })
+    const template = await TemplateModel.create({
+      ownerId: owner!._id,
+      name: 'Two bodies (override)',
+      permalinkSlug: `two-bodies-override-${Date.now()}`,
+      theme: { background: '#ffffff', text: '#111111', accent: '#0055ff' },
+      layouts: [
+        {
+          type: 'wide',
+          label: 'Wide',
+          purpose: 'a roomy body',
+          slots: [
+            { name: 'title', kind: 'text', label: 'Title' },
+            { name: 'body', kind: 'text', label: 'Body', maxChars: 300 },
+          ],
+          elementPositions: {},
+        },
+        {
+          type: 'narrow',
+          label: 'Narrow',
+          purpose: 'a tight body',
+          slots: [
+            { name: 'title', kind: 'text', label: 'Title' },
+            { name: 'body', kind: 'text', label: 'Body', maxChars: 40 },
+          ],
+          elementPositions: {},
+        },
+        {
+          type: 'whiteboard',
+          label: 'Whiteboard',
+          purpose: 'a blank slate',
+          slots: [],
+          elementPositions: {},
+        },
+      ],
+      visibility: 'private',
+    })
+    const project = await act(ada, 'project.create', { title: 'Two bodies' })
+    const created = await act(ada, 'deck.create', {
+      projectId: project.body.id,
+      title: 'Lecture',
+      templateId: String(template._id),
+    })
+    const customDeckId = created.body.id as string
+    await DeckModel.updateOne(
+      { _id: customDeckId },
+      {
+        $set: { templateId: String(template._id) },
+        $unset: { templateVersionId: '' },
+      },
+    )
+    await act(admin, 'deck.setNewSlideOverrides', {
+      deckId: customDeckId,
+      overflow: false,
+    })
+    const target = await SlideModel.create({
+      deckId: customDeckId,
+      index: 0,
+      layoutType: 'wide',
+      title: 'Long body',
+      body: 'y'.repeat(200), // fits "wide" (300), far over "narrow" (40)
+    })
+
+    const gen = registry.get<GenerationProvider>('generation')
+    const refine = vi.spyOn(gen, 'refineSlide').mockResolvedValueOnce({
+      layoutType: 'narrow',
+      slots: {},
+    })
+
+    await act(ada, 'deck.refineSlide', {
+      deckId: customDeckId,
+      slideId: target._id.toString(),
+      options: { parts: { text: false, layout: true, imagery: false } },
+    })
+
+    const t = await SlideModel.findById(target._id)
+    // The switch is taken even though "narrow" cannot hold the body without
+    // a trim: with the override off, the fit-first gate is skipped.
+    expect(t?.layoutType).toBe('narrow')
+    expect(t?.body).toBe('y'.repeat(200))
+    refine.mockRestore()
+  })
+
+  it('stores over-long bullets untrimmed on a TEXT-ONLY refine (layout off)', async () => {
+    // This exercises the `want.text` branch alone (reconcile.ts ~688-697),
+    // distinct from the combined `want.text && want.layout` branch the first
+    // test above covers — each substitutes `clampToBudget` independently.
+    const admin = await registerUser(ADMIN_EMAIL)
+    await act(admin, 'deck.setNewSlideOverrides', { deckId, overflow: false })
+
+    const target = await SlideModel.create({
+      deckId,
+      index: 0,
+      layoutType: 'list',
+      title: 'Stages',
+      bullets: ['one'],
+    })
+    const gen = registry.get<GenerationProvider>('generation')
+    const refine = vi.spyOn(gen, 'refineSlide').mockResolvedValueOnce({
+      layoutType: 'content', // ignored for the clamp; text-only keeps the slide's own layout
+      slots: {
+        bullets: Array.from(
+          { length: 10 }, // over list's 5-item cap
+          () =>
+            'this bullet has words enough to run well past the seventy character limit',
+        ),
+      },
+    })
+
+    await act(ada, 'deck.refineSlide', {
+      deckId,
+      slideId: target._id.toString(),
+      options: { parts: { text: true, layout: false, imagery: false } },
+    })
+
+    const t = await SlideModel.findById(target._id)
+    expect(t?.layoutType).toBe('list') // layout untouched, as the option asked
+    expect(t?.bullets).toHaveLength(10) // untrimmed: over list's 5-item cap
+    expect(t?.bullets?.some(b => b.length > 70)).toBe(true)
+    refine.mockRestore()
+  })
+
+  it('stores an over-long split part untrimmed when Refine applies the split', async () => {
+    // Exercises `splitSlideIntoParts`'s clamp (reconcile.ts ~554-557) via the
+    // Refine call path, which passes `trimToBudget: false` when the switch
+    // is off — distinct from the manual deck.splitSlide path, which does not.
+    const admin = await registerUser(ADMIN_EMAIL)
+    await act(admin, 'deck.setNewSlideOverrides', { deckId, overflow: false })
+
+    const target = await SlideModel.create({
+      deckId,
+      index: 0,
+      layoutType: 'content',
+      title: 'Stages',
+      body: 'Absorption, transfer, then fixation.',
+    })
+    const gen = registry.get<GenerationProvider>('generation')
+    const refine = vi.spyOn(gen, 'refineSlide').mockResolvedValueOnce({
+      layoutType: 'content',
+      slots: { title: 'Stages', body: 'Absorption, transfer, then fixation.' },
+      splitProposal: {
+        reason: 'three separate stages',
+        parts: [
+          {
+            layoutType: 'list', // maxItems 5, maxChars 70
+            slots: {
+              title: 'Absorption',
+              bullets: Array.from(
+                { length: 8 }, // over the 5-item cap
+                () =>
+                  'a bullet with words enough to run well past the seventy character limit',
+              ),
+            },
+          },
+          { layoutType: 'content', slots: { title: 'Transfer', body: 'y' } },
+        ],
+      },
+    })
+
+    await act(ada, 'deck.refineSlide', {
+      deckId,
+      slideId: target._id.toString(),
+      options: { allowSplit: true },
+    })
+
+    const parts = await SlideModel.find({ deckId }).sort({ index: 1 })
+    expect(parts).toHaveLength(2)
+    const withBullets = parts.find(p => p.layoutType === 'list')!
+    // Untrimmed: all 8 bullets survive, over the 5-item cap and 70-char limit.
+    expect(withBullets.bullets).toHaveLength(8)
+    expect(withBullets.bullets?.some(b => b.length > 70)).toBe(true)
+    refine.mockRestore()
+  })
+
+  it('manual deck.splitSlide still trims an over-long part even with the switch off', async () => {
+    // The switch governs REFINE's trimming only; the hand-driven/MCP split
+    // action is not an update->new override and must keep trimming
+    // regardless (splitSlideIntoParts's `opts.trimToBudget` default).
+    const admin = await registerUser(ADMIN_EMAIL)
+    await act(admin, 'deck.setNewSlideOverrides', { deckId, overflow: false })
+
+    const target = await SlideModel.create({
+      deckId,
+      index: 0,
+      layoutType: 'content',
+      title: 'Stages',
+      body: 'Absorption, transfer, then fixation.',
+    })
+
+    const res = await act(ada, 'deck.splitSlide', {
+      deckId,
+      slideId: target._id.toString(),
+      parts: [
+        {
+          layoutType: 'list', // maxItems 5, maxChars 70
+          slots: {
+            title: 'Absorption',
+            bullets: Array.from(
+              { length: 8 }, // over the 5-item cap
+              () =>
+                'a bullet with words enough to run well past the seventy character limit',
+            ),
+          },
+        },
+        { layoutType: 'content', slots: { title: 'Transfer', body: 'y' } },
+      ],
+    })
+    expect(res.status).toBe(200)
+
+    const parts = await SlideModel.find({ deckId }).sort({ index: 1 })
+    const withBullets = parts.find(p => p.layoutType === 'list')!
+    // Trimmed: the manual split path always clamps, override or not.
+    expect(withBullets.bullets).toHaveLength(5)
+    for (const b of withBullets.bullets ?? [])
+      expect(b.length).toBeLessThanOrEqual(70)
+  })
+})
+
+/**
  * The transcript editor's "Refine" button runs the same narration pass, at the
  * same strength, but hands the text back instead of writing it.
  */

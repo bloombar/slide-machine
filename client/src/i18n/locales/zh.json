@@ -1160,6 +1160,18 @@
         "studyLabelHeading": "研究标签",
         "studyLabelHint": "可选的研究标签，用于在研究导出中对讲座进行分组，例如“单元-课程-条件”代码。仅管理员可见。",
         "studyLabelPlaceholder": "例如 B1-SWE-treatment",
+        "newSlideOverrides": {
+          "heading": "新建幻灯片覆盖设置",
+          "hint": "在实时生成过程中，服务器有时会否决AI“更新当前幻灯片”的决定。关闭其中任意一项即可看到没有它时的生成效果。仅管理员可见。",
+          "headerLabel": "标题/章节幻灯片提升",
+          "headerDescription": "在标题或章节幻灯片上讲述的新内容会变成一张新幻灯片，而不是添加到其中。",
+          "overflowLabel": "溢出提升",
+          "overflowDescription": "对幻灯片而言过长的更新会变成一张新幻灯片，而不是溢出。此项也会关闭“润色”过程中的裁剪。",
+          "whiteboardLabel": "白板提升",
+          "whiteboardDescription": "在白板幻灯片上讲话会变成一张新幻灯片，而不是添加画布无法显示的文字。",
+          "drawingLabel": "绘图中暂停",
+          "drawingDescription": "绘图进行中时，本应新建的幻灯片会被并入当前幻灯片的转录文本，而不会被创建。"
+        },
         "deleteHint": "删除课程会永久移除其幻灯片和参考材料。此操作无法撤销。"
       },
       "refine": {

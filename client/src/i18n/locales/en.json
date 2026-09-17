@@ -1160,6 +1160,18 @@
         "studyLabelHeading": "Study label",
         "studyLabelHint": "Optional research-study tag used to group lectures in research exports, e.g. a block-course-condition code. Visible to admins only.",
         "studyLabelPlaceholder": "e.g. B1-SWE-treatment",
+        "newSlideOverrides": {
+          "heading": "New-slide overrides",
+          "hint": "During live generation the server sometimes overrules the AI's \"update the current slide\" decision. Switch any of these off to see generation without it. Visible to admins only.",
+          "headerLabel": "Title/section slide promotion",
+          "headerDescription": "New content spoken over a title or section slide becomes a new slide instead of being added to it.",
+          "overflowLabel": "Overflow promotion",
+          "overflowDescription": "An update too long for its slide becomes a new slide instead of overflowing it. Also turns off trimming during Refine.",
+          "whiteboardLabel": "Whiteboard promotion",
+          "whiteboardDescription": "Speaking over a whiteboard slide becomes a new slide instead of adding text the canvas cannot show.",
+          "drawingLabel": "Drawing-in-progress hold",
+          "drawingDescription": "While a drawing is in progress, a would-be new slide is folded into the current slide's transcript instead of being created."
+        },
         "deleteHint": "Deleting a lecture permanently removes its slides and seed material. This cannot be undone."
       },
       "refine": {

@@ -293,6 +293,17 @@ export interface DeckSetTtsVoiceInput {
   voice: string | null
 }
 
+/** Admin-only (GEN-8): per-lecture switches for the server's automatic
+ * update→new-slide overrides, for experimentation. Null re-inherits the
+ * default (on); any field left absent is unchanged. */
+export interface DeckSetNewSlideOverridesInput {
+  deckId: string
+  header?: boolean | null
+  overflow?: boolean | null
+  whiteboard?: boolean | null
+  drawing?: boolean | null
+}
+
 /** One finalized spoken (or typed, until STT lands) phrase for a live session. */
 export interface SessionPhraseInput {
   deckId: string

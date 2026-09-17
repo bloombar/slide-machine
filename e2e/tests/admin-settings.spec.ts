@@ -242,6 +242,55 @@ test("the admin edits another user's lecture settings", async ({ page }) => {
   await expect(page.getByLabel('AI freedom')).toHaveValue('4')
 })
 
+test('a regular user never sees the new-slide overrides (GEN-8), even their own', async ({
+  page,
+}) => {
+  await ensureSignedIn(page, owner)
+  await page.goto('/app')
+  await page.getByRole('link', { name: projectTitle }).click()
+  await page.getByRole('link', { name: deckTitle }).click()
+  await page.getByRole('button', { name: 'Lecture settings' }).click()
+  const modal = page.getByRole('dialog', { name: 'Lecture settings' })
+  await expect(modal).toBeVisible()
+  await expect(
+    modal.getByRole('checkbox', { name: /Overflow promotion/ }),
+  ).toHaveCount(0)
+})
+
+test('the admin sees the new-slide overrides (GEN-8) and a toggle persists', async ({
+  page,
+}) => {
+  await ensureSignedIn(page, admin)
+  await page.goto('/app/admin')
+  await page.getByRole('link', { name: owner.email }).click()
+  await page.getByRole('link', { name: projectTitle }).click()
+  await page.getByRole('link', { name: deckTitle }).click()
+  await page.getByRole('button', { name: 'View slideshow' }).click()
+  await expect(page).toHaveURL(/\/d\//)
+
+  const modal = await openSettingsAsAdmin(page, 'Lecture settings')
+  const overflow = modal.getByRole('checkbox', { name: /Overflow promotion/ })
+  await expect(overflow).toBeChecked()
+  const saved = page.waitForResponse(
+    res =>
+      res.url().includes('deck.setNewSlideOverrides') && res.status() === 200,
+  )
+  // The checkbox is controlled by the saved deck, so it only flips once the
+  // save round-trips — a plain click, not uncheck() (which verifies the
+  // state synchronously and would race the request).
+  await overflow.click()
+  await saved
+  await expect(overflow).not.toBeChecked()
+
+  // Survives a reload, so it really was stored.
+  await page.reload()
+  await page.getByRole('button', { name: 'Lecture settings' }).click()
+  await page.getByRole('button', { name: 'Edit settings' }).click()
+  await expect(
+    page.getByRole('checkbox', { name: /Overflow promotion/ }),
+  ).not.toBeChecked()
+})
+
 test('every edit is recorded in the audit log', async ({ page }) => {
   await ensureSignedIn(page, admin)
   await page.goto('/app/admin/logs')

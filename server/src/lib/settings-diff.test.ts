@@ -54,4 +54,16 @@ describe('diffSettings', () => {
     expect(bio!.to).toBe(`${'x'.repeat(200)}…`)
     expect(String(bio!.to)).toHaveLength(201)
   })
+
+  // GEN-8: the new-slide override toggles are stored absent-means-on, so a
+  // caller switching one off must diff as false-vs-null, not vanish because
+  // both sides look "falsy".
+  it('records a new-slide override switched off', () => {
+    expect(
+      diffSettings<{ newSlideOverrideOverflow?: boolean }>(
+        {},
+        { newSlideOverrideOverflow: false },
+      ),
+    ).toEqual({ newSlideOverrideOverflow: { from: null, to: false } })
+  })
 })

@@ -108,6 +108,7 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
   'deck.setAccess': { resource: 'deck', level: 'settings' },
   'deck.setGenerationFreedom': { resource: 'deck', level: 'settings' },
   'deck.setLanguage': { resource: 'deck', level: 'settings' },
+  'deck.setNewSlideOverrides': { resource: 'deck', level: 'settingsAdmin' },
   'deck.setRefineSettings': { resource: 'deck', level: 'settings' },
   'deck.setSeedNotes': { resource: 'deck', level: 'settings' },
   'deck.setStudyLabel': { resource: 'deck', level: 'settingsAdmin' },
