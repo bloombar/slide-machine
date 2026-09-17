@@ -17,6 +17,7 @@ import type {
   DeckSetAccessInput,
   DeckSetGenerationFreedomInput,
   DeckSetLanguageInput,
+  DeckSetNewSlideOverridesInput,
   DeckSetRefineSettingsInput,
   DeckSetTtsVoiceInput,
   DeckSetSeedNotesInput,
@@ -105,6 +106,7 @@ import {
   updateOverflows,
   charCount,
 } from '../lib/slide-fit'
+import { isNewSlideOverrideOn } from '../lib/new-slide-overrides'
 import { declaredContentOf, onlyDeclaredBy } from '../lib/generated-slots'
 import {
   layoutDisplaysContent,
@@ -1403,7 +1405,10 @@ export const sessionPhrase = defineAction<
       result.action === 'update' &&
       lastSlide &&
       isHeaderLayout(lastSlide.layoutType, descriptors) &&
-      (result.slots.body || result.slots.bullets?.length)
+      (result.slots.body || result.slots.bullets?.length) &&
+      // GEN-8 admin override: off means the update lands on the header slide
+      // in place instead of being promoted (an admin experiment).
+      isNewSlideOverrideOn(deck.newSlideOverrideHeader)
     ) {
       // GEN-13: while lastSlide was untitled, the `titled` fragment asked
       // the model for a title for lastSlide's own content, not for the new
@@ -1459,6 +1464,9 @@ export const sessionPhrase = defineAction<
     if (
       result.action === 'update' &&
       lastSlide &&
+      // GEN-8 admin override: off means an overflowing update lands in place,
+      // unclamped (an admin experiment) — see isNewSlideOverrideOn.
+      isNewSlideOverrideOn(deck.newSlideOverrideOverflow) &&
       updateOverflows(
         result,
         {
@@ -1493,7 +1501,11 @@ export const sessionPhrase = defineAction<
     // joins its transcript.
     if (
       result.action === 'update' &&
-      lastSlide?.layoutType === WHITEBOARD_LAYOUT_TYPE
+      lastSlide?.layoutType === WHITEBOARD_LAYOUT_TYPE &&
+      // GEN-8 admin override: off means the update lands on the canvas
+      // slide's document as usual, even though the drawing does not show it
+      // (an admin experiment).
+      isNewSlideOverrideOn(deck.newSlideOverrideWhiteboard)
     ) {
       // GEN-13: unlike the header and overflow promotions above, no title
       // redirect happens here. The `untitled` prompt fragment excludes
@@ -1514,7 +1526,16 @@ export const sessionPhrase = defineAction<
     // and the "new slide" voice command bypass this action, so explicit slide
     // creation still works. With no current slide there is nothing to append
     // to, so a slide is created as usual.
-    if (input.suppressNewSlide && result.action === 'new' && lastSlide) {
+    if (
+      input.suppressNewSlide &&
+      result.action === 'new' &&
+      lastSlide &&
+      // GEN-8 admin override: off means a new slide is created as usual
+      // instead of being folded into the current slide's transcript (an
+      // admin experiment). keepLayout (also driven by suppressNewSlide) is
+      // unaffected.
+      isNewSlideOverrideOn(deck.newSlideOverrideDrawing)
+    ) {
       lastSlide.sourceTranscript = [lastSlide.sourceTranscript, input.phrase]
         .filter(Boolean)
         .join(' ')
@@ -1766,6 +1787,41 @@ export const deckSetRefineSettings = defineAction<
         deck.refineTranscriptEnabled = input.transcriptEnabled ?? undefined
       if (input.transcriptLevel !== undefined)
         deck.refineTranscriptLevel = input.transcriptLevel ?? undefined
+      await deck.save()
+      return toDeckDto(deck, acl)
+    }),
+})
+
+/** Admin-only per-lecture switches for the server's automatic
+ * update->new-slide overrides (GEN-8), for experimentation. Gated with
+ * `settingsAdminOf` like `deckSetStudyLabel`: an owner or editor who is not
+ * an allowlisted admin is refused, same as anyone else — the UI hiding these
+ * checkboxes is not the security boundary. For each field a value sets it,
+ * null re-inherits the default (on), and absent leaves it unchanged. */
+export const deckSetNewSlideOverrides = defineAction<
+  DeckSetNewSlideOverridesInput,
+  Deck,
+  DeckSettingsAccess
+>({
+  name: 'deck.setNewSlideOverrides',
+  access: settingsAdminOf,
+  input: z.object({
+    deckId: z.string().min(1),
+    header: z.boolean().nullable().optional(),
+    overflow: z.boolean().nullable().optional(),
+    whiteboard: z.boolean().nullable().optional(),
+    drawing: z.boolean().nullable().optional(),
+  }),
+  execute: (ctx, input, access) =>
+    withDeckSettingsAudit(access, async (deck, acl) => {
+      if (input.header !== undefined)
+        deck.newSlideOverrideHeader = input.header ?? undefined
+      if (input.overflow !== undefined)
+        deck.newSlideOverrideOverflow = input.overflow ?? undefined
+      if (input.whiteboard !== undefined)
+        deck.newSlideOverrideWhiteboard = input.whiteboard ?? undefined
+      if (input.drawing !== undefined)
+        deck.newSlideOverrideDrawing = input.drawing ?? undefined
       await deck.save()
       return toDeckDto(deck, acl)
     }),
@@ -2179,6 +2235,7 @@ registerAction(sessionPhrase)
 registerAction(deckSetSeedNotes)
 registerAction(deckSetGenerationFreedom)
 registerAction(deckSetRefineSettings)
+registerAction(deckSetNewSlideOverrides)
 registerAction(deckSetLanguage)
 registerAction(deckSetTtsVoice)
 registerAction(deckSetStudyLabel)

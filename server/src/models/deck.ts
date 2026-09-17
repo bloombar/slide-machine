@@ -237,6 +237,12 @@ const deckSchema = new Schema<DeckDb>(
     refineSplitEnabled: { type: Boolean, default: undefined },
     refineTranscriptEnabled: { type: Boolean, default: undefined },
     refineTranscriptLevel: { type: Number, min: 1, max: 5, default: undefined },
+    // Admin-only per-lecture switches for the server's automatic
+    // update->new-slide overrides (GEN-8); absent = on (current behaviour).
+    newSlideOverrideHeader: { type: Boolean, default: undefined },
+    newSlideOverrideOverflow: { type: Boolean, default: undefined },
+    newSlideOverrideWhiteboard: { type: Boolean, default: undefined },
+    newSlideOverrideDrawing: { type: Boolean, default: undefined },
     // Explicit lecturing language only; absent = inherit (project, then
     // owner profile, then the speaker's browser)
     language: { type: String, enum: LOCALES, default: undefined },
@@ -427,6 +433,10 @@ export const toDeckDto = (
   refineSplitEnabled: doc.refineSplitEnabled,
   refineTranscriptEnabled: doc.refineTranscriptEnabled,
   refineTranscriptLevel: doc.refineTranscriptLevel,
+  newSlideOverrideHeader: doc.newSlideOverrideHeader,
+  newSlideOverrideOverflow: doc.newSlideOverrideOverflow,
+  newSlideOverrideWhiteboard: doc.newSlideOverrideWhiteboard,
+  newSlideOverrideDrawing: doc.newSlideOverrideDrawing,
   language: doc.language,
   ttsVoice: doc.ttsVoice,
   titleLocked: doc.titleLocked,
@@ -438,9 +448,10 @@ export const toDeckDto = (
   updatedAt: (doc.updatedAt ?? doc.createdAt).toISOString(),
 })
 
-/** The deck as shown to non-owners: share lists stay with the owner, and
- * the study label (EVAL-3) is admin-facing research metadata a viewer has
- * no business reading — it can name a study condition. */
+/** The deck as shown to non-owners: share lists stay with the owner, the
+ * study label (EVAL-3) is admin-facing research metadata a viewer has no
+ * business reading — it can name a study condition — and the same goes for
+ * the GEN-8 new-slide override switches, admin experiment metadata. */
 export const toSharedDeckDto = (
   doc: HydratedDocument<DeckDb>,
   acl: ResolvedAcl,
@@ -449,5 +460,12 @@ export const toSharedDeckDto = (
   delete dto.viewers
   delete dto.editors
   delete dto.studyLabel
+  // GEN-8: admin experiment metadata, same reasoning as studyLabel — a
+  // shared viewer has no business seeing which automatic overrides an admin
+  // has switched off for this lecture.
+  delete dto.newSlideOverrideHeader
+  delete dto.newSlideOverrideOverflow
+  delete dto.newSlideOverrideWhiteboard
+  delete dto.newSlideOverrideDrawing
   return dto
 }

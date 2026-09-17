@@ -1160,6 +1160,18 @@
         "studyLabelHeading": "Étiquette d'étude",
         "studyLabelHint": "Étiquette facultative d'étude de recherche pour regrouper les cours dans les exports de recherche, p. ex. un code bloc-cours-condition. Visible uniquement par les administrateurs.",
         "studyLabelPlaceholder": "p. ex. B1-SWE-treatment",
+        "newSlideOverrides": {
+          "heading": "Dérogations de nouvelle diapositive",
+          "hint": "Pendant la génération en direct, le serveur outrepasse parfois la décision de l'IA de \"mettre à jour la diapositive actuelle\". Désactivez l'une de ces options pour voir la génération sans elle. Visible uniquement par les administrateurs.",
+          "headerLabel": "Promotion des diapositives de titre/section",
+          "headerDescription": "Un nouveau contenu prononcé sur une diapositive de titre ou de section devient une nouvelle diapositive au lieu d'y être ajouté.",
+          "overflowLabel": "Promotion par débordement",
+          "overflowDescription": "Une mise à jour trop longue pour sa diapositive devient une nouvelle diapositive au lieu de la faire déborder. Désactive aussi la découpe pendant Affiner.",
+          "whiteboardLabel": "Promotion du tableau blanc",
+          "whiteboardDescription": "Parler sur une diapositive de tableau blanc devient une nouvelle diapositive au lieu d'ajouter un texte que le canevas ne peut pas afficher.",
+          "drawingLabel": "Pause pendant le dessin",
+          "drawingDescription": "Pendant qu'un dessin est en cours, une nouvelle diapositive potentielle est ajoutée à la transcription de la diapositive actuelle au lieu d'être créée."
+        },
         "deleteHint": "La suppression d’un cours efface définitivement ses diapositives et ses documents sources. Cette action est irréversible."
       },
       "refine": {

@@ -1160,6 +1160,18 @@
         "studyLabelHeading": "Etiqueta de estudio",
         "studyLabelHint": "Etiqueta opcional de estudio de investigación para agrupar clases en las exportaciones de investigación, p. ej. un código de bloque-curso-condición. Visible solo para administradores.",
         "studyLabelPlaceholder": "p. ej. B1-SWE-treatment",
+        "newSlideOverrides": {
+          "heading": "Anulaciones de diapositiva nueva",
+          "hint": "Durante la generación en vivo, el servidor a veces anula la decisión de la IA de \"actualizar la diapositiva actual\". Desactiva cualquiera de estas para ver la generación sin ella. Visible solo para administradores.",
+          "headerLabel": "Promoción de diapositiva de título/sección",
+          "headerDescription": "El contenido nuevo dicho sobre una diapositiva de título o sección se convierte en una diapositiva nueva en lugar de añadirse a ella.",
+          "overflowLabel": "Promoción por desbordamiento",
+          "overflowDescription": "Una actualización demasiado larga para su diapositiva se convierte en una diapositiva nueva en lugar de desbordarla. También desactiva el recorte durante Refinar.",
+          "whiteboardLabel": "Promoción de pizarra",
+          "whiteboardDescription": "Hablar sobre una diapositiva de pizarra se convierte en una diapositiva nueva en lugar de añadir texto que el lienzo no puede mostrar.",
+          "drawingLabel": "Pausa mientras se dibuja",
+          "drawingDescription": "Mientras un dibujo está en curso, una posible diapositiva nueva se añade a la transcripción de la diapositiva actual en lugar de crearse."
+        },
         "deleteHint": "Eliminar una clase borra de forma permanente sus diapositivas y su material de referencia. Esta acción no se puede deshacer."
       },
       "refine": {

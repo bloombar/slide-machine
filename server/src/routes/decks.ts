@@ -192,12 +192,17 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
       )?.value ?? 0)
     : 0
   const { up: voteUp, down: voteDown } = await voteBreakdown('deck', deck._id)
-  // The shared shape drops the study label (EVAL-3), but an admin opening
-  // another user's settings needs the current value — re-attach it for any
-  // allowlisted admin, checking only when there is a label to reveal.
+  // The shared shape drops the study label (EVAL-3) and the GEN-8 new-slide
+  // override switches, but an admin opening another user's settings needs
+  // the current values — re-attach them for any allowlisted admin.
   const deckDto = isOwner ? toDeckDto(deck, acl) : toSharedDeckDto(deck, acl)
-  if (!isOwner && deck.studyLabel && (admin || (await adminViewer(req.userId))))
-    deckDto.studyLabel = deck.studyLabel
+  if (!isOwner && (admin || (await adminViewer(req.userId)))) {
+    if (deck.studyLabel) deckDto.studyLabel = deck.studyLabel
+    deckDto.newSlideOverrideHeader = deck.newSlideOverrideHeader
+    deckDto.newSlideOverrideOverflow = deck.newSlideOverrideOverflow
+    deckDto.newSlideOverrideWhiteboard = deck.newSlideOverrideWhiteboard
+    deckDto.newSlideOverrideDrawing = deck.newSlideOverrideDrawing
+  }
   const body: DeckViewResponse = {
     deck: deckDto,
     slides: slides.map(toSlideDto),

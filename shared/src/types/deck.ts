@@ -93,6 +93,25 @@ export interface Deck {
   /** Per-lecture "Refine the spoken transcript" strength (1-5); absent =
    * inherit the server default. Stored only once moved. */
   refineTranscriptLevel?: number
+  /** Admin-only (GEN-8): during live generation, an update carrying real
+   * content onto a header (title/section) slide is promoted to a new slide.
+   * Absent/true = on (current behaviour); false = the update lands on the
+   * header slide in place instead. */
+  newSlideOverrideHeader?: boolean
+  /** Admin-only (GEN-8): during live generation, an update that would
+   * overflow its slide's budget is promoted to a new slide. Absent/true =
+   * on; false = the update lands in place, unclamped. Also turns off
+   * Refine's box-limit trimming (GEN-4) for this lecture. */
+  newSlideOverrideOverflow?: boolean
+  /** Admin-only (GEN-8): during live generation, an update to a whiteboard
+   * canvas is promoted to a new slide (the canvas has no text slots to show
+   * it). Absent/true = on; false = the update lands on the canvas slide's
+   * document, even though the drawing does not display it. */
+  newSlideOverrideWhiteboard?: boolean
+  /** Admin-only (GEN-8): while a drawing is in progress (suppressNewSlide),
+   * a would-be new slide is instead appended to the current slide's
+   * transcript. Absent/true = on; false = a new slide is created as usual. */
+  newSlideOverrideDrawing?: boolean
   /** Lecturing/generation language, only when explicitly chosen; absent
    * = inherit (project, then owner profile, then browser default). */
   language?: Locale

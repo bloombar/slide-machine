@@ -733,3 +733,69 @@ describe('DeckSettingsModal — study label (EVAL-3)', () => {
     )
   })
 })
+
+describe('DeckSettingsModal — new-slide overrides (GEN-8)', () => {
+  it('hides the checkboxes from non-admin viewers, owner included', () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+    })
+    renderModal()
+    expect(
+      screen.queryByRole('checkbox', {
+        name: /Title\/section slide promotion/,
+      }),
+    ).toBeNull()
+  })
+
+  it('shows all four checkboxes to an admin, checked by default (unset = on)', () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+    })
+    renderModal({}, { viewerIsAdmin: true })
+    for (const label of [
+      /Title\/section slide promotion/,
+      /Overflow promotion/,
+      /Whiteboard promotion/,
+      /Drawing-in-progress hold/,
+    ]) {
+      expect(screen.getByRole('checkbox', { name: label })).toBeChecked()
+    }
+  })
+
+  it('reflects an explicitly-off switch as unchecked', () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+    })
+    renderModal({ newSlideOverrideOverflow: false }, { viewerIsAdmin: true })
+    expect(
+      screen.getByRole('checkbox', { name: /Overflow promotion/ }),
+    ).not.toBeChecked()
+    expect(
+      screen.getByRole('checkbox', {
+        name: /Title\/section slide promotion/,
+      }),
+    ).toBeChecked()
+  })
+
+  it('toggling a checkbox sends the field and reports the fresh deck', async () => {
+    let sent: Record<string, unknown> = {}
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.setNewSlideOverrides': init => {
+        sent = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { ...baseDeck, newSlideOverrideHeader: false },
+        }
+      },
+    })
+    const { onDeckChange } = renderModal({}, { viewerIsAdmin: true })
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: /Title\/section slide promotion/,
+      }),
+    )
+    await waitFor(() => expect(onDeckChange).toHaveBeenCalled())
+    expect(sent).toEqual({ deckId: 'd1', header: false })
+  })
+})

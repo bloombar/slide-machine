@@ -889,3 +889,39 @@ entirely).
 **Split parts clamped in `splitSlideIntoParts`**, shared by both `deck.refineSlide`'s applied split and
 `deck.splitSlide` (the manual/MCP caller) — the brief called this intended, so no separate path was added for
 either caller.
+
+## GEN-8 admin switches for the update->new-slide overrides (2026-09-17)
+
+**Field shape: four flat optional booleans**, not a nested `newSlideOverrides` object. The existing per-lecture
+toggles (`refineSlidesEnabled`, `refineSplitEnabled`, …) are all flat, and `lib/settings-diff.ts`'s `diffSettings`
+is a shallow `!==` compare — a nested object would always look "changed" (different reference) or never look
+changed (same reference reused), neither of which is what the audit log should record. One shared resolver,
+`isNewSlideOverrideOn` (`lib/new-slide-overrides.ts`), reads any of the four the same way: `value !== false`,
+i.e. absent/undefined/true is on, only an explicit `false` is off.
+
+**Admin-only enforcement reuses `deckSettingsAdmin`/`settingsAdminOf`**, the exact gate `deck.setStudyLabel`
+already uses: an owner or editor who is not an allowlisted admin is refused, same as anyone else — being the
+lecture's owner is not sufficient, matching the brief's "the UI hiding is not the security boundary." An admin
+editing their own lecture, or another user's on the audited override, both reach it the same way `deckSettings`
+routes any other setting.
+
+**Whiteboard-off semantics**: turning the whiteboard override off does not make the canvas render text — it
+just stops the promotion, so the update lands on the whiteboard slide's document (title/body/bullets) via the
+ordinary additive-update path, same as any other layout. The drawing tool still shows nothing, which is the
+acknowledged, documented cost of an admin experimenting with the switch off; nothing about the whiteboard
+canvas itself changed.
+
+**Refine's overflow coupling**: the brief specified the lecture's `newSlideOverrideOverflow` switch also turns
+off Refine's box-limit trimming (added in PR #385/GEN-4). Implemented as a single `trimToBudget` boolean
+resolved once at the top of `refineOneSlide` (reconcile.ts) from `isNewSlideOverrideOn(deck.newSlideOverrideOverflow)`,
+threaded through to the three trim sites (text+layout clamp, text-only clamp, and the layout-only fit gate) and
+into `splitSlideIntoParts` as an explicit `opts.trimToBudget` parameter — NOT read from `deck` inside
+`splitSlideIntoParts` itself, because that function is also called by `deck.splitSlide` (the manual/MCP split
+action), which the brief says must keep trimming regardless of the lecture's override. Threading it as an
+explicit parameter (default `true`) keeps the manual path's behaviour unchanged while Refine's call passes the
+resolved flag.
+
+**GEN-13 title redirects**: the header and overflow promotion `if` blocks already contained both the redirect
+(moving a title the model wrote for `lastSlide` onto `lastSlide` before promoting) and the promotion itself in
+one block; adding `isNewSlideOverrideOn(...)` as one more `&&` condition on the same `if` means the redirect
+only runs when the promotion actually fires, with no separate check needed.

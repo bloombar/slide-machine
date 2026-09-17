@@ -80,6 +80,10 @@ export const deckSettingsSnapshot = (
   refineSlidesLevel: doc.refineSlidesLevel,
   refineTranscriptEnabled: doc.refineTranscriptEnabled,
   refineTranscriptLevel: doc.refineTranscriptLevel,
+  newSlideOverrideHeader: doc.newSlideOverrideHeader,
+  newSlideOverrideOverflow: doc.newSlideOverrideOverflow,
+  newSlideOverrideWhiteboard: doc.newSlideOverrideWhiteboard,
+  newSlideOverrideDrawing: doc.newSlideOverrideDrawing,
   viewers: people(acl.viewers),
   editors: people(acl.editors),
 })

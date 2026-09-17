@@ -70,6 +70,7 @@ import { planReformat } from '../lib/reformat-plan'
 import { imageSlotNames, layoutHasImageSlot } from '../lib/image-layout'
 import { layoutDisplaysContent } from '../lib/layout-refit'
 import { clampToBudget, layoutFitsBudget } from '../lib/slide-fit'
+import { isNewSlideOverrideOn } from '../lib/new-slide-overrides'
 import { enrichSlideImages } from '../enrichment/enrich'
 import type { SlideImageContext } from '../enrichment/types'
 import { deriveImageKeywords } from '../enrichment/keywords'
@@ -531,8 +532,12 @@ const splitSlideIntoParts = async (
   slide: SlideDoc,
   parts: SlideSplitPart[],
   descriptors: LayoutDescriptor[],
-  opts: { reason?: string } = {},
+  opts: { reason?: string; trimToBudget?: boolean } = {},
 ): Promise<AppliedSplit> => {
+  // GEN-8: Refine's call passes `trimToBudget: false` when the lecture's
+  // overflow override is off; the hand-driven deck.splitSlide action always
+  // trims (it is not an update->new override).
+  const trimToBudget = opts.trimToBudget ?? true
   const known = new Set(descriptors.map(d => d.type))
   // A layout this deck's design does not have would draw nothing. Falling
   // back to the slide's own layout keeps every part visible, which beats
@@ -548,7 +553,8 @@ const splitSlideIntoParts = async (
   // have already trimmed them.
   const clampedPart = (part: SlideSplitPart): SlideSplitPart => {
     const layoutType = layoutOf(part.layoutType)
-    return clampToBudget({ ...part, layoutType }, descriptors)
+    const withLayout = { ...part, layoutType }
+    return trimToBudget ? clampToBudget(withLayout, descriptors) : withLayout
   }
 
   const firstClamped = clampedPart(first!)
@@ -638,6 +644,12 @@ const refineOneSlide = async (
   const want = resolveParts(parts)
   if (!want.text && !want.layout && !want.imagery) return { changed: false }
 
+  // GEN-8 admin override: the lecture's overflow switch also governs
+  // Refine's box-limit trimming (GEN-4) — off means text refine and split
+  // parts skip clampToBudget, and the layout-only switch skips the
+  // fit-first gate below (layoutDisplaysContent still applies).
+  const trimToBudget = isNewSlideOverrideOn(deck.newSlideOverrideOverflow)
+
   // Splitting is a claim about the WORDS — that they are two ideas, or more
   // than a slide can hold. A layout- or imagery-only refine never looked at
   // them, so it cannot make that claim and does not ask for one.
@@ -668,13 +680,20 @@ const refineOneSlide = async (
       // Refine is prompted with every box's limit (GEN-4), but the model is
       // never trusted with them — clamped to the budget of the layout the
       // slide actually ends on, same as a live new slide (clampToBudget).
-      applyContent(slide, clampToBudget(result, descriptors))
+      // GEN-8: skipped when the lecture's overflow override is off.
+      applyContent(
+        slide,
+        trimToBudget ? clampToBudget(result, descriptors) : result,
+      )
     } else if (want.text) {
       // Layout is the user's; only the words change. Substitute it first, so
       // the clamp below is against the layout the slide will actually end on.
+      const withOwnLayout = { ...result, layoutType: slide.layoutType }
       applyContent(
         slide,
-        clampToBudget({ ...result, layoutType: slide.layoutType }, descriptors),
+        trimToBudget
+          ? clampToBudget(withOwnLayout, descriptors)
+          : withOwnLayout,
       )
     } else if (
       layoutDisplaysContent(
@@ -687,7 +706,10 @@ const refineOneSlide = async (
       // taken when the slide's EXISTING content already fits the target
       // layout's limits (GEN-4) — otherwise the switch would need a trim it
       // is not allowed to make, and the slide keeps its current layout.
-      layoutFitsBudget(contentOf(slide), result.layoutType, descriptors)
+      // GEN-8: this fit-first gate is skipped when the overflow override is
+      // off; layoutDisplaysContent above still applies.
+      (!trimToBudget ||
+        layoutFitsBudget(contentOf(slide), result.layoutType, descriptors))
     ) {
       // Layout only: keep every word, move the slide to the better layout.
       slide.layoutType = result.layoutType
@@ -725,6 +747,7 @@ const refineOneSlide = async (
   const split = proposal
     ? await splitSlideIntoParts(deck, slide, proposal.parts, descriptors, {
         reason: proposal.reason,
+        trimToBudget,
       })
     : undefined
 
