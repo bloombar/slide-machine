@@ -2162,9 +2162,9 @@
     separation has to be structural rather than promissory. Exit-ticket
     responses stay in the instructor's institutional workspace and are never
     ingested by the app (EVAL-4 is deliberately unbuilt, and its body says why
-    that absence is the safer position). No student PII enters the app (P-2);
-    retained lecture transcripts are scrubbed of student utterances before
-    analysis, and audio retention (P-6) stays disabled for the…
+    that absence is the safer position). The only student PII the app stores is
+    the institutional email address of a student who signs in (P-2 keeps it from
+    external models); retained lecture transcripts are…
   section: §16 Privacy, Security & Compliance
   family: P
   phase: 3
