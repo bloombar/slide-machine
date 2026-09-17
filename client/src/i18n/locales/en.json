@@ -1161,8 +1161,9 @@
         "studyLabelHint": "Optional research-study tag used to group lectures in research exports, e.g. a block-course-condition code. Visible to admins only.",
         "studyLabelPlaceholder": "e.g. B1-SWE-treatment",
         "newSlideOverrides": {
+          "advancedToggle": "Advanced settings",
           "heading": "New-slide overrides",
-          "hint": "During live generation the server sometimes overrules the AI's \"update the current slide\" decision. Tick or untick any of these to change how it overrides the AI. Visible to admins only.",
+          "hint": "These switches control when the server overrides the AI's choice between updating the current slide and starting a new one. Each can be ticked or unticked per lecture; overflow is off unless ticked, and also decides whether Refine trims text to the box limits. You can also change how much each box holds in the <designLink>design's character and bullet limits</designLink>.",
           "headerLabel": "Title/section slide promotion",
           "headerDescription": "New content spoken over a title or section slide becomes a new slide instead of being added to it.",
           "overflowLabel": "Overflow promotion",

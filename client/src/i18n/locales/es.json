@@ -1161,8 +1161,9 @@
         "studyLabelHint": "Etiqueta opcional de estudio de investigación para agrupar clases en las exportaciones de investigación, p. ej. un código de bloque-curso-condición. Visible solo para administradores.",
         "studyLabelPlaceholder": "p. ej. B1-SWE-treatment",
         "newSlideOverrides": {
+          "advancedToggle": "Ajustes avanzados",
           "heading": "Anulaciones de diapositiva nueva",
-          "hint": "Durante la generación en vivo, el servidor a veces anula la decisión de la IA de \"actualizar la diapositiva actual\". Marca o desmarca cualquiera de estas para cambiar cómo anula a la IA. Visible solo para administradores.",
+          "hint": "Estos interruptores controlan cuándo el servidor anula la decisión de la IA entre actualizar la diapositiva actual y crear una nueva. Cada uno se puede marcar o desmarcar por clase; el de desbordamiento está desactivado a menos que se marque, y también decide si Refinar recorta el texto a los límites de la caja. También puedes cambiar cuánto contiene cada caja en los <designLink>límites de caracteres y viñetas del diseño</designLink>.",
           "headerLabel": "Promoción de diapositiva de título/sección",
           "headerDescription": "El contenido nuevo dicho sobre una diapositiva de título o sección se convierte en una diapositiva nueva en lugar de añadirse a ella.",
           "overflowLabel": "Promoción por desbordamiento",

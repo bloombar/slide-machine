@@ -1056,3 +1056,28 @@ restore — see the developer report for this round for the exact failures).
 plain strings in, one string out, and the round-2 brief asked for direct unit tests of the helper — giving it
 its own module (mirroring `slide-fit.ts`) makes that a plain `import` rather than exporting an action-file
 internal for tests alone.
+
+## GEN-8 advanced-settings disclosure (2026-09-17)
+
+**Disclosure pattern: a `<button>` with `aria-expanded`/`aria-controls`, not `<details>/<summary>`.** `QuizPanel`
+already has an "Advanced settings" toggle built this way (a chevron that rotates, plain-language label), so
+`DeckSettingsModal`'s new-slide overrides reuse the same shape rather than introducing `<details>` as a second
+house style. `aria-controls` was added on top of `QuizPanel`'s version (it only had `aria-expanded`) since the
+brief asked for it and it costs nothing to point at the panel's id.
+
+**One boolean gates the whole section**: `showAdvancedSettings = viewerIsAdmin`. Both the toggle button and the
+expanded content read this single constant rather than `viewerIsAdmin` inline in two places, so opening the
+section to non-admins later is a one-line change instead of a search for every gate.
+
+**Collapse state is not persisted** — `useState(false)` inside the modal component, which is unmounted on
+close, so every open starts collapsed for free; no lecture field or localStorage entry was added.
+
+**Design-tab link is a `<button>` inside a `Trans`, not a `react-router` `Link`** — it flips this same modal's
+own `tab` state (`setTab('template')`) rather than navigating anywhere, matching how the tab list already
+works; a `Link` would have meant leaving the modal and reopening it on the Design tab, which is not what
+"switch to Design" should cost.
+
+**The group hint text was rewritten rather than kept alongside a new paragraph** — the old copy ("visible to
+admins only") was redundant once the whole section sits behind an admin-gated disclosure, so the explanation
+of what the switches do, the overflow/Refine coupling, and the pointer to the Design tab's box limits were
+folded into a single paragraph instead of stacking two explanations above the checkboxes.
