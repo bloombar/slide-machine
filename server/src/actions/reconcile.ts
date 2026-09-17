@@ -69,6 +69,7 @@ import { mapSpeakerRoles } from '../lib/speaker-roles'
 import { planReformat } from '../lib/reformat-plan'
 import { imageSlotNames, layoutHasImageSlot } from '../lib/image-layout'
 import { layoutDisplaysContent } from '../lib/layout-refit'
+import { clampToBudget, layoutFitsBudget } from '../lib/slide-fit'
 import { enrichSlideImages } from '../enrichment/enrich'
 import type { SlideImageContext } from '../enrichment/types'
 import { deriveImageKeywords } from '../enrichment/keywords'
@@ -541,29 +542,37 @@ const splitSlideIntoParts = async (
 
   const [first, ...rest] = parts
 
+  // Each part is clamped to ITS OWN layout's budget (GEN-4), the same
+  // `clampToBudget` a live new slide is clamped to — a split writes whole
+  // new slots straight from the model, with nothing upstream that would
+  // have already trimmed them.
+  const clampedPart = (part: SlideSplitPart): SlideSplitPart => {
+    const layoutType = layoutOf(part.layoutType)
+    return clampToBudget({ ...part, layoutType }, descriptors)
+  }
+
+  const firstClamped = clampedPart(first!)
   // The original keeps its id and takes the first part.
-  applyContent(slide, {
-    layoutType: layoutOf(first!.layoutType),
-    slots: first!.slots,
-  })
+  applyContent(slide, firstClamped)
   // The part's own picture terms, so its box fills for what THIS part is
   // about rather than for what the undivided slide was.
-  const firstTerms = imageSearchTerms(first!.imageGuidance, first!.slots)
+  const firstTerms = imageSearchTerms(first!.imageGuidance, firstClamped.slots)
   if (firstTerms.length) slide.imageKeywords = firstTerms
   await slide.save()
 
   const created: SlideDoc[] = []
   for (const part of rest) {
+    const clamped = clampedPart(part)
     const made = await SlideModel.create({
       deckId: deck._id,
       // Placed by slideOrder below; this is a provisional value.
       index: deck.slideOrder.length,
-      layoutType: layoutOf(part.layoutType),
-      title: part.slots.title,
-      body: part.slots.body,
-      bullets: part.slots.bullets,
-      caption: part.slots.caption,
-      imageKeywords: imageSearchTerms(part.imageGuidance, part.slots),
+      layoutType: clamped.layoutType,
+      title: clamped.slots.title,
+      body: clamped.slots.body,
+      bullets: clamped.slots.bullets,
+      caption: clamped.slots.caption,
+      imageKeywords: imageSearchTerms(part.imageGuidance, clamped.slots),
       // The words came from this slide, so the part answers for the same
       // stretch of speech. Without it a new part has no source material and
       // its narration would be written from the slide text alone.
@@ -656,17 +665,29 @@ const refineOneSlide = async (
 
   if (result) {
     if (want.text && want.layout) {
-      applyContent(slide, result)
+      // Refine is prompted with every box's limit (GEN-4), but the model is
+      // never trusted with them — clamped to the budget of the layout the
+      // slide actually ends on, same as a live new slide (clampToBudget).
+      applyContent(slide, clampToBudget(result, descriptors))
     } else if (want.text) {
-      // Layout is the user's; only the words change.
-      applyContent(slide, { ...result, layoutType: slide.layoutType })
+      // Layout is the user's; only the words change. Substitute it first, so
+      // the clamp below is against the layout the slide will actually end on.
+      applyContent(
+        slide,
+        clampToBudget({ ...result, layoutType: slide.layoutType }, descriptors),
+      )
     } else if (
       layoutDisplaysContent(
         result.layoutType,
         // The image counts: a layout with no image slot would hide it.
         { ...contentOf(slide), hasImage: Boolean(slide.imageRef) },
         descriptors,
-      )
+      ) &&
+      // Layout-only means the WORDS must not change, so a switch is only
+      // taken when the slide's EXISTING content already fits the target
+      // layout's limits (GEN-4) — otherwise the switch would need a trim it
+      // is not allowed to make, and the slide keeps its current layout.
+      layoutFitsBudget(contentOf(slide), result.layoutType, descriptors)
     ) {
       // Layout only: keep every word, move the slide to the better layout.
       slide.layoutType = result.layoutType

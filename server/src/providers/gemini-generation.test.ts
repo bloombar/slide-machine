@@ -2024,6 +2024,53 @@ describe('the slide’s load in the refine prompt (GEN-4)', () => {
     const prompt = await promptFor({ bullets: [] }, { maxBullets: 6 })
     expect(prompt).not.toContain('How full this slide is')
   })
+
+  /**
+   * nyu-elegant's "list"/"content-list" layouts put maxItems/maxChars on
+   * the bullets/body SLOTS rather than on the layout's own `constraints` —
+   * the load fragment has to read the same effective limits `clampToBudget`
+   * does, or the body half of "how full" never appears for those layouts.
+   */
+  const promptForSlots = async (
+    current: Record<string, unknown>,
+    slots: Record<string, unknown>[],
+    allowSplit = true,
+  ) => {
+    fetchMock.mockResolvedValue(geminiReply({ layoutType: 'list', slots: {} }))
+    await new GeminiGenerationProvider().refineSlide({
+      current: { layoutType: 'list', ...current },
+      level: 3,
+      layoutDescriptors: [
+        { type: 'list', label: 'List', purpose: 'points', slots },
+      ],
+      allowSplit,
+    } as never)
+    const [, init] = fetchMock.mock.calls[0]!
+    return JSON.parse(String(init.body)).contents[0].parts[0].text as string
+  }
+
+  it('counts bullets against the bullets SLOT’s maxItems when the layout has no constraint', async () => {
+    const prompt = await promptForSlots({ bullets: ['a', 'b', 'c'] }, [
+      { name: 'bullets', kind: 'bullets', label: 'Bullets', maxItems: 3 },
+    ])
+    expect(prompt).toContain('3 of at most 3 bullets')
+    expect(prompt).toContain('AT its limit')
+  })
+
+  it('counts the body against the body SLOT’s maxChars', async () => {
+    const prompt = await promptForSlots({ body: 'x'.repeat(150) }, [
+      { name: 'body', kind: 'text', label: 'Body', maxChars: 150 },
+    ])
+    expect(prompt).toContain('150 of about 150 body characters')
+  })
+
+  it('names how many bullets exceed the per-bullet SLOT limit', async () => {
+    const prompt = await promptForSlots(
+      { bullets: ['ok', 'this one is far too long for the budget', 'fine'] },
+      [{ name: 'bullets', kind: 'bullets', label: 'Bullets', maxChars: 20 }],
+    )
+    expect(prompt).toContain('1 of 3 bullets over the 20-char limit')
+  })
 })
 
 /**

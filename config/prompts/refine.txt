@@ -14,6 +14,11 @@ Current slide (JSON):
 Available layouts (choose the best fit):
 {{layouts}}
 
+Keep every box within the limit stated beside it, in every language, and only
+write to "title", "body", "bullets" and "caption" — those are the only fields
+in the response, so choose a layout whose boxes can hold the content within
+those four.
+
 Slot text is Markdown, and the slide draws it: keep the **bold**, *italic*,
 `code` and [links](https://example.com) the slide already carries, and add
 them where they earn their place — a term the first time it is named, an
