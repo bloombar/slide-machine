@@ -5,7 +5,10 @@
  * The live API is never called from tests.
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
-import type { SlideGenerationRequest } from '@slide-machine/shared'
+import type {
+  SlideGenerationRequest,
+  LayoutDescriptor,
+} from '@slide-machine/shared'
 import {
   VOICE_COMMAND_DESCRIPTORS,
   MAX_SPLIT_PARTS,
@@ -239,8 +242,9 @@ describe('GeminiGenerationProvider', () => {
     expect(body.generationConfig.responseSchema).toBeUndefined()
     expect(body.generationConfig.maxOutputTokens).toBe(2048)
     expect(prompt).toContain('"action": "new" | "update" | "none"')
-    // Capacity guidance: current load and the prefer-new bias
-    expect(prompt).toContain('Current slide load: 5 bullets')
+    // Capacity guidance: current load (with remaining room stated outright,
+    // GEN-8) and the prefer-new bias
+    expect(prompt).toContain('Current slide: 5 of at most 6 bullets (1 left)')
     expect(prompt).toContain('Prefer "new" whenever in doubt')
     // No language resolved anywhere: no language directive
     expect(prompt).not.toContain('IETF tag')
@@ -252,14 +256,171 @@ describe('GeminiGenerationProvider', () => {
       prompt.indexOf('Recent slides'),
     )
     expect(prompt.indexOf('Recent slides')).toBeLessThan(
-      prompt.indexOf('Current slide load'),
+      prompt.indexOf('Current slide:'),
     )
     expect(prompt.indexOf('New phrase:')).toBeGreaterThan(
-      prompt.indexOf('Current slide load'),
+      prompt.indexOf('Current slide:'),
     )
     // The key travels in a header, never the URL
     expect(String(url)).not.toContain('test-key')
     expect(init.headers['x-goog-api-key']).toBe('test-key')
+  })
+
+  describe('the current-slide load line states remaining room (GEN-8)', () => {
+    const contentList: LayoutDescriptor[] = [
+      {
+        type: 'content-list',
+        label: 'Content list',
+        purpose: 'bulleted content',
+        slots: [
+          { name: 'title', kind: 'text', label: 'Title' },
+          {
+            name: 'bullets',
+            kind: 'bullets',
+            label: 'Bullets',
+            maxItems: 3,
+          },
+          {
+            name: 'body',
+            kind: 'text',
+            label: 'Body',
+            maxChars: 146,
+          },
+        ],
+      },
+    ]
+    const promptFor = async (
+      currentSlide: NonNullable<SlideGenerationRequest['currentSlide']>,
+      layoutDescriptors: LayoutDescriptor[] = contentList,
+      allowLayoutRefit = false,
+    ): Promise<string> => {
+      fetchMock.mockClear()
+      fetchMock.mockResolvedValue(geminiReply({ action: 'none' }))
+      await provider.generateSlideContent(
+        request({ layoutDescriptors, currentSlide, allowLayoutRefit }),
+      )
+      return JSON.parse(String(fetchMock.mock.calls[0]![1].body)).contents[0]
+        .parts[0].text as string
+    }
+
+    it('says the slide is FULL when at its bullet cap', async () => {
+      const prompt = await promptFor({
+        layoutType: 'content-list',
+        bulletCount: 3,
+        bodyChars: 95,
+      })
+      expect(prompt).toContain(
+        'Current slide: 3 of at most 3 bullets (0 left), 95 of about 146 body characters (51 left), layout "content-list".',
+      )
+      expect(prompt).toContain('This slide is FULL')
+    })
+
+    it('says the slide is FULL when its body is near its cap, even under the bullet cap', async () => {
+      const prompt = await promptFor({
+        layoutType: 'content-list',
+        bulletCount: 1,
+        bodyChars: 140,
+      })
+      expect(prompt).toContain('1 of at most 3 bullets (2 left)')
+      expect(prompt).toContain('This slide is FULL')
+    })
+
+    it('only offers the refit escape when refit is actually allowed for this request', async () => {
+      // Refit disabled (the default here, and the server's own default):
+      // offering it would describe an option the model cannot take — a
+      // refit it isn't offered is silently discarded (deck.ts), losing the
+      // phrase rather than fitting it.
+      const withoutRefit = await promptFor(
+        { layoutType: 'content-list', bulletCount: 3, bodyChars: 95 },
+        contentList,
+        false,
+      )
+      expect(withoutRefit).toContain('This slide is FULL')
+      expect(withoutRefit).not.toContain('refitting the whole slide')
+
+      // Refit enabled: the same FULL slide may now name refitting as an
+      // escape, since the server would actually accept one.
+      const withRefit = await promptFor(
+        { layoutType: 'content-list', bulletCount: 3, bodyChars: 95 },
+        contentList,
+        true,
+      )
+      expect(withRefit).toContain('This slide is FULL')
+      expect(withRefit).toContain('refitting the whole slide')
+    })
+
+    it('states how much room is left when the slide is only partly full', async () => {
+      const prompt = await promptFor({
+        layoutType: 'content-list',
+        bulletCount: 1,
+        bodyChars: 20,
+      })
+      expect(prompt).toContain(
+        'Current slide: 1 of at most 3 bullets (2 left), 20 of about 146 body characters (126 left), layout "content-list".',
+      )
+      expect(prompt).not.toContain('This slide is FULL')
+      expect(prompt).toContain(
+        'If adding this phrase\'s content would exceed these limits, choose "new" instead of "update"',
+      )
+    })
+
+    it('omits a limit the layout does not set, rather than inventing one', async () => {
+      // "content" (the default request's other layout) sets a body budget
+      // but no bullet count, so only the body side states a ceiling.
+      const prompt = await promptFor(
+        { layoutType: 'content', bulletCount: 0, bodyChars: 10 },
+        [
+          {
+            type: 'content',
+            label: 'Content',
+            purpose: 'x',
+            slots: [{ name: 'title', kind: 'text', label: 'Title' }],
+            constraints: { maxBodyChars: 400 },
+          },
+        ],
+      )
+      expect(prompt).toContain(
+        'Current slide: 0 bullets, 10 of about 400 body characters (390 left), layout "content".',
+      )
+
+      // No limits at all: neither side invents a ceiling.
+      const unbounded = await promptFor(
+        { layoutType: 'plain', bulletCount: 2, bodyChars: 30 },
+        [
+          {
+            type: 'plain',
+            label: 'Plain',
+            purpose: 'x',
+            slots: [{ name: 'title', kind: 'text', label: 'Title' }],
+          },
+        ],
+      )
+      expect(unbounded).toContain(
+        'Current slide: 2 bullets, ~30 body characters, layout "plain".',
+      )
+    })
+
+    it('names the per-bullet character max when the layout has one', async () => {
+      const prompt = await promptFor(
+        { layoutType: 'content-list', bulletCount: 1, bodyChars: 0 },
+        [
+          {
+            ...contentList[0]!,
+            slots: [
+              ...contentList[0]!.slots.filter(s => s.name !== 'bullets'),
+              {
+                name: 'bullets',
+                kind: 'bullets',
+                label: 'Bullets',
+                maxItems: 3,
+                maxChars: 60,
+              },
+            ],
+          },
+        ],
+      )
+      expect(prompt).toContain('up to 60 characters each')
+    })
   })
 
   it('renders deck-structure outline + signals + heading guidance when present', async () => {
@@ -385,7 +546,7 @@ describe('GeminiGenerationProvider', () => {
     expect(prompt).toContain('freehand whiteboard drawing canvas')
     expect(prompt).toContain('NEVER output layoutType "whiteboard"')
     // ...its "load" is never surfaced (that invited the update bug)...
-    expect(prompt).not.toContain('Current slide load')
+    expect(prompt).not.toContain('Current slide:')
     // ...and no update/delta rules that reference its non-selectable layout
     // (this text is unique to the updateRules fragment, unlike the "delta"
     // token that always appears in the JSON output shape).

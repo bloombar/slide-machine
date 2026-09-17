@@ -110,6 +110,7 @@ import {
   isNewSlideOverrideOn,
   NEW_SLIDE_OVERRIDE_DEFAULTS,
 } from '../lib/new-slide-overrides'
+import { dropRepeatedBody } from '../lib/body-dedupe'
 import { declaredContentOf, onlyDeclaredBy } from '../lib/generated-slots'
 import {
   layoutDisplaysContent,
@@ -1156,23 +1157,69 @@ export const sessionPhrase = defineAction<
         ? generated
         : { ...generated, layoutType: safeLayout }
 
+    // GEN-8: whether a `updateMode: 'refit'` response will actually be
+    // APPLIED as a refit — mirrors, exactly, the outer guard on the refit
+    // block further below (the one thing that decides whether that block is
+    // entered at all). Every check INSIDE that block — the env flag off,
+    // same-layout rephrase disabled, or the refit failing verification
+    // (`refitPreservesContent`/`refitOverflows`) — discards the refit to
+    // 'none' and RETURNS, rather than falling through to the additive path,
+    // so none of them change where `slots.body`/`slots.bullets` end up
+    // either; they don't belong in this test. A refit's slots are the
+    // COMPLETE re-mapped slide, not additive material — dedupe must never
+    // touch them. But when the OUTER preconditions fail (the user is
+    // drawing, the slide is a whiteboard canvas, or a pinned header's layout
+    // would change), the response falls through to the plain ADDITIVE path
+    // below with `updateMode` still reading 'refit' — GEN-14's bullet dedupe
+    // and this file's body dedupe must key off whether the additive path
+    // will actually run, not off that leftover field.
+    const refitWillApply =
+      rawResult.action === 'update' &&
+      rawResult.updateMode === 'refit' &&
+      Boolean(lastSlide) &&
+      !keepLayout &&
+      lastSlide?.layoutType !== WHITEBOARD_LAYOUT_TYPE &&
+      !(pinLayout && rawResult.layoutType !== lastSlide?.layoutType)
+
     // GEN-14: dedupe BEFORE any capacity decision, not after. updateOverflows,
     // refitOverflows and clampToBudget all count or slice `slots.bullets`
     // downstream of this point — a duplicate still present when they run
     // consumes a budget slot or trips an overflow it should never have
     // caused (a repeat can shove genuine content onto an overflow slide, or
-    // get discarded along with it). A refit REPLACES the bullet list rather
-    // than appending to it, so it only needs within-batch dedup (existing =
-    // []); a plain additive delta is checked against what the slide already
-    // holds. Every capacity check below reads this already-deduped list.
+    // get discarded along with it). A refit that will actually apply
+    // REPLACES the bullet list rather than appending to it, so it only needs
+    // within-batch dedup (existing = []); anything reaching the additive
+    // path — a plain delta, or a refit that fell through — is checked
+    // against what the slide already holds. Every capacity check below
+    // reads this already-deduped list.
     if (rawResult.action === 'update' && rawResult.slots.bullets?.length) {
-      const existing =
-        rawResult.updateMode === 'refit' ? [] : (lastSlide?.bullets ?? [])
+      const existing = refitWillApply ? [] : (lastSlide?.bullets ?? [])
       rawResult = {
         ...rawResult,
         slots: {
           ...rawResult.slots,
           bullets: dedupeBullets(existing, rawResult.slots.bullets),
+        },
+      }
+    }
+
+    // GEN-8: drop any body text the model re-sent from the current slide,
+    // for the same reason bullets are deduped just above and at the same
+    // point — before updateOverflows (which would otherwise count it
+    // against the budget twice) and before the additive append further
+    // down (which would otherwise print it twice). Skipped only when a
+    // refit will actually apply (see `refitWillApply`): that path replaces
+    // the body wholesale, so there is nothing to dedupe against.
+    if (
+      rawResult.action === 'update' &&
+      !refitWillApply &&
+      rawResult.slots.body
+    ) {
+      rawResult = {
+        ...rawResult,
+        slots: {
+          ...rawResult.slots,
+          body: dropRepeatedBody(lastSlide?.body, rawResult.slots.body),
         },
       }
     }

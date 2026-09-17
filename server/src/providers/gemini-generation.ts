@@ -566,6 +566,63 @@ export const descriptorStatus = (
   return { length, max, overBudget: length > max }
 }
 
+/**
+ * How full the CURRENT slide already is, in the model's own units (GEN-8).
+ *
+ * The evidence behind this (see DECISIONS) is that the old wording —
+ * bullet/character counts with the layout's limits left implicit, sitting
+ * only in the menu far above — got ignored: the model kept choosing
+ * "update" on slides that were already at their cap. This states the
+ * effective limits (`budgetsFor`, box overrides included) and what is LEFT
+ * right on this line, and says outright when the slide is FULL. A limit the
+ * layout does not set is omitted rather than invented.
+ */
+const currentSlideLoadLine = (
+  currentSlide: NonNullable<SlideGenerationRequest['currentSlide']>,
+  descriptors: SlideGenerationRequest['layoutDescriptors'],
+  allowLayoutRefit: boolean | undefined,
+): string => {
+  const limits = budgetsFor(currentSlide.layoutType, descriptors)
+  const { bulletCount, bodyChars } = currentSlide
+
+  const bulletsFull = limits.maxBullets
+    ? bulletCount >= limits.maxBullets
+    : false
+  const bulletsPart = limits.maxBullets
+    ? `${bulletCount} of at most ${limits.maxBullets} bullets (${Math.max(
+        limits.maxBullets - bulletCount,
+        0,
+      )} left${limits.maxBulletChars ? `, up to ${limits.maxBulletChars} characters each` : ''})`
+    : `${bulletCount} bullets`
+
+  // A slide is "near" its body budget, not only exactly at it, because the
+  // next phrase adds more than one character — waiting for the exact ceiling
+  // still lets one more overflowing update through.
+  const bodyFull = limits.maxBodyChars
+    ? bodyChars >= limits.maxBodyChars * 0.9
+    : false
+  const bodyPart = limits.maxBodyChars
+    ? `${bodyChars} of about ${limits.maxBodyChars} body characters (${Math.max(
+        limits.maxBodyChars - bodyChars,
+        0,
+      )} left)`
+    : `~${bodyChars} body characters`
+
+  const load = `Current slide: ${bulletsPart}, ${bodyPart}, layout "${currentSlide.layoutType}".`
+  // The refit escape only exists when the server would actually accept one
+  // (GENERATION_LAYOUT_REFIT / `allowLayoutRefit`) — offering it regardless
+  // describes an option the model cannot actually take: an unoffered refit
+  // is silently discarded (see the refit block in deck.ts), so a slide the
+  // model left "full" on the strength of a refit that was never on the
+  // table would sit unchanged with the phrase lost.
+  const refitEscape = allowLayoutRefit
+    ? ', or it fits by refitting the whole slide within these limits'
+    : ''
+  return bulletsFull || bodyFull
+    ? `\n${load} This slide is FULL: this phrase's content must go on a "new" slide unless it only sharpens the title/caption${refitEscape}.`
+    : `\n${load} If adding this phrase's content would exceed these limits, choose "new" instead of "update".`
+}
+
 const instructions = (req: SlideGenerationRequest): string => {
   // Rendered once and measured here, rather than once to measure and again
   // for the prompt: this runs per phrase on the latency-sensitive generation
@@ -659,7 +716,11 @@ const instructions = (req: SlideGenerationRequest): string => {
         // budget-overflow case, decided server-side after the response), so
         // the model can be asked for its title in the same call.
         `\nThe current slide is a freehand whiteboard drawing canvas: it has NO text slots and its layout ("${WHITEBOARD_LAYOUT_TYPE}") is NOT in the set above. NEVER choose "update" for it and NEVER output layoutType "${WHITEBOARD_LAYOUT_TYPE}". This phrase's content must go on a "new" slide (or "none" if it is filler); give that new slide a "title" in slots.`
-      : `\nCurrent slide load: ${req.currentSlide.bulletCount} bullets, ~${req.currentSlide.bodyChars} body characters (layout "${req.currentSlide.layoutType}"). If adding this phrase's content would exceed the layout's limits, choose "new" instead of "update".`
+      : currentSlideLoadLine(
+          req.currentSlide,
+          req.layoutDescriptors,
+          req.allowLayoutRefit,
+        )
     : ''
 
   // Update semantics + the slide's exact content, present only when
