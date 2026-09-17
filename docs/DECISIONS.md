@@ -945,3 +945,114 @@ takes the switch's own default as a second argument; the four defaults themselve
 checkboxes read the same map rather than assuming `?? true` everywhere. Both the live-generation call site
 (`deck.ts`'s overflow promotion) and Refine's `trimToBudget` (`reconcile.ts`) now resolve against
 `NEW_SLIDE_OVERRIDE_DEFAULTS.overflow` (`false`) instead of the old default-on fallback.
+
+## GEN-8 remaining-room prompt + resent-body dedupe (2026-09-17)
+
+**"FULL" threshold: bullets at the exact cap, body at 90% of it.** A slide's bullet count is an exact integer
+against an exact integer cap, so "full" is simply `count >= max`. Body characters are not exact in the same
+way — the next phrase almost never adds exactly zero characters — so waiting for `bodyChars >= maxBodyChars`
+would still let one more overflowing update through on the last phrase before the true ceiling. 90% was picked
+as a round number that reliably fires a phrase or two before the hard cap, without flagging FULL so early that
+a still-mostly-empty slide reads as full.
+
+**No new field threaded onto `SlideGenerationRequest`.** The brief flagged threading layout descriptors through
+`deck.ts` if the load-line fragment needed them, but `layoutDescriptors` was already a top-level field on the
+request the current-slide fragment sits inside — `budgetsFor(currentSlide.layoutType, req.layoutDescriptors)`
+reads it directly in `gemini-generation.ts`, so nothing else changed shape.
+
+**The refit escape is named in the FULL wording only when refit is actually offered.** `currentSlideLoadLine`
+takes `req.allowLayoutRefit` and only appends "...or it fits by refitting the whole slide within these limits"
+when it's true — mentioning it regardless would describe an option the model cannot take: a refit the server
+never offered is silently discarded (the outer guard on the refit block in `deck.ts`), so the phrase would be
+lost rather than fitted.
+
+### Round 2 (body-dedupe correctness)
+
+Round 1's first `dropRepeatedBody` (naive sentence split + trim/rejoin, no prefix handling) shipped three real
+defects, all caught in review: it rewrote every delta with body text (splitting on every `.`/`!`/`?`, including
+abbreviation periods like "e.g." and decimals like "3.14", then rejoining trimmed fragments with single spaces
+— corrupting Markdown, decimals, URLs and code exactly as reported); a prefix-without-terminator repeat ("We
+use caching" + "We use caching to reduce latency.") was never caught at all, sentence-level matching has
+nothing to split on without one; and a refit that fell back to the plain additive path (drawing in progress,
+a pinned header whose layout would change, a whiteboard slide) skipped the dedupe entirely, because the check
+tested `rawResult.updateMode !== 'refit'` — true for the raw field even though this response is NOT going to
+be applied as a refit.
+
+**~~"the 'prefix plus new text' case ... falls out of the same split"~~ — wrong, corrected here.** The original
+version of this entry claimed the sentence split alone handled the prefix case. It doesn't: sentence-level
+matching only removes a fragment ending in a terminator, so "existing text with no period" + "existing text
+with no period, plus more" never matches on the existing side at all. Fixed with a dedicated whole-body prefix
+check (`stripRepeatedPrefix`) that runs BEFORE the sentence pass: if `incoming`'s normalized text starts with
+the whole of `existing`'s normalized text, only the remainder (mapped back onto `incoming`'s own raw
+characters, not the lowercased copy) is kept. Supports `。！？` alongside `.!?` so CJK prose that doesn't
+punctuate every clause is covered too.
+
+**Sentences are now spans of the ORIGINAL string, never trimmed-and-rejoined text.** `sentenceSpans` records
+exact `text.slice(start, end)` cuts, where each span's own leading separator (whitespace, a newline, a blank
+Markdown line) is inherited as part of that span rather than the one before it — so removing a span and
+joining the survivors with `''` reproduces the untouched substring exactly, and `incoming` is returned by the
+SAME reference, unmodified, whenever nothing is actually dropped. The split point itself is also stricter: a
+terminator only counts when followed by whitespace or the end of the string, so "v2.0" and the first period in
+"e.g." (no space after it) never split at all.
+
+**A fragment must clear BOTH a word count (≥3) and a character count (≥12) to ever be a match candidate, on
+either side of the comparison.** The stricter split above still treats "e.g. " as a sentence end (the period
+before the space genuinely has whitespace after it) — that alone is harmless, but the resulting fragments
+("For e.g." / "g.") are short enough to coincidentally collide with unrelated short fragments elsewhere, which
+is exactly how the original bug deleted a word ("Consider e.g. caching." → "Consider e. caching."). Requiring
+BOTH thresholds (not either) means a short fragment is never the reason something gets deleted — the cost is
+never deduping a genuinely short sentence, the safe side to err on. Not applied to `stripRepeatedPrefix`: that
+check compares the WHOLE existing body, and enforcing per-fragment word counts there would break the CJK case
+(CJK prose has no spaces, so "word count" is meaningless — every CJK string of any length is "1 word").
+
+**Dedupe now keys off `refitWillApply`, not the raw `updateMode` field.** `refitWillApply` duplicates the
+refit block's own OUTER guard (`updateMode === 'refit' && !keepLayout && lastSlide.layoutType !== whiteboard &&
+!(pinLayout && layout would change)`) — the one condition that decides whether that block is entered at all.
+Every check INSIDE the block — the `GENERATION_LAYOUT_REFIT` flag off, same-layout rephrase disabled, or the
+refit failing verification (`refitPreservesContent`/`refitOverflows`) — discards the refit to `'none'` and
+RETURNS from the block, rather than falling through to the additive path below, so none of them change where
+`slots.body`/`slots.bullets` end up either; all of them are irrelevant to this test for the same reason. Both
+GEN-14's bullet dedupe and this file's body dedupe now skip ONLY when a refit will actually be applied — a
+refit that falls through to the additive path (still carrying `updateMode: 'refit'`) is deduped exactly like a
+plain delta. Applying the same fix to the bullet dedupe (originally scoped as "as-is unless trivial") turned
+out to be a one-line change once `refitWillApply` existed, so it's included and tested alongside the body fix
+rather than left as a known gap.
+
+### Round 3 (prefix-cut boundaries + coverage gaps)
+
+Round 2's `stripRepeatedPrefix` cut wherever the normalized character count matched, with no check that the
+cut point was a real boundary in `incoming` — "Supports 5" matched the start of "Supports 50 users." and cut
+the "5" out of "50"; "Version 2." (its own trailing period stripped for the comparison) matched the start of
+"Version 2.5 adds streaming support." and cut the decimal in half; and neither guard existed to keep a short,
+generic existing body ("Cache", "A") from coincidentally prefix-matching an unrelated sentence that never
+repeated anything.
+
+**Fixed with two checks, both required.** `isSubstantialSentence(existing)` (reused from the sentence-level
+guard) rejects a trivial existing body before ever attempting a prefix match — "Cache" and "A" are both
+2-word-or-fewer fragments. `isBoundaryAt(raw, rawEnd)` then requires the cut position to be the end of the
+string, whitespace, or a terminator that itself ends there (a CJK terminator always; a Latin one only when
+ALSO followed by whitespace/end) — rejecting a cut that lands on a bare letter or digit. **`isSubstantialSentence`
+had to become script-aware to add that guard without breaking the CJK case**: CJK has no spaces, so the
+existing word-count rule always reads a CJK string as "one word," which would have rejected the passing
+"缓存很有用。" test (5 characters) the same way it rejects "Cache" (5 characters). Fixed by judging a
+whitespace-free string containing a CJK character by length alone, at a lower bar (4 characters) — one CJK
+character carries far more of a sentence's meaning than one Latin character does.
+
+**Added regression coverage the round-2 suite was missing entirely.** Every existing "leaves incoming
+untouched" test matches nothing and returns early — so mutating the join back to trim+rejoin, dropping the
+sentence-boundary lookahead, or hard-coding `isSubstantialSentence` to `true` all left that suite green; none
+of them exercise a case that actually drops something. Added: a drop whose kept remainder crosses a blank
+line and a Markdown list (`server/src/lib/body-dedupe.test.ts`, "blank lines and a Markdown list survive a
+real drop"); the same through the SENTENCE pass rather than the prefix pass, so the join behaviour is
+exercised there too ("preserves blank-line paragraph breaks..."); a decimal inside a genuinely-repeated
+sentence, which the missing lookahead would otherwise split into a substantial half (dropped) and a stranded
+short half (kept) — precisely the asymmetric failure that makes the lookahead's absence observable at all,
+since a *consistent* mistake applied to both `existing` and `incoming` mostly cancels out; and a guard test
+(two DIFFERENT sentences that both happen to end "... this.") proving a short fragment is never treated as a
+match on its own. Verified each of the three mutations turns at least one of these red (mutate a copy, run,
+restore — see the developer report for this round for the exact failures).
+
+**`dropRepeatedBody` moved to `server/src/lib/body-dedupe.ts`.** It has no dependency on `deck.ts` beyond two
+plain strings in, one string out, and the round-2 brief asked for direct unit tests of the helper — giving it
+its own module (mirroring `slide-fit.ts`) makes that a plain `import` rather than exporting an action-file
+internal for tests alone.
