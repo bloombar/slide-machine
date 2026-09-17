@@ -252,12 +252,17 @@ test('a regular user never sees the new-slide overrides (GEN-8), even their own'
   await page.getByRole('button', { name: 'Lecture settings' }).click()
   const modal = page.getByRole('dialog', { name: 'Lecture settings' })
   await expect(modal).toBeVisible()
+  // Neither the disclosure that would reveal them, nor the switches
+  // themselves — an owner is not an admin, so there is nothing to expand.
+  await expect(
+    modal.getByRole('button', { name: 'Advanced settings' }),
+  ).toHaveCount(0)
   await expect(
     modal.getByRole('checkbox', { name: /Overflow promotion/ }),
   ).toHaveCount(0)
 })
 
-test('the admin sees the new-slide overrides (GEN-8) and a toggle persists', async ({
+test('the admin sees the new-slide overrides (GEN-8) behind Advanced settings, and a toggle persists', async ({
   page,
 }) => {
   await ensureSignedIn(page, admin)
@@ -269,9 +274,32 @@ test('the admin sees the new-slide overrides (GEN-8) and a toggle persists', asy
   await expect(page).toHaveURL(/\/d\//)
 
   const modal = await openSettingsAsAdmin(page, 'Lecture settings')
+  // The switches sit behind a disclosure, collapsed by default — hidden
+  // until the admin actually asks to see them.
+  const overflow = modal.getByRole('checkbox', { name: /Overflow promotion/ })
+  await expect(overflow).toHaveCount(0)
+  const advancedToggle = modal.getByRole('button', {
+    name: 'Advanced settings',
+  })
+  await expect(advancedToggle).toBeVisible()
+  await advancedToggle.click()
+
+  // Clicking through the explanation's Design link switches this modal's
+  // own tab, then the admin returns to General to find the section still
+  // expanded — collapse state isn't reset by a tab switch, only by the
+  // modal reopening.
+  await modal
+    .getByRole('button', { name: "design's character and bullet limits" })
+    .click()
+  await expect(modal.getByRole('tab', { name: 'Design' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await modal.getByRole('tab', { name: 'General' }).click()
+  await expect(overflow).toBeVisible()
+
   // GEN-8: overflow promotion defaults off (unlike the other three
   // switches), so this one starts unchecked.
-  const overflow = modal.getByRole('checkbox', { name: /Overflow promotion/ })
   await expect(overflow).not.toBeChecked()
   const saved = page.waitForResponse(
     res =>
@@ -284,10 +312,12 @@ test('the admin sees the new-slide overrides (GEN-8) and a toggle persists', asy
   await saved
   await expect(overflow).toBeChecked()
 
-  // Survives a reload, so it really was stored.
+  // Survives a reload, so it really was stored. The disclosure is
+  // collapsed again on this fresh open of the modal.
   await page.reload()
   await page.getByRole('button', { name: 'Lecture settings' }).click()
   await page.getByRole('button', { name: 'Edit settings' }).click()
+  await page.getByRole('button', { name: 'Advanced settings' }).click()
   await expect(
     page.getByRole('checkbox', { name: /Overflow promotion/ }),
   ).toBeChecked()

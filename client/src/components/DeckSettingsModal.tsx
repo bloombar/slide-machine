@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { Trans, useTranslation } from 'react-i18next'
-import { X } from 'lucide-react'
+import { ChevronRight, X } from 'lucide-react'
 import {
   findTtsVoice,
   NEW_SLIDE_OVERRIDE_DEFAULTS,
@@ -281,6 +281,15 @@ export default function DeckSettingsModal({
   // promotion and the Refine trimming it also gates default off; the other
   // three default on). Saved immediately, one field at a time, so an admin
   // sees each change take effect right away.
+  //
+  // The whole section sits behind one gate (`showAdvancedSettings`) so
+  // opening it up to non-admins later — if that ever happens — is a
+  // one-line change rather than a hunt through the JSX.
+  const showAdvancedSettings = viewerIsAdmin
+  // Collapsed behind "Advanced settings" until clicked; starts collapsed
+  // every time the modal opens (no persistence), since these are rarely
+  // touched.
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const saveNewSlideOverride = (
     patch: Partial<
       Pick<
@@ -756,76 +765,114 @@ export default function DeckSettingsModal({
               />
             </div>
           )}
-          {viewerIsAdmin && (
+          {showAdvancedSettings && (
             <div>
-              <h3 className="mb-2 text-lg font-semibold text-slate-700">
-                {t('deck.settings.general.newSlideOverrides.heading')}
-              </h3>
-              <p className="mb-3 text-sm text-slate-500">
-                {t('deck.settings.general.newSlideOverrides.hint')}
-              </p>
-              <div className="flex flex-col gap-3">
-                <RefineOption
-                  label={t(
-                    'deck.settings.general.newSlideOverrides.headerLabel',
-                  )}
-                  description={t(
-                    'deck.settings.general.newSlideOverrides.headerDescription',
-                  )}
-                  checked={
-                    deck.newSlideOverrideHeader ??
-                    NEW_SLIDE_OVERRIDE_DEFAULTS.header
-                  }
-                  onChange={checked =>
-                    saveNewSlideOverride({ header: checked })
-                  }
+              <button
+                type="button"
+                onClick={() => setAdvancedOpen(open => !open)}
+                aria-expanded={advancedOpen}
+                aria-controls="new-slide-overrides-panel"
+                className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline"
+              >
+                <ChevronRight
+                  className={`h-4 w-4 transition-transform ${advancedOpen ? 'rotate-90' : ''}`}
+                  aria-hidden
                 />
-                <RefineOption
-                  label={t(
-                    'deck.settings.general.newSlideOverrides.overflowLabel',
-                  )}
-                  description={t(
-                    'deck.settings.general.newSlideOverrides.overflowDescription',
-                  )}
-                  checked={
-                    deck.newSlideOverrideOverflow ??
-                    NEW_SLIDE_OVERRIDE_DEFAULTS.overflow
-                  }
-                  onChange={checked =>
-                    saveNewSlideOverride({ overflow: checked })
-                  }
-                />
-                <RefineOption
-                  label={t(
-                    'deck.settings.general.newSlideOverrides.whiteboardLabel',
-                  )}
-                  description={t(
-                    'deck.settings.general.newSlideOverrides.whiteboardDescription',
-                  )}
-                  checked={
-                    deck.newSlideOverrideWhiteboard ??
-                    NEW_SLIDE_OVERRIDE_DEFAULTS.whiteboard
-                  }
-                  onChange={checked =>
-                    saveNewSlideOverride({ whiteboard: checked })
-                  }
-                />
-                <RefineOption
-                  label={t(
-                    'deck.settings.general.newSlideOverrides.drawingLabel',
-                  )}
-                  description={t(
-                    'deck.settings.general.newSlideOverrides.drawingDescription',
-                  )}
-                  checked={
-                    deck.newSlideOverrideDrawing ??
-                    NEW_SLIDE_OVERRIDE_DEFAULTS.drawing
-                  }
-                  onChange={checked =>
-                    saveNewSlideOverride({ drawing: checked })
-                  }
-                />
-              </div>
+                {t('deck.settings.general.newSlideOverrides.advancedToggle')}
+              </button>
+              {advancedOpen && (
+                <div id="new-slide-overrides-panel" className="mt-3">
+                  <h3 className="mb-2 text-lg font-semibold text-slate-700">
+                    {t('deck.settings.general.newSlideOverrides.heading')}
+                  </h3>
+                  <p className="mb-3 text-sm text-slate-500">
+                    {/* Trans, not t: the link mid-sentence switches this
+                        modal's own tab rather than navigating away, so it
+                        is a button rather than a route Link. */}
+                    <Trans
+                      i18nKey="deck.settings.general.newSlideOverrides.hint"
+                      components={{
+                        designLink: (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTab('template')
+                              // Same as the arrow-key handler on the tab
+                              // list: land keyboard focus on the tab that is
+                              // now showing, not on this (now invisible)
+                              // button.
+                              tabRefs.current.get('template')?.focus()
+                            }}
+                            className="text-indigo-600 hover:underline"
+                          />
+                        ),
+                      }}
+                    />
+                  </p>
+                  <div className="flex flex-col gap-3">
+                    <RefineOption
+                      label={t(
+                        'deck.settings.general.newSlideOverrides.headerLabel',
+                      )}
+                      description={t(
+                        'deck.settings.general.newSlideOverrides.headerDescription',
+                      )}
+                      checked={
+                        deck.newSlideOverrideHeader ??
+                        NEW_SLIDE_OVERRIDE_DEFAULTS.header
+                      }
+                      onChange={checked =>
+                        saveNewSlideOverride({ header: checked })
+                      }
+                    />
+                    <RefineOption
+                      label={t(
+                        'deck.settings.general.newSlideOverrides.overflowLabel',
+                      )}
+                      description={t(
+                        'deck.settings.general.newSlideOverrides.overflowDescription',
+                      )}
+                      checked={
+                        deck.newSlideOverrideOverflow ??
+                        NEW_SLIDE_OVERRIDE_DEFAULTS.overflow
+                      }
+                      onChange={checked =>
+                        saveNewSlideOverride({ overflow: checked })
+                      }
+                    />
+                    <RefineOption
+                      label={t(
+                        'deck.settings.general.newSlideOverrides.whiteboardLabel',
+                      )}
+                      description={t(
+                        'deck.settings.general.newSlideOverrides.whiteboardDescription',
+                      )}
+                      checked={
+                        deck.newSlideOverrideWhiteboard ??
+                        NEW_SLIDE_OVERRIDE_DEFAULTS.whiteboard
+                      }
+                      onChange={checked =>
+                        saveNewSlideOverride({ whiteboard: checked })
+                      }
+                    />
+                    <RefineOption
+                      label={t(
+                        'deck.settings.general.newSlideOverrides.drawingLabel',
+                      )}
+                      description={t(
+                        'deck.settings.general.newSlideOverrides.drawingDescription',
+                      )}
+                      checked={
+                        deck.newSlideOverrideDrawing ??
+                        NEW_SLIDE_OVERRIDE_DEFAULTS.drawing
+                      }
+                      onChange={checked =>
+                        saveNewSlideOverride({ drawing: checked })
+                      }
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {isOwner && (

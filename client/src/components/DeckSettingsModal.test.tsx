@@ -14,6 +14,7 @@ import {
 import { MemoryRouter } from 'react-router'
 import type { Deck } from '@slide-machine/shared'
 import { mockFetchRoutes } from '../test/fetch-mock'
+import { AuthProvider } from '../auth/AuthContext'
 import DeckSettingsModal from './DeckSettingsModal'
 
 const baseDeck: Deck = {
@@ -735,11 +736,19 @@ describe('DeckSettingsModal — study label (EVAL-3)', () => {
 })
 
 describe('DeckSettingsModal — new-slide overrides (GEN-8)', () => {
-  it('hides the checkboxes from non-admin viewers, owner included', () => {
+  /** Expands the "Advanced settings" disclosure so the checkboxes render. */
+  const openAdvanced = () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced settings' }))
+  }
+
+  it('hides both the disclosure and the checkboxes from non-admin viewers, owner included', () => {
     mockFetchRoutes({
       '/api/actions/template.list': () => ({ status: 200, body: [] }),
     })
     renderModal()
+    expect(
+      screen.queryByRole('button', { name: 'Advanced settings' }),
+    ).toBeNull()
     expect(
       screen.queryByRole('checkbox', {
         name: /Title\/section slide promotion/,
@@ -747,11 +756,111 @@ describe('DeckSettingsModal — new-slide overrides (GEN-8)', () => {
     ).toBeNull()
   })
 
+  it('shows an admin the "Advanced settings" disclosure, collapsed', () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+    })
+    renderModal({}, { viewerIsAdmin: true })
+    const toggle = screen.getByRole('button', { name: 'Advanced settings' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    // Collapsed: the checkboxes are not in the document at all yet
+    expect(
+      screen.queryByRole('checkbox', {
+        name: /Title\/section slide promotion/,
+      }),
+    ).toBeNull()
+  })
+
+  it('expanding the disclosure reveals the explanation and the checkboxes', () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+    })
+    renderModal({}, { viewerIsAdmin: true })
+    const toggle = screen.getByRole('button', { name: 'Advanced settings' })
+    openAdvanced()
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(
+      screen.getByText(
+        /overrides the AI's choice between updating the current/,
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('checkbox', {
+        name: /Title\/section slide promotion/,
+      }),
+    ).toBeInTheDocument()
+    // aria-controls must actually name the panel it expands, or a screen
+    // reader announces a relationship to nothing.
+    const panelId = toggle.getAttribute('aria-controls')
+    expect(panelId).toBeTruthy()
+    expect(document.getElementById(panelId!)).not.toBeNull()
+  })
+
+  it('collapsing the disclosure again hides the checkboxes', () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+    })
+    renderModal({}, { viewerIsAdmin: true })
+    openAdvanced()
+    expect(
+      screen.getByRole('checkbox', {
+        name: /Title\/section slide promotion/,
+      }),
+    ).toBeInTheDocument()
+    openAdvanced()
+    expect(
+      screen.queryByRole('checkbox', {
+        name: /Title\/section slide promotion/,
+      }),
+    ).toBeNull()
+  })
+
+  it('clicking the Design link inside the explanation switches to the Design tab and focuses it', () => {
+    // The Design tab's own content (TemplateDesignPanel) reads auth
+    // context, unlike anything on General — so this one test needs the
+    // provider and its refresh call mocked, where the others do not.
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      '/api/auth/refresh': () => ({ status: 401 }),
+    })
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <DeckSettingsModal
+            deck={baseDeck}
+            projectGenerationFreedom={2}
+            isOwner
+            viewerIsAdmin
+            onClose={vi.fn()}
+            onTemplateChange={vi.fn()}
+            onDeckChange={vi.fn()}
+            onDeleted={vi.fn()}
+            onReformatted={vi.fn()}
+          />
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+    openAdvanced()
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: "design's character and bullet limits",
+      }),
+    )
+    const designTab = screen.getByRole('tab', { name: 'Design' })
+    expect(designTab).toHaveAttribute('aria-selected', 'true')
+    // Clicking a link that jumps focus elsewhere in the page (here, a
+    // different tab entirely) without moving focus to match leaves a
+    // keyboard/screen-reader user's focus on a control that just
+    // disappeared from the visible tabpanel.
+    expect(designTab).toHaveFocus()
+  })
+
   it('shows three checkboxes checked by default (unset = on) and overflow unchecked (unset = off, GEN-8)', () => {
     mockFetchRoutes({
       '/api/actions/template.list': () => ({ status: 200, body: [] }),
     })
     renderModal({}, { viewerIsAdmin: true })
+    openAdvanced()
     for (const label of [
       /Title\/section slide promotion/,
       /Whiteboard promotion/,
@@ -769,6 +878,7 @@ describe('DeckSettingsModal — new-slide overrides (GEN-8)', () => {
       '/api/actions/template.list': () => ({ status: 200, body: [] }),
     })
     renderModal({ newSlideOverrideOverflow: true }, { viewerIsAdmin: true })
+    openAdvanced()
     expect(
       screen.getByRole('checkbox', { name: /Overflow promotion/ }),
     ).toBeChecked()
@@ -779,6 +889,7 @@ describe('DeckSettingsModal — new-slide overrides (GEN-8)', () => {
       '/api/actions/template.list': () => ({ status: 200, body: [] }),
     })
     renderModal({ newSlideOverrideHeader: false }, { viewerIsAdmin: true })
+    openAdvanced()
     expect(
       screen.getByRole('checkbox', {
         name: /Title\/section slide promotion/,
@@ -802,6 +913,7 @@ describe('DeckSettingsModal — new-slide overrides (GEN-8)', () => {
       },
     })
     const { onDeckChange } = renderModal({}, { viewerIsAdmin: true })
+    openAdvanced()
     fireEvent.click(
       screen.getByRole('checkbox', { name: /Overflow promotion/ }),
     )
@@ -822,6 +934,7 @@ describe('DeckSettingsModal — new-slide overrides (GEN-8)', () => {
       },
     })
     const { onDeckChange } = renderModal({}, { viewerIsAdmin: true })
+    openAdvanced()
     fireEvent.click(
       screen.getByRole('checkbox', {
         name: /Title\/section slide promotion/,
