@@ -77,6 +77,24 @@ describe('externalized templates', () => {
     }
   })
 
+  // TMPL-12: a 3-bullet cap read as too tight for what a slide actually
+  // needs, so every built-in that capped a bullet box at 3 was raised to 4
+  // (nyu-elegant's `content-list`, the only one found). Asserted on every
+  // layout of every template, resolved the same way the check above does,
+  // so a future built-in that ships a tight cap fails here rather than
+  // shipping unnoticed.
+  it('caps no built-in bullet box below 4 points', () => {
+    for (const template of listBuiltinTemplates())
+      for (const layout of layoutDescriptors(template)) {
+        const bullets = layout.slots.find(s => s.kind === 'bullets')
+        if (bullets?.maxItems !== undefined)
+          expect(
+            bullets.maxItems,
+            `${template.id}/${layout.type} caps bullets at ${bullets.maxItems}`,
+          ).toBeGreaterThanOrEqual(4)
+      }
+  })
+
   it('keeps the original starters on the budgets they were designed to', () => {
     for (const id of ['classic', 'midnight', 'seminar']) {
       const list = getBuiltinTemplate(id)!.layouts.find(l => l.type === 'list')!

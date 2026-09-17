@@ -486,7 +486,7 @@
           "name": "title",
           "kind": "text",
           "label": "Title",
-          "maxChars": 44,
+          "maxChars": 35,
           "required": true
         },
         {
@@ -502,7 +502,7 @@
           "kind": "bullets",
           "label": "Bullets",
           "description": "What follows from the opening text. Parallel, no full stops.",
-          "maxItems": 3,
+          "maxItems": 4,
           "maxChars": 65
         }
       ],
