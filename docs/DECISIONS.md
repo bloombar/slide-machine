@@ -925,3 +925,23 @@ resolved flag.
 (moving a title the model wrote for `lastSlide` onto `lastSlide` before promoting) and the promotion itself in
 one block; adding `isNewSlideOverrideOn(...)` as one more `&&` condition on the same `if` means the redirect
 only runs when the promotion actually fires, with no separate check needed.
+
+## GEN-8 overflow promotion off by default (2026-09-17)
+
+**User decision: capacity-overflow promotion is now off by default for every lecture**, existing and new — no
+migration writes a value, so "unset" simply resolves to off instead of on. Refine's box-limit trimming, which
+the same switch also governs, follows suit. The other three admin switches (heading, whiteboard,
+drawing-in-progress) keep their original default of on. Evidence for the change: a simulation with promotion
+off produced 15% fewer slides overall, and 21% of slides ended up over a character/bullet limit — but a
+browser render of those decks showed none actually clipped, because each box's fit-to-text shrink absorbed the
+overflow. Given that, forcing a promotion (and a Refine trim) by default was doing more than the visible result
+needed; it is now an opt-in admin experiment like the other three switches, not the default live-generation
+path.
+
+**Implementation: per-switch defaults, not a single flag.** `isNewSlideOverrideOn(value, defaultOn = true)`
+takes the switch's own default as a second argument; the four defaults themselves live in one place
+(`shared/src/lib/new-slide-overrides.ts`'s `NEW_SLIDE_OVERRIDE_DEFAULTS`), re-exported from
+`server/src/lib/new-slide-overrides.ts` so the server has one call site per switch and the client's settings
+checkboxes read the same map rather than assuming `?? true` everywhere. Both the live-generation call site
+(`deck.ts`'s overflow promotion) and Refine's `trimToBudget` (`reconcile.ts`) now resolve against
+`NEW_SLIDE_OVERRIDE_DEFAULTS.overflow` (`false`) instead of the old default-on fallback.

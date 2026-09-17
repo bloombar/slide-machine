@@ -127,6 +127,12 @@ describe('a slide the server promotes gets no raw-speech title (GEN-13)', () => 
   })
 
   it('leaves a budget-overflow promotion untitled when the model supplied none', async () => {
+    // GEN-8: the overflow promotion this test is about now defaults off —
+    // turn it on for this deck directly (no admin user in this suite).
+    await DeckModel.updateOne(
+      { _id: deckId },
+      { $set: { newSlideOverrideOverflow: true } },
+    )
     // A list slide already loaded with 5 of its 6-bullet budget.
     scripted.push({
       action: 'new',
@@ -238,6 +244,12 @@ describe('a title the model wrote goes to the slide the prompt asked about, not 
   })
 
   it('at the budget-overflow promotion site: the title heads the ORIGINAL slide, the new slide starts blank', async () => {
+    // GEN-8: the overflow promotion this test is about now defaults off —
+    // turn it on for this deck directly (no admin user in this suite).
+    await DeckModel.updateOne(
+      { _id: deckId },
+      { $set: { newSlideOverrideOverflow: true } },
+    )
     // An untitled list slide already loaded with 5 of its 6-bullet budget.
     scripted.push({
       action: 'new',

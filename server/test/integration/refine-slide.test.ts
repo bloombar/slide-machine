@@ -614,6 +614,18 @@ describe('deck.refineSlide clamps to the layout’s limits (GEN-4)', () => {
   // its "list" layout puts the limits on the SLOTS (title maxChars 44,
   // bullets maxItems 5/maxChars 70) rather than on layout `constraints` —
   // exactly the shape budgetsFor/clampToBudget exist to read.
+  //
+  // GEN-8: this trimming is gated by the lecture's overflow override switch,
+  // which now defaults OFF — so each test here turns it explicitly on
+  // (writing the field directly rather than through the admin-only action,
+  // which this suite has no admin user for).
+  beforeEach(async () => {
+    await DeckModel.updateOne(
+      { _id: deckId },
+      { $set: { newSlideOverrideOverflow: true } },
+    )
+  })
+
   it('trims an over-long title and bullets, and drops bullets past the count', async () => {
     const target = await SlideModel.create({
       deckId,
@@ -781,7 +793,10 @@ describe('deck.refineSlide clamps to the layout’s limits (GEN-4)', () => {
     await DeckModel.updateOne(
       { _id: customDeckId },
       {
-        $set: { templateId: String(template._id) },
+        $set: {
+          templateId: String(template._id),
+          newSlideOverrideOverflow: true, // GEN-8: trimming defaults off
+        },
         $unset: { templateVersionId: '' },
       },
     )
@@ -809,6 +824,134 @@ describe('deck.refineSlide clamps to the layout’s limits (GEN-4)', () => {
     // The switch is refused: the body would need trimming to fit "narrow",
     // and a layout-only refine must not change the words.
     expect(t?.layoutType).toBe('wide')
+    expect(t?.body).toBe('y'.repeat(200))
+    refine.mockRestore()
+  })
+})
+
+/**
+ * GEN-8: the overflow switch (and with it, Refine's trimming) now defaults
+ * off. Unlike the "turns off" tests below, these never call
+ * deck.setNewSlideOverrides at all — a freshly-created deck's field is
+ * genuinely absent, not explicitly set — so a regression that flips
+ * reconcile.ts's own fallback back to trimming (rather than reading
+ * NEW_SLIDE_OVERRIDE_DEFAULTS.overflow) would still show green everywhere
+ * else and only fail here.
+ */
+describe('an unset overflow switch leaves Refine untrimmed by default (GEN-8)', () => {
+  it('stores over-long bullets untrimmed with the switch left unset', async () => {
+    const target = await SlideModel.create({
+      deckId,
+      index: 0,
+      layoutType: 'list',
+      title: 'Stages',
+      bullets: ['one', 'two', 'three'],
+    })
+    const gen = registry.get<GenerationProvider>('generation')
+    const refine = vi.spyOn(gen, 'refineSlide').mockResolvedValueOnce({
+      layoutType: 'list',
+      slots: {
+        title: 'This title definitely runs on for far too many characters',
+        bullets: [
+          'this bullet runs on for far longer than the seventy character budget allows it to',
+          ...Array.from({ length: 7 }, (_, i) => `bullet ${i}`), // 8 total
+        ],
+      },
+    })
+
+    const res = await act(ada, 'deck.refineSlide', {
+      deckId,
+      slideId: target._id.toString(),
+    })
+    expect(res.status).toBe(200)
+
+    const t = await SlideModel.findById(target._id)
+    // Untrimmed: the over-long title survives, all 8 bullets survive, and at
+    // least one is over the layout's 70-char bullet budget.
+    expect(t?.title!.length).toBeGreaterThan(44)
+    expect(t?.bullets).toHaveLength(8)
+    expect(t?.bullets?.some(b => b.length > 70)).toBe(true)
+    refine.mockRestore()
+  })
+
+  it('lets a layout-only switch through unset, even when the target does not fit (fit gate skipped)', async () => {
+    const owner = await UserModel.findOne({ email: 'ada@example.com' })
+    const template = await TemplateModel.create({
+      ownerId: owner!._id,
+      name: 'Two bodies (unset)',
+      permalinkSlug: `two-bodies-unset-${Date.now()}`,
+      theme: { background: '#ffffff', text: '#111111', accent: '#0055ff' },
+      layouts: [
+        {
+          type: 'wide',
+          label: 'Wide',
+          purpose: 'a roomy body',
+          slots: [
+            { name: 'title', kind: 'text', label: 'Title' },
+            { name: 'body', kind: 'text', label: 'Body', maxChars: 300 },
+          ],
+          elementPositions: {},
+        },
+        {
+          type: 'narrow',
+          label: 'Narrow',
+          purpose: 'a tight body',
+          slots: [
+            { name: 'title', kind: 'text', label: 'Title' },
+            { name: 'body', kind: 'text', label: 'Body', maxChars: 40 },
+          ],
+          elementPositions: {},
+        },
+        {
+          type: 'whiteboard',
+          label: 'Whiteboard',
+          purpose: 'a blank slate',
+          slots: [],
+          elementPositions: {},
+        },
+      ],
+      visibility: 'private',
+    })
+    const project = await act(ada, 'project.create', { title: 'Two bodies' })
+    const created = await act(ada, 'deck.create', {
+      projectId: project.body.id,
+      title: 'Lecture',
+      templateId: String(template._id),
+    })
+    const customDeckId = created.body.id as string
+    // The override is left unset here — no deck.setNewSlideOverrides call —
+    // this is the default-off state, not an admin experiment.
+    await DeckModel.updateOne(
+      { _id: customDeckId },
+      {
+        $set: { templateId: String(template._id) },
+        $unset: { templateVersionId: '' },
+      },
+    )
+    const target = await SlideModel.create({
+      deckId: customDeckId,
+      index: 0,
+      layoutType: 'wide',
+      title: 'Long body',
+      body: 'y'.repeat(200), // fits "wide" (300), far over "narrow" (40)
+    })
+
+    const gen = registry.get<GenerationProvider>('generation')
+    const refine = vi.spyOn(gen, 'refineSlide').mockResolvedValueOnce({
+      layoutType: 'narrow',
+      slots: {},
+    })
+
+    await act(ada, 'deck.refineSlide', {
+      deckId: customDeckId,
+      slideId: target._id.toString(),
+      options: { parts: { text: false, layout: true, imagery: false } },
+    })
+
+    const t = await SlideModel.findById(target._id)
+    // The switch is taken even though "narrow" cannot hold the body without
+    // a trim: unset defaults to off, so the fit-first gate is skipped.
+    expect(t?.layoutType).toBe('narrow')
     expect(t?.body).toBe('y'.repeat(200))
     refine.mockRestore()
   })

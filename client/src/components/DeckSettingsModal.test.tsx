@@ -747,34 +747,66 @@ describe('DeckSettingsModal — new-slide overrides (GEN-8)', () => {
     ).toBeNull()
   })
 
-  it('shows all four checkboxes to an admin, checked by default (unset = on)', () => {
+  it('shows three checkboxes checked by default (unset = on) and overflow unchecked (unset = off, GEN-8)', () => {
     mockFetchRoutes({
       '/api/actions/template.list': () => ({ status: 200, body: [] }),
     })
     renderModal({}, { viewerIsAdmin: true })
     for (const label of [
       /Title\/section slide promotion/,
-      /Overflow promotion/,
       /Whiteboard promotion/,
       /Drawing-in-progress hold/,
     ]) {
       expect(screen.getByRole('checkbox', { name: label })).toBeChecked()
     }
+    expect(
+      screen.getByRole('checkbox', { name: /Overflow promotion/ }),
+    ).not.toBeChecked()
+  })
+
+  it('reflects an explicitly-on overflow switch as checked', () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+    })
+    renderModal({ newSlideOverrideOverflow: true }, { viewerIsAdmin: true })
+    expect(
+      screen.getByRole('checkbox', { name: /Overflow promotion/ }),
+    ).toBeChecked()
   })
 
   it('reflects an explicitly-off switch as unchecked', () => {
     mockFetchRoutes({
       '/api/actions/template.list': () => ({ status: 200, body: [] }),
     })
-    renderModal({ newSlideOverrideOverflow: false }, { viewerIsAdmin: true })
-    expect(
-      screen.getByRole('checkbox', { name: /Overflow promotion/ }),
-    ).not.toBeChecked()
+    renderModal({ newSlideOverrideHeader: false }, { viewerIsAdmin: true })
     expect(
       screen.getByRole('checkbox', {
         name: /Title\/section slide promotion/,
       }),
+    ).not.toBeChecked()
+    expect(
+      screen.getByRole('checkbox', { name: /Whiteboard promotion/ }),
     ).toBeChecked()
+  })
+
+  it('ticking the overflow checkbox sends true', async () => {
+    let sent: Record<string, unknown> = {}
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+      '/api/actions/deck.setNewSlideOverrides': init => {
+        sent = JSON.parse(String(init?.body))
+        return {
+          status: 200,
+          body: { ...baseDeck, newSlideOverrideOverflow: true },
+        }
+      },
+    })
+    const { onDeckChange } = renderModal({}, { viewerIsAdmin: true })
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /Overflow promotion/ }),
+    )
+    await waitFor(() => expect(onDeckChange).toHaveBeenCalled())
+    expect(sent).toEqual({ deckId: 'd1', overflow: true })
   })
 
   it('toggling a checkbox sends the field and reports the fresh deck', async () => {

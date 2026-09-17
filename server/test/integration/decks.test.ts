@@ -626,6 +626,13 @@ describe('session.phrase capacity enforcement', () => {
   it('converts an update that would overflow the slide into a new slide', async () => {
     const deck = await act(ada, 'deck.create', { projectId, title: 'Full' })
     const deckId = deck.body.id as string
+    // GEN-8: overflow promotion defaults off; this test is about the
+    // promotion itself, so turn the admin switch on directly (writing the
+    // field, since this suite has no admin user for the gated action).
+    await DeckModel.updateOne(
+      { _id: deckId },
+      { $set: { newSlideOverrideOverflow: true } },
+    )
 
     // Build a bullet slide already at the design's own cap. The phrase
     // offers more items than any shipped design allows, so the slide comes

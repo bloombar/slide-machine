@@ -99,9 +99,10 @@ export interface Deck {
    * header slide in place instead. */
   newSlideOverrideHeader?: boolean
   /** Admin-only (GEN-8): during live generation, an update that would
-   * overflow its slide's budget is promoted to a new slide. Absent/true =
-   * on; false = the update lands in place, unclamped. Also turns off
-   * Refine's box-limit trimming (GEN-4) for this lecture. */
+   * overflow its slide's budget is promoted to a new slide. Unlike the other
+   * three switches, this one defaults OFF: absent/false = off, the update
+   * lands in place, unclamped; true = on, promoted. Also governs Refine's
+   * box-limit trimming (GEN-4) for this lecture the same way. */
   newSlideOverrideOverflow?: boolean
   /** Admin-only (GEN-8): during live generation, an update to a whiteboard
    * canvas is promoted to a new slide (the canvas has no text slots to show

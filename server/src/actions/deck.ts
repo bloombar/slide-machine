@@ -106,7 +106,10 @@ import {
   updateOverflows,
   charCount,
 } from '../lib/slide-fit'
-import { isNewSlideOverrideOn } from '../lib/new-slide-overrides'
+import {
+  isNewSlideOverrideOn,
+  NEW_SLIDE_OVERRIDE_DEFAULTS,
+} from '../lib/new-slide-overrides'
 import { declaredContentOf, onlyDeclaredBy } from '../lib/generated-slots'
 import {
   layoutDisplaysContent,
@@ -1464,9 +1467,13 @@ export const sessionPhrase = defineAction<
     if (
       result.action === 'update' &&
       lastSlide &&
-      // GEN-8 admin override: off means an overflowing update lands in place,
-      // unclamped (an admin experiment) — see isNewSlideOverrideOn.
-      isNewSlideOverrideOn(deck.newSlideOverrideOverflow) &&
+      // GEN-8 admin override: overflow promotion defaults OFF (an
+      // overflowing update lands in place, unclamped, unless an admin turns
+      // it on) — see isNewSlideOverrideOn / NEW_SLIDE_OVERRIDE_DEFAULTS.
+      isNewSlideOverrideOn(
+        deck.newSlideOverrideOverflow,
+        NEW_SLIDE_OVERRIDE_DEFAULTS.overflow,
+      ) &&
       updateOverflows(
         result,
         {
@@ -1797,7 +1804,8 @@ export const deckSetRefineSettings = defineAction<
  * `settingsAdminOf` like `deckSetStudyLabel`: an owner or editor who is not
  * an allowlisted admin is refused, same as anyone else — the UI hiding these
  * checkboxes is not the security boundary. For each field a value sets it,
- * null re-inherits the default (on), and absent leaves it unchanged. */
+ * null re-inherits the switch's own default (on, except overflow — see
+ * NEW_SLIDE_OVERRIDE_DEFAULTS), and absent leaves it unchanged. */
 export const deckSetNewSlideOverrides = defineAction<
   DeckSetNewSlideOverridesInput,
   Deck,

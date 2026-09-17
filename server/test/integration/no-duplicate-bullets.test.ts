@@ -308,6 +308,14 @@ describe('dedup at the layout bullet budget (GEN-14)', () => {
   }
 
   it('a pure-repeat update at a full slide stays a plain update, not a new slide', async () => {
+    // GEN-8: this test is about updateOverflows' dedup-aware count, which
+    // only runs when the overflow override is on (it defaults off) — turn
+    // it on so the assertion actually exercises that path rather than
+    // passing vacuously because the promotion never fires at all.
+    await DeckModel.updateOne(
+      { _id: deckId },
+      { $set: { newSlideOverrideOverflow: true } },
+    )
     const cap = await discoverBulletCap()
     const full = points(cap)
     scripted.push({
@@ -346,6 +354,13 @@ describe('dedup at the layout bullet budget (GEN-14)', () => {
   })
 
   it('a repeat mixed with a genuine point at a full slide promotes with only the genuine point', async () => {
+    // GEN-8: this promotion is the overflow override, which now defaults
+    // off — turn it on for this deck so the overflow itself (not dedup) is
+    // under test here.
+    await DeckModel.updateOne(
+      { _id: deckId },
+      { $set: { newSlideOverrideOverflow: true } },
+    )
     const cap = await discoverBulletCap()
     const full = points(cap)
     scripted.push({
