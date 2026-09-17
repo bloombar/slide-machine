@@ -1082,7 +1082,7 @@ admins only") was redundant once the whole section sits behind an admin-gated di
 of what the switches do, the overflow/Refine coupling, and the pointer to the Design tab's box limits were
 folded into a single paragraph instead of stacking two explanations above the checkboxes.
 
-## TMPL-12: 3-bullet caps raised to 4 across built-ins, content-list title narrowed to 35 (2026-09-17)
+## TMPL-12: nyu-elegant content-list holds 4 bullets, title narrowed to 35 (2026-09-17)
 
 **User decision**: every built-in whose bullet box was capped at 3 should be raised — to 4, not the 5 first
 tried — and `nyu-elegant`'s `content-list` title budget narrowed from 44 to 35 characters to make 4 hold at

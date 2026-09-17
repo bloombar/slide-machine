@@ -78,7 +78,7 @@ describe('externalized templates', () => {
   })
 
   // TMPL-12: a 3-bullet cap read as too tight for what a slide actually
-  // needs, so every built-in that capped a bullet box at 3 was raised to 5
+  // needs, so every built-in that capped a bullet box at 3 was raised to 4
   // (nyu-elegant's `content-list`, the only one found). Asserted on every
   // layout of every template, resolved the same way the check above does,
   // so a future built-in that ships a tight cap fails here rather than
