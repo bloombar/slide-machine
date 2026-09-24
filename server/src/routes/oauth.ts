@@ -36,7 +36,7 @@ import { UserModel } from '../models/user'
 import {
   provider,
   supportedScopes,
-  CONSENT_COOKIE,
+  consentCookieName,
   clearConsentCookie,
 } from '../oauth/provider'
 import {
@@ -146,7 +146,18 @@ export const oauthAuthRouter = (): Router => {
     path(metadata.authorization_endpoint),
     authorizationHandler({ provider }),
   )
-  router.use(path(metadata.token_endpoint), tokenHandler({ provider }))
+  router.use(
+    path(metadata.token_endpoint),
+    // `rateLimit.max` is configurable (OAUTH_TOKEN_RATE_LIMIT, config/env.ts)
+    // for the same reason DECK_VIEW_RATE_LIMIT is: a test suite that drives
+    // real authorize/rotate/replay flows over real HTTP legitimately makes
+    // more than the SDK's default 50 requests per 15 minutes in one run.
+    // Unconfigured, this is the SDK's own default and nothing changes.
+    tokenHandler({
+      provider,
+      rateLimit: { windowMs: 15 * 60 * 1000, max: env.OAUTH_TOKEN_RATE_LIMIT },
+    }),
+  )
   router.use(
     path(metadata.registration_endpoint!),
     clientRegistrationHandler({ clientsStore: provider.clientsStore }),
@@ -172,11 +183,11 @@ export const oauthAuthRouter = (): Router => {
 export const oauthConsentRouter = Router()
 
 /**
- * A value `browserNonceHash` can never equal, so a missing or malformed
- * binding cookie falls through to the same "not found" outcome as every
- * other refusal rather than getting a query with no hash condition at all
- * (which would match any row with any nonce). `hashToken` output is 64 lower
- * case hex characters; this is neither hex nor that length.
+ * A value `browserNonceHash` can never equal, so a missing binding cookie
+ * falls through to the same "not found" outcome as every other refusal
+ * rather than getting a query with no hash condition at all (which would
+ * match any row with any nonce). `hashToken` output is 64 lower case hex
+ * characters; this is neither hex nor that length.
  */
 const NO_CONSENT_COOKIE = 'no-consent-cookie'
 
@@ -184,19 +195,16 @@ const NO_CONSENT_COOKIE = 'no-consent-cookie'
  * The HMAC the parked row must carry for this request to be answerable from
  * this browser (finding 1a, docs/plans/OAUTH_CONSENT_SECURITY.md).
  *
- * The cookie's value is `<requestId>.<nonce>` — checking that the id half
- * matches the id in the URL means a cookie set for one pending request can
- * never be reused to answer a different one, even by the same browser.
+ * The cookie is named after the request id (`consentCookieName`,
+ * oauth/provider.ts — root cause C4, rework round 1), so there is no id to
+ * split back out of the value: whichever cookie answers to *this* id's name
+ * is the only one that could ever be relevant, and its value is the raw
+ * nonce directly.
  */
 const browserNonceHash = (req: Request, id: string): string => {
-  const raw = req.cookies?.[CONSENT_COOKIE]
-  if (typeof raw !== 'string') return NO_CONSENT_COOKIE
-  const dot = raw.indexOf('.')
-  if (dot < 0) return NO_CONSENT_COOKIE
-  const cookieId = raw.slice(0, dot)
-  const nonce = raw.slice(dot + 1)
-  if (cookieId !== id || !nonce) return NO_CONSENT_COOKIE
-  return hashToken(nonce)
+  const raw = req.cookies?.[consentCookieName(id)]
+  if (typeof raw !== 'string' || !raw) return NO_CONSENT_COOKIE
+  return hashToken(raw)
 }
 
 /**
@@ -249,13 +257,39 @@ const redirectWith = (
 }
 
 /**
+ * The redirect target, in the most specific readable form available
+ * (finding 1b / root cause D1, rework round 1).
+ *
+ * `origin` rather than `hostname`: for a loopback client (RFC 8252) the
+ * *port* is the only thing telling two of them apart, and `hostname` drops
+ * it. For a custom-scheme redirect URI — which registers just fine, the
+ * SDK's schema only refuses `javascript:`/`data:`/`vbscript:` — `hostname`
+ * is actively misleading rather than merely incomplete: `myapp://cb/x`
+ * yields `cb`, an attacker-chosen string shaped exactly like a real host,
+ * and `com.example.app:/oauth2redirect` (no authority at all) yields the
+ * empty string, rendering "Access will be sent to .". `origin` fails more
+ * honestly for the second case — WHATWG URL gives the literal string
+ * `"null"` for a non-special scheme with no authority — which is why that
+ * case falls back to the whole URI instead: something a person can actually
+ * read beats a word that looks like an answer but is not one.
+ */
+const redirectDisplay = (uri: string): string => {
+  try {
+    const origin = new URL(uri).origin
+    return origin && origin !== 'null' ? origin : uri
+  } catch {
+    return uri
+  }
+}
+
+/**
  * What the consent screen shows: who is asking, for what, to which account,
  * and where the answer goes.
  *
  * The client's name is whatever it registered, so it is a label and never a
  * claim — anything may register under any name. That is a real limitation of
  * open registration, and the reason the screen also says which account is
- * about to be connected and the redirect URI's host (finding 1b,
+ * about to be connected and the redirect target (finding 1b,
  * docs/plans/OAUTH_CONSENT_SECURITY.md): a link the user's own browser
  * genuinely started passes every server-side check there is, so these two
  * facts are the only defence left, and they are read straight off the parked
@@ -271,6 +305,16 @@ oauthConsentRouter.get(
       OAuthClientModel.findOne({ clientId: request.clientId }),
       UserModel.findById(req.userId),
     ])
+    if (!user) {
+      // The only way `requireAuth` can verify a token yet name an account
+      // that does not load: a session whose account was deleted after the
+      // JWT was signed (root cause D2). The earlier version rendered a
+      // hardcoded English "your account" spliced into a translated
+      // sentence — wrong on its own — and, worse, *affirmed* that a
+      // connection was about to happen instead of refusing one. Treat it
+      // exactly like any other invalid session.
+      throw new HttpError(401, 'unauthorized', 'Sign in to continue')
+    }
 
     res.json({
       clientName: client?.clientName ?? 'An unnamed assistant',
@@ -279,8 +323,8 @@ oauthConsentRouter.get(
         description:
           SCOPE_DESCRIPTIONS[scope as Scope] ?? 'An unrecognised permission',
       })),
-      account: user?.email ?? 'your account',
-      redirectHost: new URL(request.redirectUri).hostname,
+      account: user.email,
+      redirectTarget: redirectDisplay(request.redirectUri),
     })
   },
 )
@@ -324,7 +368,7 @@ oauthConsentRouter.post(
     }
 
     // The flow has an answer; the binding cookie's job is done.
-    clearConsentCookie(res)
+    clearConsentCookie(res, request._id.toString())
     res.json({
       redirectTo: redirectWith(request.redirectUri, request.state, { code }),
     })
@@ -345,7 +389,7 @@ oauthConsentRouter.post(
     const request = await pendingRequest(req, String(req.params.id))
     await OAuthAuthorizationModel.deleteOne({ _id: request._id })
 
-    clearConsentCookie(res)
+    clearConsentCookie(res, request._id.toString())
     res.json({
       redirectTo: redirectWith(request.redirectUri, request.state, {
         error: 'access_denied',

@@ -1,43 +1,55 @@
 # OAuth consent: three security findings
 
-Status: **all three fixed.** Written 2026-09-19; fixed 2026-09-24 on
-`fix/oauth-consent-binding`.
+Status: **all three fixed**, after a rework round. Written 2026-09-19; first
+pass fixed 2026-09-24 on `fix/oauth-consent-binding`; two independent reviews
+of that pass found that two of the three fixes did not hold up under real
+HTTP traffic (one made things worse for honest clients), and a second pass
+the same day fixed the underlying causes. What follows describes the
+**current** state; `docs/DECISIONS.md` keeps the record of what the first
+pass got wrong and why, since that reasoning is worth keeping even though the
+code it describes no longer exists.
 
-These were found while reviewing the equivalent code in another project
-(wikistreets), which had the first of them as a live account-takeover bug.
-Slide Machine has the same shape. What shipped:
-
-- **Finding 1.** Both parts. (a): `provider.authorize` sets a
-  browser-binding cookie (`sm_oauth_consent`, scoped to `/api/oauth`, not
-  `/oauth` — see the fix branch's note below), and `GET`/`approve`/`deny` in
-  `routes/oauth.ts` fold the binding check into the same query that already
-  refused missing/expired/already-answered requests, so all four refusals stay
-  identical (a malformed id's CastError is still caught, too). (b): the `GET`
-  now also returns the signed-in account and the redirect URI's host, and
-  `OAuthConsentPage.tsx` renders both. The harder variant — the victim's own
-  browser starting the flow — is still not something a server-side check can
-  refuse; (b) is what a person reading the screen now has to work with.
+- **Finding 1.** Both parts. (a): `provider.authorize` sets a browser-binding
+  cookie, `__Host-` prefixed and named after the request id it belongs to
+  (`consentCookieName`), `Path=/`. The `__Host-` prefix is load-bearing, not
+  decoration: a merely `httpOnly`/`SameSite=Lax` cookie can still be
+  *planted* — an attacker parks their own flow and hands the victim the
+  resulting cookie's value to set for themselves, since cookies are not
+  origin-isolated by default — and both reviewers demonstrated exactly that
+  against the first pass. `__Host-` closes it: only a same-origin response
+  can ever set the cookie at all. Naming it per request (rather than one
+  fixed name) stops a second parked flow from silently overwriting the
+  first's cookie. `GET`/`approve`/`deny` in `routes/oauth.ts` fold the
+  binding check into the same query that already refused
+  missing/expired/already-answered requests, so all refusals stay identical.
+  (b): the `GET` returns the signed-in account and the redirect **origin**
+  (falling back to the whole URI when an origin is not a meaningful answer —
+  see finding-1b's D1 note in `docs/DECISIONS.md`), and refuses outright
+  rather than affirming a connection when the session names a deleted
+  account (D2). The harder variant — the victim's own browser starting the
+  flow — is still not something a server-side check can refuse; (b) is what
+  a person reading the screen has to work with.
 - **Finding 2.** `exchangeAuthorizationCode` puts the redirect URI and
   resource checks inside the same atomic `findOneAndUpdate` that claims the
-  row, so nothing is consumed until every binding matches — a wrong redirect
-  URI no longer burns a code. A replay of an already-redeemed code now revokes
-  the exact access/refresh tokens that redemption minted (their hashes are
-  recorded on the grant at exchange time), with the refusal body kept
-  byte-identical to an unknown code's.
-- **Finding 3.** `rotateTokens` records the superseded token's hash
-  (`previousTokenHash`) on the row that replaces it. Presenting an
-  already-rotated-out token is recognised via that link and ends the whole
-  connection (`disconnect`), not just the one exchange, and mails the account
-  a best-effort notice via the existing mailer — the only visible trace of the
-  attempt a user gets.
+  row, so nothing is consumed until every binding matches. A replay of an
+  already-redeemed code ends the whole **token family** it minted — every
+  access and refresh token descended from that one authorization grant,
+  however many times they have since rotated — rather than snapshotting two
+  token hashes onto the grant row, which the first pass did and which a
+  concurrent double exchange or an intervening rotation could make stale
+  before it was ever read. See `docs/DECISIONS.md` root cause A.
+- **Finding 3.** `rotateTokens` no longer deletes a superseded refresh token
+  immediately; it shortens the row's expiry to a grace window and marks it
+  superseded, mirroring `auth/refresh-store.ts`'s own session-rotation
+  grace. A presentation inside the window is an ordinary retry (the MCP SDK
+  client has no single-flight around refresh); a presentation after it ends
+  the whole token family and mails the account a best-effort notice, with an
+  unconditional log line as a trace independent of whether mail is
+  configured at all. See `docs/DECISIONS.md` root causes A and B.
 
-One deviation from the brief worth recording: the cookie is scoped to
-`/api/oauth`, not `/oauth`. The three person-facing consent endpoints answer
-under `/api/oauth/authorization/...` (`routes/oauth.ts`, mounted under `/api`
-in `app.ts`); `/oauth` is where the machine-facing SDK router lives and never
-reads this cookie. A `Path=/oauth` cookie would not have matched the requests
-that needed it at all. See `docs/DECISIONS.md` for the rest of the judgment
-calls made while fixing this.
+See `docs/DECISIONS.md` for the full record of what changed between the two
+passes, the judgment calls made in the second, and the residual limits that
+are now written down rather than left implicit.
 
 The three are ordered by severity. Finding 1 is the one to act on.
 

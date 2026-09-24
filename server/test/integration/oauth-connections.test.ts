@@ -63,11 +63,14 @@ beforeEach(async () => {
 
 describe('issuing and verifying', () => {
   it('mints a pair that verifies back to the account and the assistant', async () => {
-    const tokens = await issueTokens({
-      clientId: 'client-a',
-      userId,
-      scopes: [SCOPES.read],
-    })
+    const tokens = await issueTokens(
+      {
+        clientId: 'client-a',
+        userId,
+        scopes: [SCOPES.read],
+      },
+      'test-family',
+    )
     const verified = await verifyToken(tokens.accessToken)
 
     expect(verified).toMatchObject({
@@ -80,11 +83,14 @@ describe('issuing and verifying', () => {
   it('stores no token that could be replayed from the database', async () => {
     // A leaked collection must not yield working credentials — the same rule
     // session refresh tokens already follow.
-    const tokens = await issueTokens({
-      clientId: 'client-a',
-      userId,
-      scopes: [SCOPES.read],
-    })
+    const tokens = await issueTokens(
+      {
+        clientId: 'client-a',
+        userId,
+        scopes: [SCOPES.read],
+      },
+      'test-family',
+    )
     const rows = await OAuthTokenModel.find({})
     const stored = JSON.stringify(rows.map(r => r.tokenHash))
 
@@ -99,11 +105,14 @@ describe('issuing and verifying', () => {
   it('refuses an expired token even before the sweep removes it', async () => {
     // Mongo's TTL monitor runs about once a minute, so an expired row is
     // routinely still present when its token is presented.
-    const tokens = await issueTokens({
-      clientId: 'client-a',
-      userId,
-      scopes: [SCOPES.read],
-    })
+    const tokens = await issueTokens(
+      {
+        clientId: 'client-a',
+        userId,
+        scopes: [SCOPES.read],
+      },
+      'test-family',
+    )
     await OAuthTokenModel.updateMany(
       {},
       { expiresAt: new Date(Date.now() - 1) },
@@ -113,11 +122,14 @@ describe('issuing and verifying', () => {
   })
 
   it('will not let a refresh token be used as an access token', async () => {
-    const tokens = await issueTokens({
-      clientId: 'client-a',
-      userId,
-      scopes: [SCOPES.read],
-    })
+    const tokens = await issueTokens(
+      {
+        clientId: 'client-a',
+        userId,
+        scopes: [SCOPES.read],
+      },
+      'test-family',
+    )
     expect(await verifyToken(tokens.refreshToken)).toBeNull()
   })
 })
@@ -137,11 +149,14 @@ describe('how long a connection lasts', () => {
   it('restarts the clock on every use, so an active connection never lapses', async () => {
     // This is what makes the window an IDLE timeout rather than a lifetime,
     // and it is the whole reason six months is generous rather than limiting.
-    const first = await issueTokens({
-      clientId: 'client-a',
-      userId,
-      scopes: [SCOPES.read],
-    })
+    const first = await issueTokens(
+      {
+        clientId: 'client-a',
+        userId,
+        scopes: [SCOPES.read],
+      },
+      'test-family',
+    )
     const issued = await OAuthTokenModel.findOne({ kind: 'refresh' })
 
     // Age the stored token, then use it: the replacement must be dated from
@@ -152,7 +167,13 @@ describe('how long a connection lasts', () => {
     const rotated = await rotateTokens(first.refreshToken, 'client-a')
     expect(rotated).not.toBeNull()
 
-    const replacement = await OAuthTokenModel.findOne({ kind: 'refresh' })
+    // Rotation no longer deletes the presented row (it is kept, shortened,
+    // as evidence for reuse detection — rework round 1's root cause B), so
+    // two `kind: 'refresh'` rows exist now. The replacement is the live one.
+    const replacement = await OAuthTokenModel.findOne({
+      kind: 'refresh',
+      supersededAt: { $exists: false },
+    })
     expect(replacement!.expiresAt.getTime()).toBeGreaterThan(aged.getTime())
     expect(replacement!.expiresAt.getTime()).toBeGreaterThan(
       issued!.expiresAt.getTime() - 1000,
@@ -162,11 +183,14 @@ describe('how long a connection lasts', () => {
 
 describe('rotation', () => {
   it('issues a new pair and burns the old refresh token', async () => {
-    const first = await issueTokens({
-      clientId: 'client-a',
-      userId,
-      scopes: [SCOPES.write],
-    })
+    const first = await issueTokens(
+      {
+        clientId: 'client-a',
+        userId,
+        scopes: [SCOPES.write],
+      },
+      'test-family',
+    )
     const second = await rotateTokens(first.refreshToken, 'client-a')
 
     expect(second).not.toBeNull()
@@ -174,20 +198,26 @@ describe('rotation', () => {
   })
 
   it('refuses a refresh token presented by a different assistant', async () => {
-    const tokens = await issueTokens({
-      clientId: 'client-a',
-      userId,
-      scopes: [SCOPES.read],
-    })
+    const tokens = await issueTokens(
+      {
+        clientId: 'client-a',
+        userId,
+        scopes: [SCOPES.read],
+      },
+      'test-family',
+    )
     expect(await rotateTokens(tokens.refreshToken, 'client-b')).toBeNull()
   })
 
   it('lets a client ask for less than it holds', async () => {
-    const tokens = await issueTokens({
-      clientId: 'client-a',
-      userId,
-      scopes: [SCOPES.read, SCOPES.write],
-    })
+    const tokens = await issueTokens(
+      {
+        clientId: 'client-a',
+        userId,
+        scopes: [SCOPES.read, SCOPES.write],
+      },
+      'test-family',
+    )
     const rotated = await rotateTokens(tokens.refreshToken, 'client-a', [
       SCOPES.read,
     ])
@@ -198,11 +228,14 @@ describe('rotation', () => {
 
   it('never lets a client ask for more than it holds', async () => {
     // The grant is what the user approved; a refresh must not widen it.
-    const tokens = await issueTokens({
-      clientId: 'client-a',
-      userId,
-      scopes: [SCOPES.read],
-    })
+    const tokens = await issueTokens(
+      {
+        clientId: 'client-a',
+        userId,
+        scopes: [SCOPES.read],
+      },
+      'test-family',
+    )
     const rotated = await rotateTokens(tokens.refreshToken, 'client-a', [
       SCOPES.write,
     ])
@@ -214,11 +247,14 @@ describe('rotation', () => {
 
 describe('taking it back', () => {
   it('forgets one token, and says nothing about one it never knew', async () => {
-    const tokens = await issueTokens({
-      clientId: 'client-a',
-      userId,
-      scopes: [SCOPES.read],
-    })
+    const tokens = await issueTokens(
+      {
+        clientId: 'client-a',
+        userId,
+        scopes: [SCOPES.read],
+      },
+      'test-family',
+    )
     await revokeToken(tokens.accessToken)
     expect(await verifyToken(tokens.accessToken)).toBeNull()
 
@@ -227,16 +263,22 @@ describe('taking it back', () => {
   })
 
   it('cuts every token one assistant holds, not just the last one used', async () => {
-    const first = await issueTokens({
-      clientId: 'client-a',
-      userId,
-      scopes: [SCOPES.read],
-    })
-    const second = await issueTokens({
-      clientId: 'client-a',
-      userId,
-      scopes: [SCOPES.read],
-    })
+    const first = await issueTokens(
+      {
+        clientId: 'client-a',
+        userId,
+        scopes: [SCOPES.read],
+      },
+      'test-family',
+    )
+    const second = await issueTokens(
+      {
+        clientId: 'client-a',
+        userId,
+        scopes: [SCOPES.read],
+      },
+      'test-family',
+    )
 
     expect(await disconnect(userId, 'client-a')).toBe(4)
     expect(await verifyToken(first.accessToken)).toBeNull()
@@ -245,17 +287,26 @@ describe('taking it back', () => {
 
   it('leaves other assistants, and other accounts, alone', async () => {
     // "Disconnect one; stay signed in everywhere else" is the promise.
-    const kept = await issueTokens({
-      clientId: 'client-b',
-      userId,
-      scopes: [SCOPES.read],
-    })
-    const someoneElse = await issueTokens({
-      clientId: 'client-a',
-      userId: otherId,
-      scopes: [SCOPES.read],
-    })
-    await issueTokens({ clientId: 'client-a', userId, scopes: [SCOPES.read] })
+    const kept = await issueTokens(
+      {
+        clientId: 'client-b',
+        userId,
+        scopes: [SCOPES.read],
+      },
+      'test-family',
+    )
+    const someoneElse = await issueTokens(
+      {
+        clientId: 'client-a',
+        userId: otherId,
+        scopes: [SCOPES.read],
+      },
+      'test-family',
+    )
+    await issueTokens(
+      { clientId: 'client-a', userId, scopes: [SCOPES.read] },
+      'test-family',
+    )
 
     await disconnect(userId, 'client-a')
 
@@ -266,9 +317,18 @@ describe('taking it back', () => {
 
 describe('the connected-assistants list', () => {
   it('shows one row per assistant, however often it has refreshed', async () => {
-    await issueTokens({ clientId: 'client-a', userId, scopes: [SCOPES.read] })
-    await issueTokens({ clientId: 'client-a', userId, scopes: [SCOPES.write] })
-    await issueTokens({ clientId: 'client-b', userId, scopes: [SCOPES.read] })
+    await issueTokens(
+      { clientId: 'client-a', userId, scopes: [SCOPES.read] },
+      'test-family',
+    )
+    await issueTokens(
+      { clientId: 'client-a', userId, scopes: [SCOPES.write] },
+      'test-family',
+    )
+    await issueTokens(
+      { clientId: 'client-b', userId, scopes: [SCOPES.read] },
+      'test-family',
+    )
 
     const connections = await connectionsFor(userId)
     expect(connections.map(c => c.clientId).sort()).toEqual([
@@ -281,7 +341,10 @@ describe('the connected-assistants list', () => {
   })
 
   it('leaves out an assistant whose tokens have expired', async () => {
-    await issueTokens({ clientId: 'client-a', userId, scopes: [SCOPES.read] })
+    await issueTokens(
+      { clientId: 'client-a', userId, scopes: [SCOPES.read] },
+      'test-family',
+    )
     await OAuthTokenModel.updateMany(
       {},
       { expiresAt: new Date(Date.now() - 1) },
@@ -297,7 +360,10 @@ describe('the connected-assistants list', () => {
       redirectUris: ['https://claude.test/cb'],
       metadata: {},
     })
-    await issueTokens({ clientId: 'client-a', userId, scopes: [SCOPES.write] })
+    await issueTokens(
+      { clientId: 'client-a', userId, scopes: [SCOPES.write] },
+      'test-family',
+    )
 
     const [connection] = await runAction(mcpConnections, ctx(userId), {})
     expect(connection).toMatchObject({
@@ -308,7 +374,10 @@ describe('the connected-assistants list', () => {
   })
 
   it('falls back to a label when an assistant registered without a name', async () => {
-    await issueTokens({ clientId: 'client-a', userId, scopes: [SCOPES.read] })
+    await issueTokens(
+      { clientId: 'client-a', userId, scopes: [SCOPES.read] },
+      'test-family',
+    )
     const [connection] = await runAction(mcpConnections, ctx(userId), {})
     expect(connection?.clientName).toBe('An unnamed assistant')
   })
@@ -320,7 +389,10 @@ describe('the connected-assistants list', () => {
 
 describe('disconnecting through the action layer', () => {
   it('cuts the assistant and reports how many tokens went', async () => {
-    await issueTokens({ clientId: 'client-a', userId, scopes: [SCOPES.read] })
+    await issueTokens(
+      { clientId: 'client-a', userId, scopes: [SCOPES.read] },
+      'test-family',
+    )
 
     const result = await runAction(mcpDisconnect, ctx(userId), {
       clientId: 'client-a',
@@ -332,11 +404,14 @@ describe('disconnecting through the action layer', () => {
   it('cannot reach into another account’s connections', async () => {
     // The action is self-scoped, so this is not a matter of care: the id it
     // deletes by is the caller's own, never one supplied in the input.
-    const theirs = await issueTokens({
-      clientId: 'client-a',
-      userId: otherId,
-      scopes: [SCOPES.read],
-    })
+    const theirs = await issueTokens(
+      {
+        clientId: 'client-a',
+        userId: otherId,
+        scopes: [SCOPES.read],
+      },
+      'test-family',
+    )
 
     await runAction(mcpDisconnect, ctx(userId), { clientId: 'client-a' })
     expect(await verifyToken(theirs.accessToken)).not.toBeNull()

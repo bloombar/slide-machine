@@ -29,13 +29,29 @@ export interface OAuthTokenDb {
   /** RFC 8707 resource this token is valid for, when the client named one. */
   resource?: string
   /**
-   * HMAC of the refresh token this one replaced, kept for exactly one
-   * generation (finding 3, docs/plans/OAUTH_CONSENT_SECURITY.md). Rotation
-   * deletes the superseded row, so without this a stolen token that gets
-   * rotated first leaves no trace: the legitimate client's next refresh just
-   * fails, and nobody is told why. Only set on `kind: 'refresh'` rows.
+   * Groups every access and refresh token descended from one authorization
+   * grant (rework round 1's root cause A, docs/plans/OAUTH_CONSENT_SECURITY.md).
+   * For a grant's first token pair this is the authorization code's own
+   * `codeHash`; rotation (`rotateTokens`) carries the presented token's
+   * `familyId` forward onto its replacement, so the value is identical across
+   * any number of rotations. Revoking a compromised chain is then
+   * `deleteMany({ familyId })` — it survives rotation (unlike a hash
+   * snapshot taken once and never updated) and never reaches an unrelated
+   * connection through the same (user, client) pair (unlike `disconnect`,
+   * which is keyed on exactly that pair and was shown to take out a
+   * bystander's live connection in rework round 1's review).
    */
-  previousTokenHash?: string
+  familyId: string
+  /**
+   * Set on a `kind: 'refresh'` row the moment it is rotated away from,
+   * instead of being deleted immediately (finding 3 / root cause B). Read
+   * together with a shortened `expiresAt`: presenting the token again before
+   * that shortened expiry is an ordinary retry (the SDK client has no
+   * single-flight around refresh — a lost response's retry is the *only*
+   * copy the honest caller has); presenting it again after is treated as
+   * reuse, because a live token has no legitimate reason to be replayed.
+   */
+  supersededAt?: Date
   createdAt: Date
   expiresAt: Date
 }
@@ -52,7 +68,8 @@ const oauthTokenSchema = new Schema<OAuthTokenDb>({
   },
   scopes: { type: [String], required: true },
   resource: { type: String },
-  previousTokenHash: { type: String },
+  familyId: { type: String, required: true, index: true },
+  supersededAt: { type: Date },
   createdAt: { type: Date, default: Date.now },
   expiresAt: { type: Date, required: true },
 })
@@ -60,10 +77,6 @@ const oauthTokenSchema = new Schema<OAuthTokenDb>({
 // One connection is (client, user); the list and the disconnect both key on it.
 oauthTokenSchema.index({ clientId: 1, userId: 1 })
 oauthTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 })
-// Reuse detection looks up "who replaced this token", not "who does this
-// token belong to" — a second index, sparse because only rotated-in refresh
-// tokens carry the field at all.
-oauthTokenSchema.index({ previousTokenHash: 1 }, { sparse: true })
 
 export const OAuthTokenModel = model<OAuthTokenDb>(
   'OAuthToken',

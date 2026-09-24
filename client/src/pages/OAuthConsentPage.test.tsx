@@ -20,8 +20,13 @@ const REQUEST = {
     { scope: 'lectures.read', description: 'See your lectures and slides' },
     { scope: 'lectures.write', description: 'Create and change lectures' },
   ],
-  account: 'ada@example.com',
-  redirectHost: 'assistant.test',
+  // Deliberately different from the signed-in fixture's email below (E4,
+  // rework round 1): the page must render what the *server* said the
+  // account is, not the client's own cached notion of who is signed in —
+  // an implementation that read `useAuth().user.email` instead would pass
+  // this test just as happily if the two ever matched by coincidence.
+  account: 'server-reported@example.test',
+  redirectTarget: 'https://attacker-shaped.example',
 }
 
 const renderPage = ({
@@ -91,10 +96,20 @@ describe('what the user is told', () => {
   it('says which account is being connected and where access will be sent', async () => {
     // The only defence left once the user's own browser genuinely started
     // the flow (docs/plans/OAUTH_CONSENT_SECURITY.md, finding 1b) — a name
-    // alone cannot show either fact.
+    // alone cannot show either fact. Anchored exact matches, not loose
+    // substrings: `/assistant.test/` would also match "assistantXtest",
+    // which is not what the server actually said (E4, rework round 1).
     renderPage()
-    expect(await screen.findByText(/ada@example.com/)).toBeTruthy()
-    expect(screen.getByText(/assistant.test/)).toBeTruthy()
+    expect(
+      await screen.findByText(
+        /^This will connect as server-reported@example\.test\.$/,
+      ),
+    ).toBeTruthy()
+    expect(
+      screen.getByText(
+        /^Access will be sent to https:\/\/attacker-shaped\.example\.$/,
+      ),
+    ).toBeTruthy()
   })
 
   it('states the limits on the screen where the decision is made', async () => {

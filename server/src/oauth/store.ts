@@ -107,8 +107,7 @@ const store = async (
     resource?: string
   },
   ttlSeconds: number,
-  /** Only meaningful for `kind: 'refresh'` — see `rotateTokens`. */
-  previousTokenHash?: string,
+  familyId: string,
 ): Promise<void> => {
   await OAuthTokenModel.create({
     tokenHash: hashToken(raw),
@@ -118,16 +117,19 @@ const store = async (
     scopes: grant.scopes,
     resource: grant.resource,
     expiresAt: new Date(Date.now() + ttlSeconds * 1000),
-    ...(previousTokenHash ? { previousTokenHash } : {}),
+    familyId,
   })
 }
 
 /**
  * Issues a fresh access/refresh pair for one assistant acting for one user.
  *
- * `previousRefreshTokenHash`, when given, is recorded on the new refresh
- * token so a later presentation of the one it replaced can be recognised as a
- * reuse rather than an ordinary unknown token (see `rotateTokens`).
+ * `familyId` groups this pair with everything descended from the same
+ * authorization grant (rework round 1's root cause A) — the authorization
+ * code's own `codeHash` for a grant's first pair, or the presented refresh
+ * token's own `familyId` when this is a rotation. Required, not optional:
+ * every token this server issues must be revocable as a family, or the
+ * revocation added for finding 2/3 quietly stops covering it.
  */
 export const issueTokens = async (
   grant: {
@@ -136,19 +138,13 @@ export const issueTokens = async (
     scopes: string[]
     resource?: string
   },
-  previousRefreshTokenHash?: string,
+  familyId: string,
 ): Promise<IssuedTokens> => {
   const accessToken = generateToken()
   const refreshToken = generateToken()
   await Promise.all([
-    store('access', accessToken, grant, ACCESS_TOKEN_TTL_SECONDS),
-    store(
-      'refresh',
-      refreshToken,
-      grant,
-      REFRESH_TOKEN_TTL_SECONDS,
-      previousRefreshTokenHash,
-    ),
+    store('access', accessToken, grant, ACCESS_TOKEN_TTL_SECONDS, familyId),
+    store('refresh', refreshToken, grant, REFRESH_TOKEN_TTL_SECONDS, familyId),
   ])
   return {
     accessToken,
@@ -185,33 +181,87 @@ export const verifyToken = async (
 /**
  * Spends a refresh token and issues a new pair, or returns null.
  *
- * Rotation, not reuse: the presented token is deleted in the same step it is
- * accepted, so it is worth exactly one exchange. `clientId` is checked too —
- * a refresh token is bound to the assistant it was issued to, and one client
- * must not be able to redeem another's.
+ * Rotation with a grace window, not immediate deletion (root cause B,
+ * rework round 1). The presented row is **not** removed on a successful
+ * rotation — its `expiresAt` is shortened to a grace window and
+ * `supersededAt` is stamped, mirroring what `auth/refresh-store.ts` already
+ * does for this application's own sign-in sessions, including the one-way
+ * ratchet (`expiresAt` is only ever shortened, never re-extended) that stops
+ * a repeatedly replayed token from renewing its own life. The MCP SDK client
+ * has no single-flight around refresh (four independent call sites, no
+ * mutex), so a lost response's retry presents the *same* token the client
+ * has always had — punishing that with a full teardown was rework round 1's
+ * finding B1, reproduced with a 100% deterministic repro (no timing needed).
+ *
+ * `clientId` is checked throughout — a refresh token is bound to the
+ * assistant it was issued to, and one client must not be able to redeem
+ * another's.
  */
 export const rotateTokens = async (
   raw: string,
   clientId: string,
   narrowedScopes?: string[],
 ): Promise<IssuedTokens | null> => {
-  const doc = await OAuthTokenModel.findOneAndDelete({
-    tokenHash: hashToken(raw),
-    kind: 'refresh',
-    clientId,
-    expiresAt: { $gt: new Date() },
-  })
-  if (!doc) {
-    // Not a live token — could be unknown, expired, or one this pair already
-    // rotated past. Only the last of those is evidence of anything, so look
-    // for it before answering (finding 3,
-    // docs/plans/OAUTH_CONSENT_SECURITY.md): a stolen token is worth one
-    // exchange to the thief too, and the race is who presents it first. If
-    // this is the loser of that race presenting the token again, the winner's
-    // replacement is sitting right there with `previousTokenHash` pointing
-    // back at it.
-    await detectRotatedReplay(raw, clientId)
+  const tokenHash = hashToken(raw)
+  let doc
+  try {
+    // No `expiresAt` filter here on purpose: a superseded row past its grace
+    // window is exactly what distinguishes reuse from an ordinary retry, and
+    // that distinction needs the row even after its shortened expiry has
+    // passed (it is still findable until the TTL reaper removes it, per this
+    // file's existing note on `verifyToken` about that ~1-minute cadence).
+    doc = await OAuthTokenModel.findOne({
+      tokenHash,
+      kind: 'refresh',
+      clientId,
+    })
+  } catch (error) {
+    // A lookup that cannot complete must still look like "this token does
+    // not work" rather than surface as a 500 (root cause F1) — the SDK maps
+    // anything that is not an OAuthError that way, which would make a
+    // transient database hiccup a *more* informative answer than an
+    // ordinary unknown token, breaking the uniform-refusal property.
+    console.warn('Refresh token lookup failed:', error)
     return null
+  }
+  if (!doc) return null
+
+  const now = new Date()
+  if (doc.expiresAt <= now) {
+    if (doc.supersededAt) {
+      // Presented after its own grace window closed: either a stolen token
+      // replayed once the honest side already moved on, or an honest client
+      // retrying so late that the distinction stopped mattering. Either way
+      // a live refresh token has no legitimate reason to be presented again
+      // this late, so the whole family ends.
+      try {
+        await endFamily(doc.familyId, doc.userId.toString(), clientId)
+      } catch (error) {
+        console.warn('Could not end a compromised OAuth connection:', error)
+      }
+    }
+    // A plain expiry that was never rotated (idle far past its TTL) is
+    // ordinary, ignored, and refused exactly like any other unknown token.
+    return null
+  }
+
+  if (!doc.supersededAt) {
+    const graceEnd = new Date(now.getTime() + env.REFRESH_GRACE_SECONDS * 1000)
+    // Only ever shortens, and only once per token — a second presentation
+    // inside the window below re-enters this branch with `supersededAt`
+    // already set and skips straight to issuing another fresh pair, rather
+    // than sliding the window forward and letting a replayed token renew
+    // its own life indefinitely.
+    if (doc.expiresAt > graceEnd) {
+      doc.expiresAt = graceEnd
+      doc.supersededAt = now
+      try {
+        await doc.save()
+      } catch (error) {
+        console.warn('Could not record refresh-token rotation:', error)
+        return null
+      }
+    }
   }
 
   // A client may ask for less than it holds, never for more: anything outside
@@ -228,35 +278,58 @@ export const rotateTokens = async (
       scopes,
       resource: doc.resource,
     },
-    hashToken(raw),
+    doc.familyId,
   )
 }
 
-/**
- * Checks whether a presented refresh token is one this (client, user) pair
- * already rotated away from, and if so ends the connection outright.
- *
- * A merely unknown or expired token proves nothing and is left alone — the
- * lookup below only matches a token that names it as `previousTokenHash`,
- * which only a real rotation can have written. `disconnect` covers every
- * token the pair currently holds, not only the one descended from this one,
- * because a theft anywhere in the chain means the whole connection is
- * compromised, not one branch of it.
- */
-const detectRotatedReplay = async (
-  raw: string,
-  clientId: string,
-): Promise<void> => {
-  const successor = await OAuthTokenModel.findOne({
-    kind: 'refresh',
-    clientId,
-    previousTokenHash: hashToken(raw),
-  })
-  if (!successor) return
+/** A short, bounded pause — used only to close the narrow window where a
+ * genuinely concurrent double-exchange's loser checks for a family to
+ * revoke before the winner has finished writing it (see `endFamily`). */
+const sleep = (ms: number): Promise<void> =>
+  new Promise(resolve => setTimeout(resolve, ms))
 
-  const userId = successor.userId.toString()
-  await disconnect(userId, clientId)
-  await notifyConnectionRevoked(userId, clientId)
+/**
+ * Ends a whole token family: every access and refresh token descended from
+ * one authorization grant, however many times it has rotated since (root
+ * cause A, rework round 1). Tighter than `disconnect(userId, clientId)` —
+ * which is kept for the user's own explicit "Disconnect" button — because a
+ * family only ever covers the one compromised chain, never a second live
+ * connection the same assistant happens to hold for the same account.
+ *
+ * `retry`, when given, re-attempts the delete a bounded number of times with
+ * a short pause between attempts. Used only by the authorization-code replay
+ * path (`revokeFamilyIfRedeemed` in provider.ts), where a genuinely
+ * concurrent double exchange can have its loser reach here before the
+ * winner's `issueTokens` has finished writing the very tokens that need
+ * revoking — a real gap the reviewers measured as "4/4 concurrent
+ * double-exchanges revoked nothing" before this existed. The refresh-reuse
+ * path (`rotateTokens` above) never needs it: it always reads the row it is
+ * revoking before calling this, so the tokens it is asking to delete are
+ * already known to exist.
+ */
+export const endFamily = async (
+  familyId: string,
+  userId: string,
+  clientId: string,
+  retry?: { attempts: number; delayMs: number },
+): Promise<void> => {
+  const attempts = retry?.attempts ?? 1
+  let deletedCount = 0
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const result = await OAuthTokenModel.deleteMany({ familyId })
+    deletedCount += result.deletedCount ?? 0
+    if (result.deletedCount) break
+    if (retry && attempt < attempts - 1) await sleep(retry.delayMs)
+  }
+
+  // Best-effort from here, and deliberately not awaited by the caller: a
+  // teardown must not make the refusal that triggered it any slower, and a
+  // configured SMTP relay is a real network round trip (lib/mailer.ts's own
+  // timeouts run to twenty seconds) that would otherwise make a genuine
+  // replay's refusal measurably slower than an unknown token's — a timing
+  // oracle for "this token was once real" (root cause F2).
+  void notifyConnectionRevoked(userId, clientId)
+  void logConnectionRevoked(userId, clientId, familyId, deletedCount)
 }
 
 /**
@@ -264,7 +337,8 @@ const detectRotatedReplay = async (
  * only case where a disconnect they did not ask for is the sole visible
  * trace of a token theft attempt. Best-effort and silent on failure, exactly
  * like the other account mail in auth/emails.ts — losing this notice is
- * regrettable, but must never turn a security response into a 500.
+ * regrettable, but must never turn a security response into a 500 (and,
+ * since it is fired without being awaited, never turn it into a delay).
  */
 const notifyConnectionRevoked = async (
   userId: string,
@@ -296,6 +370,30 @@ const notifyConnectionRevoked = async (
   } catch (error) {
     console.warn('Could not send the connection-revoked email:', error)
   }
+}
+
+/**
+ * A trace of the teardown that does not depend on mail being configured
+ * (root cause F3): `MAIL_PROVIDER=none` is a documented deployment value,
+ * and the default `smtp` provider with no `SMTP_HOST` behaves the same way
+ * — `notifyConnectionRevoked` above returns before doing anything, and
+ * without this there would be no record anywhere that a connection was cut.
+ * `console.error` rather than one of this repo's audit-log tables
+ * (audit/log.ts, audit/agent-log.ts, audit/settings-log.ts): each of those
+ * is shaped for a different actor (an admin, an MCP tool call, a settings
+ * edit) and none fits "the token endpoint ended a connection on its own
+ * initiative" without bending its schema: see docs/DECISIONS.md.
+ */
+const logConnectionRevoked = (
+  userId: string,
+  clientId: string,
+  familyId: string,
+  tokensRevoked: number,
+): void => {
+  console.error(
+    `[oauth] connection revoked: userId=${userId} clientId=${clientId} ` +
+      `familyId=${familyId} tokensRevoked=${tokensRevoked}`,
+  )
 }
 
 /** Forgets one token. Idempotent, as RFC 7009 requires. */

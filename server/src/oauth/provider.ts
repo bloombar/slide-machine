@@ -54,6 +54,7 @@ import { OAuthClientModel } from '../models/oauth-client'
 import { OAuthAuthorizationModel } from '../models/oauth-authorization'
 import {
   CONSENT_REQUEST_TTL_SECONDS,
+  endFamily,
   generateToken,
   hashToken,
   issueTokens,
@@ -61,46 +62,68 @@ import {
   rotateTokens,
   verifyToken,
 } from './store'
-import { OAuthTokenModel } from '../models/oauth-token'
 import { ALL_SCOPES, isScope, SCOPES } from './scopes'
-import { env } from '../config/env'
 
 /** Where the browser is sent to ask the user (a route in the SPA). */
 export const CONSENT_PATH = '/oauth/consent'
 
 /**
- * The cookie that proves the browser reading, approving or denying a parked
- * request is the one that started it (finding 1a,
- * docs/plans/OAUTH_CONSENT_SECURITY.md). Carries `<requestId>.<nonce>`; only
- * the nonce's HMAC is ever written down, so the cookie itself is what proves
- * possession — matching every other secret in this subsystem.
+ * The name of the cookie that proves the browser reading, approving or
+ * denying a parked request is the one that started it (finding 1a,
+ * docs/plans/OAUTH_CONSENT_SECURITY.md). Carries the raw nonce; only its
+ * HMAC is ever written down, matching every other secret in this subsystem —
+ * "signed" in earlier drafts of this fix overstated it, since nothing here
+ * uses `cookie-parser`'s signing (`app.ts` never gives it a secret).
  *
- * Necessary but not sufficient: it stops an attacker who parked a request and
- * handed the *link* to someone else, but not the harder variant where the
- * victim's own browser makes the authorize request (the binding then passes
- * honestly, because it is genuinely the same browser). That variant is what
- * `GET /oauth/authorization/:id` returning the account and redirect host
- * (routes/oauth.ts) exists to catch instead.
+ * **Named per request** rather than one fixed name for every flow (root
+ * cause C4, rework round 1): a single shared cookie name meant a *second*
+ * `GET /oauth/authorize` — a second assistant connected, a double-clicked
+ * Connect button, a client whose own retry logic redirects here twice —
+ * silently overwrote the first flow's cookie. The first flow's request then
+ * looked "not mine" to its own browser and refused identically to the
+ * attack case it cannot be told apart from, with no way to recover except
+ * starting over. Naming the cookie after the request id it belongs to means
+ * two concurrently parked flows simply hold two different cookies.
  */
-export const CONSENT_COOKIE = 'sm_oauth_consent'
+export const consentCookieName = (requestId: string): string =>
+  `__Host-sm_oauth_consent_${requestId}`
 
 /**
- * Scoped to `/api/oauth` — where the three person-facing consent endpoints
- * actually answer (routes/oauth.ts) — rather than `/oauth`, which is the
- * machine-facing SDK router mounted at the application root and never reads
- * this cookie. A path of `/` would ride along on every request to the
- * origin, including ones a request logger or APM might capture.
+ * Cookie attributes for the binding cookie (finding 1a / root cause C1,
+ * rework round 1).
  *
- * SameSite=Lax rather than Strict: the one legitimate cross-site moment in
- * this flow is the assistant's own redirect landing the user on
- * `/oauth/authorize`, a top-level navigation Lax still allows. It still keeps
- * the cookie off cross-site fetch/XHR, which is the exposure that matters.
+ * **`__Host-` prefixed, which is not decoration.** Both reviewers
+ * demonstrated that an `httpOnly`/`SameSite=Lax` cookie alone can still be
+ * *planted*: an attacker parks their own flow via the unauthenticated
+ * `GET /oauth/authorize`, receives a validly-issued (if this file ever
+ * claimed "signed", validly-*signed*) cookie, and hands the victim that
+ * cookie's value to set for themselves — cookies are not origin-isolated by
+ * default, so any same-site actor (a subdomain, a staging host, a plain-http
+ * MITM) can write one for this origin. `__Host-` closes exactly that: the
+ * browser refuses to honour the prefix at all unless the cookie also carries
+ * `Secure`, no `Domain` attribute, and `Path=/`, which together mean **only
+ * a response from this exact origin can ever set it**. A victim's browser
+ * can then only ever hold a value this application itself handed it, for a
+ * flow their own browser actually requested — which is precisely the
+ * harder variant `GET /oauth/authorization/:id` returning the account and
+ * redirect target (routes/oauth.ts) exists to catch, not a new hole.
+ *
+ * `Path=/` is mandatory for the prefix, so this **no longer avoids riding on
+ * every request to the origin** the way scoping to `/api/oauth` did in
+ * round 1 — a real cost (a request logger or APM now sees it everywhere),
+ * accepted because a narrower path that can be planted is not a mitigation
+ * at all, and a `__Host-` cookie that cannot be planted is.
+ *
+ * `secure: true` unconditionally, not only in production: the prefix
+ * requires it, and browsers treat `localhost`/`127.0.0.1` as a secure
+ * context even over plain http, which is the only place `isUsableIssuer`
+ * (routes/oauth.ts) ever lets this feature run non-https anyway.
  */
 const consentCookieOptions = {
   httpOnly: true,
   sameSite: 'lax',
-  secure: env.NODE_ENV === 'production',
-  path: '/api/oauth',
+  secure: true,
+  path: '/',
 } as const
 
 /** Sets the binding cookie for a freshly parked request. */
@@ -109,7 +132,7 @@ const setConsentCookie = (
   requestId: string,
   nonce: string,
 ): void => {
-  res.cookie(CONSENT_COOKIE, `${requestId}.${nonce}`, {
+  res.cookie(consentCookieName(requestId), nonce, {
     ...consentCookieOptions,
     maxAge: CONSENT_REQUEST_TTL_SECONDS * 1000,
   })
@@ -120,8 +143,8 @@ const setConsentCookie = (
  * options (minus `maxAge`) or the browser keeps the cookie — the same Express
  * gotcha routes/auth.ts already works around for the refresh cookie.
  */
-export const clearConsentCookie = (res: Response): void => {
-  res.clearCookie(CONSENT_COOKIE, consentCookieOptions)
+export const clearConsentCookie = (res: Response, requestId: string): void => {
+  res.clearCookie(consentCookieName(requestId), consentCookieOptions)
 }
 
 /**
@@ -182,9 +205,9 @@ const requestedScopes = (scopes: string[] | undefined): string[] => {
 }
 
 /**
- * If `codeHash` names a grant that was already redeemed, revokes exactly the
- * tokens that redemption produced (finding 2,
- * docs/plans/OAUTH_CONSENT_SECURITY.md).
+ * If `codeHash` names a grant that was already redeemed, ends the whole
+ * token family that redemption produced (finding 2 / root cause A, rework
+ * round 1 of docs/plans/OAUTH_CONSENT_SECURITY.md).
  *
  * Called whenever an exchange fails, which covers far more than genuine
  * replays — an unknown code, an expired one, and a wrong redirect URI all end
@@ -193,8 +216,17 @@ const requestedScopes = (scopes: string[] | undefined): string[] => {
  * that is merely wrong or not-yet-usable finds nothing and nothing happens.
  * A code presented a second time after it worked once is the one case that
  * matches, and that is a leak regardless of which caller is holding it now.
+ *
+ * `familyId` is `codeHash` itself (see `exchangeAuthorizationCode` and the
+ * schema note on `OAuthAuthorizationDb`), so it is always known here even
+ * when nothing was ever issued — closing the round-1 gap where a genuinely
+ * concurrent double exchange's loser found nothing to revoke because the
+ * winner had not finished writing a hash snapshot yet. The bounded retry
+ * below covers the residual case: the loser can still reach this function
+ * before the winner's `issueTokens` call (a second, later operation) has
+ * finished writing the tokens that need revoking.
  */
-const revokeReplayedGrant = async (
+const revokeFamilyIfRedeemed = async (
   codeHash: string,
   clientId: string,
 ): Promise<void> => {
@@ -203,12 +235,11 @@ const revokeReplayedGrant = async (
     clientId,
     redeemedAt: { $exists: true },
   })
-  if (!spent) return
-  await Promise.all(
-    [spent.issuedAccessTokenHash, spent.issuedRefreshTokenHash]
-      .filter((hash): hash is string => Boolean(hash))
-      .map(tokenHash => OAuthTokenModel.deleteOne({ tokenHash })),
-  )
+  if (!spent?.userId) return
+  await endFamily(codeHash, spent.userId.toString(), clientId, {
+    attempts: 5,
+    delayMs: 20,
+  })
 }
 
 export const provider: OAuthServerProvider = {
@@ -317,28 +348,24 @@ export const provider: OAuthServerProvider = {
       // untouched and can still be exchanged correctly later. What is left to
       // rule out is the other case: a code that really was already spent,
       // which is evidence of a leak regardless of who is asking now.
-      await revokeReplayedGrant(codeHash, client.client_id)
+      await revokeFamilyIfRedeemed(codeHash, client.client_id)
       throw new InvalidGrantError('Authorization code is not valid')
     }
 
-    const tokens = await issueTokens({
-      clientId: client.client_id,
-      userId: grant.userId.toString(),
-      // The scopes the user approved, not the ones asked for now.
-      scopes: grant.scopes,
-      resource: grant.resource,
-    })
-
-    // finding 2: record what this exchange produced, so a replay of this same
-    // code can revoke exactly these tokens rather than only being refused.
-    await OAuthAuthorizationModel.updateOne(
-      { _id: grant._id },
+    const tokens = await issueTokens(
       {
-        $set: {
-          issuedAccessTokenHash: hashToken(tokens.accessToken),
-          issuedRefreshTokenHash: hashToken(tokens.refreshToken),
-        },
+        clientId: client.client_id,
+        userId: grant.userId.toString(),
+        // The scopes the user approved, not the ones asked for now.
+        scopes: grant.scopes,
+        resource: grant.resource,
       },
+      // The token family this grant's code founds. No second write needed
+      // to record it anywhere — `codeHash` already is the family id, known
+      // before this call and never changing, which is what makes a replay's
+      // revocation reachable even in the race `revokeFamilyIfRedeemed`
+      // documents above.
+      codeHash,
     )
 
     return {

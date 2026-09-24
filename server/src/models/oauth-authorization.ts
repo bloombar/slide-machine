@@ -18,6 +18,15 @@
  * replayed code is a stolen session, and the usual way one leaks is a redirect
  * URI that was not checked, which is why `redirectUri` is stored here and
  * compared on exchange rather than taken from the token request.
+ *
+ * A replayed code also revokes what it minted (finding 2, rework round 1's
+ * root cause A). `codeHash` itself is used as the **token family id**
+ * (`OAuthTokenDb.familyId`) rather than snapshotting the minted tokens'
+ * hashes onto this row after the fact — a snapshot written in a second,
+ * non-atomic update left a window where a genuinely concurrent double
+ * exchange's loser found nothing to revoke, because the winner had not
+ * finished writing yet. `codeHash` is known before any database round trip
+ * and never changes, so it needs no snapshot and the race closes on its own.
  */
 import { Schema, model, Types } from 'mongoose'
 
@@ -48,13 +57,6 @@ export interface OAuthAuthorizationDb {
   codeHash?: string
   /** When the code was exchanged. Set once; a second exchange is refused. */
   redeemedAt?: Date
-  /**
-   * HMACs of the access and refresh tokens this grant's code minted, so a
-   * replayed code can revoke exactly what it produced (finding 2) rather than
-   * every token the client and user ever shared. Absent until exchange.
-   */
-  issuedAccessTokenHash?: string
-  issuedRefreshTokenHash?: string
   createdAt: Date
   expiresAt: Date
 }
@@ -70,8 +72,6 @@ const oauthAuthorizationSchema = new Schema<OAuthAuthorizationDb>({
   userId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
   codeHash: { type: String, index: true, sparse: true },
   redeemedAt: { type: Date },
-  issuedAccessTokenHash: { type: String },
-  issuedRefreshTokenHash: { type: String },
   createdAt: { type: Date, default: Date.now },
   expiresAt: { type: Date, required: true },
 })

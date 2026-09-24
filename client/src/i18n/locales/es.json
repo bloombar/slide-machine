@@ -1449,7 +1449,7 @@
     "title": "Conectar un asistente",
     "asking": "{name} solicita conectarse a tu cuenta de Slide Machine. Si lo permites, podrá:",
     "signedInAs": "Se conectará como {account}.",
-    "sendsTo": "El acceso se enviará a {host}.",
+    "sendsTo": "El acceso se enviará a {target}.",
     "limits": "No puede eliminar nada, ni compartir una clase, ni publicar un cuestionario, ni cambiar tu plan: eso permanece en la aplicación. Puedes desconectarlo en cualquier momento desde los ajustes de tu cuenta.",
     "allow": "Permitir",
     "deny": "No permitir",

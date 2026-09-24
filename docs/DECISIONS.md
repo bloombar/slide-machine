@@ -1205,6 +1205,15 @@ heading, and prior art for exactly this situation already existed in the codebas
 
 ## OAuth consent security: binding cookie, replay revocation, rotation reuse detection (2026-09-24)
 
+**Correction (rework round 1, same day): two of this entry's claims did not hold up.** Two independent
+reviews running real HTTP traffic against this pass found that finding 2's revocation was defeated by a
+single intervening rotation and never fired at all under genuine concurrency, and that finding 3's design
+tore down an honest client's connection on an ordinary lost-response retry — worse than the plain refusal it
+replaced. The entry below is kept as the record of what was tried and why it read as reasonable at the time;
+it is **not** a description of the code as it now stands. See "Rework round 1" further down for what
+replaced it, in particular the correction to the "token-set-level is tighter" claim two paragraphs down,
+which was wrong in the scenario finding 2 is actually about.
+
 Fixes docs/plans/OAUTH_CONSENT_SECURITY.md's three findings. Judgment calls the brief left open:
 
 **The binding cookie is scoped to `/api/oauth`, not `/oauth`, despite the brief saying `/oauth`.** The three
@@ -1215,12 +1224,22 @@ cookie is not a prefix of `/api/oauth/...`, so it would never have been sent on 
 Scoping to `/api/oauth` keeps the brief's actual goal — narrower than `/`, and off everything that is not
 this flow — while working with the paths this codebase actually has.
 
-**Finding 2's token revocation is token-set-level, not `disconnect(userId, clientId)`.** The plan doc names
+**Finding 2's token revocation is token-set-level, not `disconnect(userId, clientId)`.** ~~The plan doc names
 `disconnect` as the simpler option and a token-set-level revocation as "tighter"; chose tighter, because
 `disconnect` would tear down every other live token that (user, client) pair holds — including a second,
 unrelated session from the same assistant that never touched the replayed code. The grant row now records
 the hash of the access and refresh token its one exchange minted (`issuedAccessTokenHash` /
-`issuedRefreshTokenHash` on `OAuthAuthorizationModel`), and a replay deletes exactly those two rows.
+`issuedRefreshTokenHash` on `OAuthAuthorizationModel`), and a replay deletes exactly those two rows.~~
+**Wrong, and corrected in rework round 1.** "Tighter" was true only in the scenario where the code is
+exchanged once and then replayed with nothing else happening in between. It was **strictly weaker** in the
+scenario finding 2 exists for: an attacker who redeems the code and then immediately rotates (a legitimate
+rotation — finding 3 has nothing to fire on) holds new tokens whose hashes were never recorded anywhere,
+because the snapshot was taken once, at the first exchange, and never updated. Reviewers measured this end to
+end: replay refused (400), attacker's rotated access token still 200s against `/api/mcp`. A concurrent double
+exchange broke it the same way from the other direction — the loser's revocation ran before the winner had
+written any hashes to snapshot. The fix is a token **family id** (`OAuthTokenDb.familyId`, the authorization
+code's own `codeHash`) carried forward through every rotation, so revocation needs no snapshot and survives
+any number of rotations — see "Rework round 1" below for the full account.
 
 **Finding 2's ordering question: confirmed the brief's suspicion was right.** Before the fix,
 `exchangeAuthorizationCode` stamped `redeemedAt` in the same atomic update that read the row, then checked
@@ -1240,7 +1259,11 @@ kind of event and the brief said not to build one if nothing fits, so mail is wh
 **Finding 3's reuse detection keeps exactly one generation**, per the brief: a new refresh token's row
 carries `previousTokenHash` (the HMAC of the token it replaced). Presenting a token that is neither live nor
 named as someone's `previousTokenHash` is treated as ordinary unknown/expired — only a token one hop back
-in the chain is recognised as a theft signal, not the whole history.
+in the chain is recognised as a theft signal, not the whole history. **Superseded in rework round 1**: this
+design also tore down an *honest* client's connection on an ordinary retry of a lost response, since the
+immediate-delete-on-rotation it depended on gave a legitimate retry no way to succeed. The replacement (grace
+window + `supersededAt`, no chain-walking) incidentally makes the one-generation limit described here moot
+too — see "Rework round 1".
 
 **Finding 1b implements two of the plan doc's three suggested additions (account, redirect host), not the
 third (client registration age).** The brief's own instructions for finding 1b named only the first two
@@ -1269,3 +1292,171 @@ has its own inline OAuth `connect()` helper (separate from `oauth-mcp.test.ts`'s
 new binding cookie, so all five of its tests failed with `TypeError: Invalid URL` once the binding check
 landed. Fixed by forwarding the `Set-Cookie` value the same way `oauth-mcp.test.ts` does. Not in the brief's
 file list, but necessary for `npm run test:integration` to pass — reported here rather than silently patched.
+
+## Rework round 1: family-id revocation, rotation grace, `__Host-` cookies (2026-09-24)
+
+Two independent reviews — a max-effort code review with empirical verifiers, and a spec review that
+reproduced the first pass's five delete-the-guard results in a throwaway worktree (all five held up) — ran
+real HTTP traffic against the pass above and found that two of the three fixes did not work in the cases
+they exist for. Four root causes, all fixed the same day on the same branch.
+
+**Root cause A — tokens had no lineage, so revocation chased dead hashes.** The first pass recorded the
+minted access/refresh token hashes on the grant row once, at exchange time, and a replay deleted exactly
+those two rows. Measured failure: attacker redeems the code, rotates immediately (ordinary rotation —
+finding 3 has nothing to fire on), holds A1/R1; the code is then replayed; the snapshot points at A0/R0,
+both already gone from rotation, so A1/R1 survive untouched for the full 182-day idle window. A second,
+independent failure: the hashes were written in a *second*, non-atomic update after `issueTokens`, so a
+genuinely concurrent double exchange's loser could reach the revocation check before the winner had written
+anything to revoke — measured "4/4 concurrent double-exchanges revoked nothing".
+
+Fix: every token issued now carries a **family id** (`OAuthTokenDb.familyId`) — the authorization code's own
+`codeHash` for a grant's first pair, carried forward unchanged through every subsequent rotation
+(`rotateTokens` passes `doc.familyId` to `issueTokens` for the replacement pair). Revocation is
+`deleteMany({ familyId })`: no snapshot to go stale, and it survives any number of rotations because family
+membership is established once, at mint time, and never re-derived from a lookup. `codeHash` being
+deterministic and known before any database round trip is also what closes the concurrency gap: the loser of
+a race knows exactly which family to revoke without needing anything the winner wrote.
+
+The residual concurrency gap (loser reaches the revoke check before the winner's `issueTokens`, a *second*,
+later operation, has finished) is closed with a bounded retry (`endFamily`'s `retry` parameter, 5 attempts ×
+20ms, used only by the authorization-code replay path). **This was not reliably exercised by the new
+integration test on this machine** — the race window between the atomic claim and `issueTokens` completing
+is narrow enough that a single attempt already wins consistently in local runs. Verified the retry's value
+directly instead: with a 50ms artificial delay inserted before `issueTokens` (temporarily, to widen the
+race), the test failed reliably with the retry removed and passed reliably with it restored; the artificial
+delay was then removed. Recorded here because "the guard-deletion test still passed" would otherwise read as
+proof the retry does nothing, when the honest reading is "this environment's timing didn't demonstrate the
+gap either way".
+
+Root cause A also makes root cause A3's first bug (below) moot as a side effect, not by design intent.
+
+**Root cause A3 — the old blast radius and detection depth were both wrong.** Finding 3's reuse detection
+used `disconnect(userId, clientId)`, which tears down *every* live connection that (user, client) pair
+holds — verified: a bystander connection through the same client (same user, two connections; also tested
+with two different users sharing a client) went from 200 to 401 on a replay that had nothing to do with it.
+Family-scoped revocation fixes this by construction: two connections from separate `authorize` flows have
+different `familyId`s (different `codeHash`s), so a family-wide delete can never reach a sibling connection.
+Separately, the old design only recorded one hop of rotation history (`previousTokenHash`), so a token
+replayed two or more generations behind current was invisible — verified before the fix: after R0→R1→R2,
+replaying R0 gave a plain 400 with everything else untouched. Root cause B's redesign (below) removes
+chain-walking entirely, so this is now also fixed: a presented token's own row still knows its family and
+its own supersession regardless of how many further rotations happened after it, within the window before
+the TTL reaper physically removes the row (see root cause B).
+
+**Root cause B — reuse detection could not tell a thief from a retry.** `rotateTokens` deleted the presented
+refresh token immediately on a successful rotation. The `@modelcontextprotocol/sdk` client (1.30.0) has no
+single-flight around refresh — four independent `await auth(...)` call sites in `client/streamableHttp.js`,
+no mutex in `client/auth.js` — so if a rotation response is lost (timeout, proxy reset, crash) the client's
+only recourse is to retry with the token it has, which is now gone. The first pass's finding-3 fix treated
+that retry exactly like theft: full teardown, false "connection revoked" mail, no recovery short of full
+re-consent. Reviewers measured this as 100% deterministic (zero timing needed — one dropped response is
+enough) and also reproduced concurrent double-refresh independently at 1/10 and 1/5.
+
+Fix mirrors `auth/refresh-store.ts`'s own session-rotation grace exactly, including the detail that made it
+correct there: `rotateTokens` no longer deletes the presented row on success. It shortens `expiresAt` to
+`now + REFRESH_GRACE_SECONDS` and stamps `supersededAt`, but **only once** — the shortening is a one-way
+ratchet (`if (doc.expiresAt > graceEnd)`), so repeatedly replaying the same token cannot keep extending its
+own life. A presentation while `expiresAt` is still in the future (live, or within grace) mints another fresh
+pair, exactly as `auth/refresh-store.ts`'s `rotateRefreshToken` does on every valid presentation, not only
+the first. A presentation after `expiresAt` has passed is judged by whether `supersededAt` was ever set: if
+not, it is a plain idle expiry (ordinary, no action); if so, the token was rotated away and its grace window
+has since closed, which is the theft signal, and the whole family ends.
+
+This reuses `REFRESH_GRACE_SECONDS`, the same env var `auth/refresh-store.ts` already reads for the
+session-level equivalent, rather than adding an OAuth-specific knob — same semantic (tolerate a concurrent or
+lost-response retry), one place to reason about it. Tests already run with `REFRESH_GRACE_SECONDS=0`
+("rotated-out tokens must die immediately", per the existing comment in `auth.test.ts`), so the honest-retry
+test simulates a positive grace window the same way `auth.test.ts` already does for the session case:
+directly extending the already-shortened row's `expiresAt`, rather than reconfiguring env per test.
+
+**Root cause C1/C4 — the binding cookie could be planted, and one flow could orphan another.** Two separate
+bugs in the cookie itself.
+
+C1: a signed-in-spirit but unsigned, `httpOnly`/`SameSite=Lax` cookie is not origin-isolated. Both reviewers
+demonstrated the forwarded-link attack finding 1a was built to stop still worked: attacker parks a flow for
+their own redirect URI via the unauthenticated `GET /oauth/authorize`, receives the cookie, and hands the
+*value* to the victim to set for themselves — a same-site actor (subdomain, staging host, plain-http MITM
+wherever `secure` was false) can write a cookie for this origin without needing to compromise it. Signing the
+value would not have helped: the attacker copies a validly-signed cookie from their own legitimate response.
+Fix: the `__Host-` prefix, which the browser refuses to honour at all unless the cookie also carries
+`Secure`, no `Domain` attribute, and `Path=/` — together meaning only a same-origin response can ever set it.
+This is a genuine trade against round 1's own `/api/oauth` path scoping (chosen specifically to keep the
+cookie off every request to the origin): `__Host-` mandates `Path=/`, so the cookie now does ride on every
+request. Judged worth it — a narrower path that can be planted is not a mitigation; a `__Host-` cookie that
+cannot be planted is. `secure: true` is now unconditional (not gated on `NODE_ENV === 'production'`), since
+the prefix requires it and browsers treat `localhost`/`127.0.0.1` as a secure context over plain http anyway
+— the only non-https case `isUsableIssuer` (routes/oauth.ts) permits.
+
+**`__Host-`'s isolation is not independently testable at the integration-test layer.** `supertest` does not
+implement cookie-prefix enforcement (that lives in real browsers), so the planting attack itself cannot be
+reproduced or refuted by an HTTP test — sending a raw `Cookie` header with any value always "succeeds" as far
+as supertest is concerned, regardless of prefix rules. What the suite *can* and does assert is that the
+server emits every attribute the browser-side enforcement depends on (`__Host-` prefix, `Secure`, `HttpOnly`,
+`SameSite=Lax`, `Path=/`, no `Domain`) — the executable proxy for the property, verified by deleting each
+attribute in turn and confirming the assertion catches it. This also closes the caveat the spec reviewer
+raised about the first pass's e2e reasoning: the integration tests hand-carry the cookie via
+`.set('Cookie', ...)`, which can never fail on path scoping, so without this assertion a wrong `Path` would
+have been invisible to the whole suite.
+
+C4: naming the cookie identically for every parked flow meant a second `GET /oauth/authorize` — a second
+assistant connected, a double-clicked Connect button, a client whose own retry logic redirects here twice —
+silently overwrote the first flow's cookie, and its request then refused identically to the attack case it
+is deliberately indistinguishable from (verified before the fix: GET flow2 → 200, GET flow1 → 404 with the
+row neither expired nor answered). Fix: `consentCookieName(requestId)` — one cookie per parked request,
+named after the id. No server-side id→nonce map needed; the association lives in the cookie's own name.
+
+**Root cause D1/D2 — the disclosure finding 1b relies on could render blank or actively wrong.** Both
+reviewers noted 1b is the *only* mitigation for the authorize-URL variant of finding 1, so these are
+load-bearing, not polish.
+
+D1: `URL.hostname` on the redirect URI drops the port a loopback client (RFC 8252) is told apart by, and
+misreads a custom-scheme redirect URI outright — `myapp://cb/x` reads as host `cb`, an attacker-chosen string
+shaped exactly like a real one; `com.example.app:/oauth2redirect` (no authority) reads as the empty string,
+rendering "Access will be sent to .". Fix: `URL.origin`, which is honest about the failure case instead —
+WHATWG URL gives the literal string `"null"` for a non-special scheme's origin regardless of whether there is
+an authority, so both custom-scheme cases are detected the same way and fall back to showing the whole URI,
+which a person can at least read. The response field was renamed `redirectHost` → `redirectTarget` (with the
+client type, the `OAuthConsentPage` prop, and the `oauth.sendsTo` i18n placeholder `{host}` → `{target}`,
+across all five locale bundles) since it is no longer always a host.
+
+D2: the only way `requireAuth` can verify a session yet have it name an account that fails to load is a
+deleted account with a still-valid JWT. The first pass rendered a hardcoded English literal ("your account")
+spliced into a translated ICU sentence — wrong on its own, i18n-wise — and, worse, *affirmed* a connection
+was about to happen instead of refusing one, in exactly the situation that most warrants refusing. Fix:
+`GET /oauth/authorization/:id` now throws the same 401 `requireAuth` would for any other invalid session.
+Not extended to `POST .../approve`, which still stamps `userId: req.userId` without checking the user loads
+— a real, smaller gap (a dangling grant rather than a false affirmation) left as-is because it was not named
+in this round's findings; worth a line if a future pass touches this file.
+
+**Root cause F1/F2/F3 — the revocation side effects were not robust.** F1: a lookup failure inside
+`rotateTokens`'s reuse check is now caught and treated as "this token does not work" (ordinary 400) rather
+than propagating — the SDK maps anything that is not its own `OAuthError` subclass to a 500, which would
+have made a transient database hiccup a *more* informative answer than an unknown token, breaking the
+uniform-refusal property the rest of this file works to preserve. F2: `endFamily`'s notify-the-user and
+log-the-event calls are fired without being awaited (`void notifyConnectionRevoked(...)`) — a configured SMTP
+relay is a real network round trip (`lib/mailer.ts`'s own timeouts run to 10s connect / 10s greeting / 20s
+socket), and awaiting it inline would have made a genuine replay's refusal measurably slower than an unknown
+token's, a timing oracle for "this token was once real" that the test suite's `MAIL_PROVIDER=log` (which
+returns instantly) could not have caught. F3: the trace of a teardown no longer depends on mail being
+configured — `console.error('[oauth] connection revoked: ...')` fires unconditionally, independent of
+`mailerAvailable()`, and covers both revocation paths (code replay and rotation reuse), since both now go
+through the shared `endFamily`. Considered wiring this into one of the existing audit tables
+(`audit/log.ts`, `audit/agent-log.ts`, `audit/settings-log.ts`) instead; none fit without bending its schema
+— each is shaped for a specific actor (an admin, an MCP tool call driven by a dispatcher with a
+`requestId`, a settings edit with an owner/entity pair), and "the token endpoint ended a connection on its
+own initiative, no request in flight" does not have a natural slot in any of them. `console.error` was
+judged the honest minimal fix; a dedicated table is a reasonable future step if this event ever needs to be
+queryable rather than grep-able.
+
+**Test-suite budget, again.** `oauth-mcp.test.ts` also exercises `/oauth/token` far more than the previous
+round's registration-endpoint fix anticipated — the SDK's `tokenHandler` carries its own default limiter (50
+requests / 15 minutes / IP), and this file alone legitimately exceeds it once the new root-cause coverage was
+added. Rather than routing more of the file around the real HTTP endpoint (which is what several of these
+tests are *for*), added `OAUTH_TOKEN_RATE_LIMIT` (`config/env.ts`, defaulting to the SDK's own 50 so an
+unconfigured deployment sees no change) following the exact precedent `DECK_VIEW_RATE_LIMIT` already set for
+this situation, and raised it in `vitest.config.ts` for tests only.
+
+**Migration note, unchanged from round 1 and still true:** `browserNonceHash` on `OAuthAuthorizationModel`
+and `familyId` on `OAuthTokenModel` are both `required: true` with no migration. Consents parked, or tokens
+issued, before this deploys become unanswerable/unrotatable after — both fail closed, which is correct, but
+worth knowing if this ever needs a rolling deploy story.

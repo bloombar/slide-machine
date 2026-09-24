@@ -133,7 +133,7 @@ export default function OAuthConsentPage() {
         {t('oauth.signedInAs', { account: request.account })}
       </p>
       <p className="mt-1 text-sm text-slate-600">
-        {t('oauth.sendsTo', { host: request.redirectHost })}
+        {t('oauth.sendsTo', { target: request.redirectTarget })}
       </p>
 
       <ul className="mt-4 space-y-2">
