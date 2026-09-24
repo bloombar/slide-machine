@@ -230,12 +230,19 @@ describe('deck.feed (SOC-3)', () => {
 
   it('excludes a public lecture with a whitespace-only title', async () => {
     const blank = await makeLecture(bob, 'Blank title')
-    await DeckModel.updateOne(
-      { _id: blank.deckId },
-      // Bypass the schema's `trim: true` to model data already stored with
-      // whitespace, e.g. from before the trim option existed.
+    // `DeckModel.updateOne` runs the schema's `trim: true` setter, which
+    // would store '' and silently collapse this into the empty-title case
+    // above. Write through the raw driver instead, past Mongoose, to model
+    // data already stored with whitespace (e.g. from before `trim` existed).
+    await DeckModel.collection.updateOne(
+      { _id: new Types.ObjectId(blank.deckId) },
       { $set: { title: '   ' } },
     )
+    // Confirm the write actually landed as whitespace, not ''.
+    const stored = await DeckModel.collection.findOne({
+      _id: new Types.ObjectId(blank.deckId),
+    })
+    expect(stored!.title).toBe('   ')
     const res = await act(ada, 'deck.feed', { sort: 'latest' })
     const ids = res.body.items.map((i: { id: string }) => i.id)
     expect(ids).not.toContain(blank.deckId)
