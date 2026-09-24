@@ -1,36 +1,48 @@
 # MCP server & the in-app AI assistant
 
-Two related future features that share a foundation: an **in-app chat assistant**
-for preparing and revising decks, and a **remote MCP server** that lets an
-external AI assistant (Claude, ChatGPT, Gemini) do the same work from outside
-the app.
+Two features that share a foundation. The **remote MCP server** — which lets an
+external AI assistant (Claude, ChatGPT, Gemini) work on an instructor's decks
+from outside the app — is **built and running**. The **in-app chat assistant**
+is still future work.
 
 This page began as the design record: what the value is, what the two features
-share, what they don't, and what would have to change in the spec. Both remain
-future work in the spec — [SPEC.md §18](SPEC.md#18-future-work), open question
-[§19.11](SPEC.md#19-open-questions) — and the spec has not been edited.
+share, what they don't, and what would have to change in the spec. The spec has
+not been edited: both are still filed under [SPEC.md §18](SPEC.md#18-future-work)
+and open question [§19.11](SPEC.md#19-open-questions), and the MCP server has
+been built out ahead of that, the way several Phase 2 items were. There is no
+board issue for it — [#129](https://github.com/bloombar/slide-machine/issues/129)
+is closed, and the work lands as descriptively-named PRs.
 
-**What is built** (branch `mcp-server`, tracked by
-[issue #129](https://github.com/bloombar/slide-machine/issues/129)):
+**What is built** (merged from `mcp-server` in
+[#291](https://github.com/bloombar/slide-machine/pull/291), and extended since):
 
 | | State |
 | --- | --- |
 | Schema derivation and action descriptions (§3.1, §3.2) | Built — [actions/catalog.ts](../server/src/actions/catalog.ts) |
 | Model-legible errors (§3.3) | Built — [actions/agent-error.ts](../server/src/actions/agent-error.ts) |
-| The MCP tool surface (§4) | A first set of twelve tools — [mcp/tools/](../server/src/mcp/tools/) |
+| The MCP tool surface (§4) | Sixteen tools — [mcp/tools/](../server/src/mcp/tools/) |
 | The safety boundary (§6) | Built and enforced by test — [mcp/forbidden.ts](../server/src/mcp/forbidden.ts) |
 | The endpoint | `POST /api/mcp` — [routes/mcp.ts](../server/src/routes/mcp.ts) |
-| **OAuth authorization server (§5)** | Built — [oauth/](../server/src/oauth/) and [routes/oauth.ts](../server/src/routes/oauth.ts). Dynamic client registration, PKCE, scopes, refresh-token rotation, revocation, and the two discovery documents. |
-| The consent screen (§5.1) | Built — [OAuthConsentPage.tsx](../client/src/pages/OAuthConsentPage.tsx) |
-| Connected-assistants list and disconnect (§5.3) | Built — [ConnectedAssistantsPanel.tsx](../client/src/components/ConnectedAssistantsPanel.tsx), account settings → Privacy. The same panel hands over the address to paste into an assistant, which is the only part of connecting the app can offer: an authorization flow starts at the client, so there is no "connect" button and cannot be. |
+| **OAuth authorization server (§5)** | Built — [oauth/](../server/src/oauth/) and [routes/oauth.ts](../server/src/routes/oauth.ts). Dynamic client registration, PKCE, scopes, refresh-token rotation with a grace window, reuse detection, revocation, and the two discovery documents. |
+| The consent screen (§5.1) | Built — [OAuthConsentPage.tsx](../client/src/pages/OAuthConsentPage.tsx). Names the client, the account being connected, and the origin the code will be delivered to. |
+| Connected-assistants list and disconnect (§5.3) | Built — [ConnectedAssistantsPanel.tsx](../client/src/components/ConnectedAssistantsPanel.tsx), account settings → **Connected AI assistants** (its own tab since [#392](https://github.com/bloombar/slide-machine/pull/392)). The same panel hands over the address to paste into an assistant and gives per-client setup instructions, which is the only part of connecting the app can offer: an authorization flow starts at the client, so there is no "connect" button and cannot be. |
 | Agent actions recorded distinguishably (§6) | Built — [audit/agent-log.ts](../server/src/audit/agent-log.ts), written from the dispatcher on the `agent` channel |
+| The instructor-facing how-to | Built — [CONNECTING_AN_ASSISTANT.md](CONNECTING_AN_ASSISTANT.md), served in-app at `/assistants` |
 | The in-app chat assistant (§3.4) | Not built |
 
-**What has not been done:** the tool set has still not been validated against
-real usage (§4.1, §8 below), no assistant vendor's connector has been
-registered or tested against a live deployment (§5.6), and the institutional
-question in §5.6 — whether NYU IT will approve a third-party connector for
-managed faculty accounts — remains open and is not a technical matter.
+**Security.** Three findings against the consent flow were written up on
+2026-09-19 and fixed on 2026-09-24 —
+[plans/OAUTH_CONSENT_SECURITY.md](plans/OAUTH_CONSENT_SECURITY.md) is the record,
+including one finding (automatic revocation of a replayed authorization code)
+that was built, tested and then deliberately removed because it fired on honest
+clients and not on the realistic attacker. Read that file before changing
+anything under [oauth/](../server/src/oauth/).
+
+**What has not been done:** the tool set has not been validated against sustained
+real usage (§4.1, §8 below) — it is connected and exercised, but not studied. The
+institutional question in §5.6 — whether NYU IT will approve a third-party
+connector for managed faculty accounts — remains open and is not a technical
+matter.
 
 The rest of this page is unchanged, and is still a plan to argue with rather
 than a specification to implement.
@@ -41,7 +53,7 @@ The dependency runs one way, and not the way it first appears:
                           ┌─▶ conversation loop ─▶ in-app chat assistant
 action layer (built)      │
       +          ─────────┤
-schema machinery (todo)   │
+schema machinery (built)  │
                           └─▶ OAuth server ──────▶ MCP server
 ```
 
@@ -110,12 +122,14 @@ and it is smaller than "build the action catalog" suggests.
 
 Machine-readable input contracts generated from each action's existing Zod
 schema, rather than hand-maintained. Both paths need this; neither should
-duplicate it. Nothing in the server does Zod → JSON Schema conversion today.
+duplicate it. **Built** — [actions/catalog.ts](../server/src/actions/catalog.ts)
+derives them with `z.toJSONSchema`, so adding or changing an action updates the
+catalog with no separate maintenance.
 
 ### 3.2 Action descriptions — written per action, on demand (shared)
 
-[`Action`](../server/src/actions/define.ts) has `name`, `input`, `access`,
-`meter`, `execute` — no `description`. Adding the field costs one line.
+[`Action`](../server/src/actions/define.ts) now carries an optional
+`description` alongside `name`, `input`, `access`, `meter` and `execute`.
 
 **Do not backfill ninety descriptions.** Write the description when you write
 the action. Preflight's actions do not exist yet — there are no `concept.*`
@@ -228,6 +242,10 @@ instructor and a power user, without turning the product into something that
 needs a manual. Getting this wrong in either direction — too granular and the
 agent flounders, too clever and it does things the instructor didn't intend — is
 the main design risk in the whole feature.
+
+This table is the original sketch, kept as the reasoning behind the shape. It is
+**not** the shipped tool list — the sixteen tools that exist are in
+[mcp/tools/](../server/src/mcp/tools/), and their names and granularity differ.
 
 | Intent | Roughly composes |
 | --- | --- |
