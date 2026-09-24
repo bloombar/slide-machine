@@ -71,7 +71,7 @@ Do this once. It is the same address for every assistant.
 2. Click the **menu button** (the ☰ icon) in the top-left corner. A panel
    slides in from the left.
 3. Choose **Account settings**.
-4. Scroll down to **Connected AI assistants**, and find **Connect an
+4. Open the **Connected AI assistants** tab, and find **Connect an
    assistant** inside it.
 5. Click **Copy**.
 
@@ -84,7 +84,7 @@ https://your-slide-machine-site.example/api/mcp
 Keep it on your clipboard, or paste it somewhere safe for a moment — Step 2
 asks for it.
 
-> **Do not see a "Connected AI assistants" section?** Your site has assistant
+> **Do not see a "Connected AI assistants" tab?** Your site has assistant
 > access switched off. Ask whoever runs it to read
 > [For whoever runs your site](#for-whoever-runs-your-site) at the bottom of
 > this page.
@@ -224,7 +224,7 @@ it guessing — and stops it working on last term's lecture by mistake.
 You can undo this at any moment, and it takes effect straight away.
 
 1. In Slide Machine, open the **☰ menu** and choose **Account settings**.
-2. Scroll to **Connected AI assistants**.
+2. Open the **Connected AI assistants** tab.
 3. Click **Disconnect** next to the one you want to stop.
 
 The assistant loses access immediately. It does not sign you out of anything
@@ -260,7 +260,7 @@ That is intended, not a fault. See
 Open the lecture in Slide Machine and edit it as normal. The assistant cannot
 delete your work, so anything it changed is still there to fix.
 
-**"There is no 'Connected AI assistants' section in my settings."**
+**"There is no 'Connected AI assistants' tab in my settings."**
 Assistant access is switched off on your site. See the next section.
 
 ---

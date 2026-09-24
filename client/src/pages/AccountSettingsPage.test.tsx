@@ -13,6 +13,7 @@ import { AuthProvider } from '../auth/AuthContext'
 import { setAccessToken } from '../auth/token'
 import AccountSettingsPage from './AccountSettingsPage'
 import { mockFetchRoutes } from '../test/fetch-mock'
+import * as runtimeConfig from '../runtime-config'
 
 const user = (over: Record<string, unknown> = {}) => ({
   id: 'u1',
@@ -115,7 +116,10 @@ const renderSettings = (
 }
 
 beforeEach(() => setAccessToken(null))
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
 
 describe('AccountSettingsPage', () => {
   it('shows account details on General and the tier on Plan', async () => {
@@ -362,6 +366,81 @@ describe('AccountSettingsPage', () => {
       expect(sent).toEqual({ profileVisibility: 'private' }),
     )
     await vi.waitFor(() => expect(toggle).not.toBeChecked())
+  })
+
+  it('offers a Connected AI assistants tab that renders the panel', async () => {
+    vi.spyOn(runtimeConfig, 'getAgentAccessEnabled').mockReturnValue(true)
+    renderSettings({
+      '/api/actions/mcp.connections': () => ({ status: 200, body: [] }),
+    })
+
+    fireEvent.click(
+      await screen.findByRole('tab', { name: 'Connected AI assistants' }),
+    )
+
+    expect(
+      await screen.findByText(/No AI assistants are connected/),
+    ).toBeVisible()
+  })
+
+  it('no longer renders the assistants panel on the Privacy tab', async () => {
+    vi.spyOn(runtimeConfig, 'getAgentAccessEnabled').mockReturnValue(true)
+    renderSettings({
+      '/api/actions/mcp.connections': () => ({ status: 200, body: [] }),
+    })
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Privacy' }))
+    await screen.findByRole('checkbox', { name: 'Public profile' })
+
+    // The tab strip itself always says "Connected AI assistants" — it is the
+    // panel's own heading, rendered only inside the assistants tab, that
+    // must be gone from Privacy.
+    expect(
+      screen.queryByRole('heading', { name: 'Connected AI assistants' }),
+    ).toBeNull()
+  })
+
+  it('links the assistants tab’s "Learn more" to the assistants guide', async () => {
+    vi.spyOn(runtimeConfig, 'getAgentAccessEnabled').mockReturnValue(true)
+    renderSettings({
+      '/api/actions/mcp.connections': () => ({ status: 200, body: [] }),
+    })
+
+    fireEvent.click(
+      await screen.findByRole('tab', { name: 'Connected AI assistants' }),
+    )
+
+    expect(
+      await screen.findByRole('link', { name: 'Learn more' }),
+    ).toHaveAttribute('href', '/assistants')
+  })
+
+  // The panel's own actionable content is already gated on
+  // getAgentAccessEnabled() (ConnectedAssistantsPanel.test.tsx); the tab
+  // itself must drop away too, or a deployment with no MCP OAuth advertises a
+  // feature with nothing behind it — and the guide's own troubleshooting
+  // entry (shared/src/content/assistants.ts) tells a reader that the tab's
+  // *absence* is how they know access is off, so a visible-but-empty tab
+  // would make that untrue.
+  it('drops the Connected AI assistants tab on a deployment with no MCP OAuth', async () => {
+    vi.spyOn(runtimeConfig, 'getAgentAccessEnabled').mockReturnValue(false)
+    renderSettings()
+
+    await screen.findByText('ada@example.com')
+    expect(
+      screen.queryByRole('tab', { name: 'Connected AI assistants' }),
+    ).toBeNull()
+  })
+
+  it('falls back to General when a deep link names the assistants tab and access is off', async () => {
+    vi.spyOn(runtimeConfig, 'getAgentAccessEnabled').mockReturnValue(false)
+    renderSettings({}, '/app/settings?tab=assistants')
+
+    expect(await screen.findByText('ada@example.com')).toBeVisible()
+    expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
   })
 
   it('saves an explicit lecture language and clears back to default', async () => {
@@ -624,6 +703,19 @@ describe('AccountSettingsPage as an admin (ADMIN-5)', () => {
     await renderAsAdmin()
     expect(await screen.findByText('grace@example.com')).toBeVisible()
     expect(screen.queryByRole('tab', { name: 'Design' })).toBeNull()
+  })
+
+  it('keeps Connected AI assistants off an admin’s view of someone else’s account', async () => {
+    // mcp.connections is self-scoped too: an admin would only ever be shown
+    // their own connections behind a tab that names someone else's account.
+    // Access enabled here so this test isolates the admin guard from the
+    // getAgentAccessEnabled() guard covered separately above.
+    vi.spyOn(runtimeConfig, 'getAgentAccessEnabled').mockReturnValue(true)
+    await renderAsAdmin()
+    expect(await screen.findByText('grace@example.com')).toBeVisible()
+    expect(
+      screen.queryByRole('tab', { name: 'Connected AI assistants' }),
+    ).toBeNull()
   })
 
   it('lands an admin on General when the URL names the tab they lack', async () => {

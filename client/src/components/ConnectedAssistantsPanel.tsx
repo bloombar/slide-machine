@@ -124,6 +124,55 @@ export default function ConnectedAssistantsPanel() {
           {copied ? t('assistants.copied') : t('common.copy')}
         </button>
       </div>
+
+      {/* Per-client setup, in place of one hedged sentence. Menu names drift
+          between clients and between versions of the same client — a "connector"
+          in one is a "plugin" or "MCP server" in another — so that caveat is
+          said once, up front, rather than pinned to a click path that will go
+          stale (bloombot's apps/web/src/pages/Mcp.tsx hit this exact staleness
+          before). Adding a connector is also a paid feature in both clients
+          (docs/CONNECTING_AN_ASSISTANT.md), said once here rather than per
+          client too — without it, someone on a free plan follows either set
+          of steps to a menu that is simply not there. */}
+      <p className="mt-2 text-xs text-slate-500">
+        {t('assistants.clientMenuDrift')}
+      </p>
+      <p className="mt-1 text-xs text-slate-500">
+        {t('assistants.paidFeature')}
+      </p>
+      <div className="mt-2 flex flex-col gap-2 text-xs text-slate-600">
+        <p>{t('assistants.claudeInstructions')}</p>
+        <div>
+          <p>{t('assistants.chatgptIntro')}</p>
+          <dl className="mt-1 flex flex-col gap-0.5 pl-3">
+            <div className="flex flex-wrap gap-1">
+              <dt className="text-slate-500">
+                {t('assistants.chatgptFieldName')}
+              </dt>
+              <dd>{t('assistants.chatgptFieldNameValue')}</dd>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              <dt className="text-slate-500">
+                {t('assistants.chatgptFieldDescription')}
+              </dt>
+              <dd>{t('assistants.chatgptFieldDescriptionValue')}</dd>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              <dt className="text-slate-500">
+                {t('assistants.chatgptFieldConnection')}
+              </dt>
+              <dd>{t('assistants.chatgptFieldConnectionValue')}</dd>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              <dt className="text-slate-500">
+                {t('assistants.chatgptFieldAuth')}
+              </dt>
+              <dd>{t('assistants.chatgptFieldAuthValue')}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
       <p className="mt-2 text-xs text-slate-500">
         {t('assistants.connectApproval')}
       </p>

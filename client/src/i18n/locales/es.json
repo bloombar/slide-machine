@@ -205,6 +205,7 @@
       "general": "General",
       "design": "Diseño",
       "privacy": "Privacidad",
+      "assistants": "Asistentes de IA conectados",
       "plan": "Plan y uso"
     },
     "templateHeading": "Plantilla predeterminada",
@@ -219,7 +220,9 @@
       "message": "Tu cuenta y todos sus proyectos, clases y diapositivas se eliminarán definitivamente."
     },
     "assistantsSection": "Asistentes de IA conectados",
-    "assistantsSectionHint": "Asistentes a los que has permitido leer o cambiar tus clases desde fuera de la aplicación. Desconectar uno surte efecto de inmediato y no cierra tu sesión en ningún sitio."
+    "assistantsSectionHint": "Asistentes a los que has permitido leer o cambiar tus clases desde fuera de la aplicación. Desconectar uno surte efecto de inmediato y no cierra tu sesión en ningún sitio.",
+    "assistantsIntro": "Puedes dejar que un asistente de IA que ya usas —Claude o ChatGPT— trabaje en tus diapositivas contigo.",
+    "assistantsLearnMore": "Más información"
   },
   "language": {
     "label": "Idioma",
@@ -1457,7 +1460,19 @@
     "disconnect": "Desconectar",
     "failed": "No se pudieron cargar los asistentes conectados.",
     "connectTitle": "Conectar un asistente",
-    "connectHint": "Pega esta dirección en los ajustes de conectores de tu asistente de IA. Los asistentes compatibles con conectores MCP remotos —como Claude— harán el resto.",
+    "connectHint": "Pega esta dirección en los ajustes de conectores de tu asistente de IA.",
+    "clientMenuDrift": "Es posible que los nombres exactos de los menús no coincidan con los que se indican abajo: busca lo que tu asistente llame \"conector\", \"complemento\" o \"servidor MCP\"; son lo mismo.",
+    "paidFeature": "Añadir tu propio conector es una función de pago tanto en Claude como en ChatGPT. Si no está disponible en tu plan en uno, prueba con el otro.",
+    "claudeInstructions": "Claude: añade un conector personalizado por URL, usando la dirección de arriba, luego inicia sesión y aprueba en la pantalla que se abre.",
+    "chatgptIntro": "ChatGPT: en Ajustes, abre el modo de desarrollador — puede estar bajo Avanzado, y es el único lugar donde ChatGPT acepta una dirección personalizada como esta — y añade un nuevo conector, luego completa:",
+    "chatgptFieldName": "Nombre",
+    "chatgptFieldNameValue": "Slide Machine",
+    "chatgptFieldDescription": "Descripción",
+    "chatgptFieldDescriptionValue": "Crear y editar diapositivas de clase",
+    "chatgptFieldConnection": "Conexión",
+    "chatgptFieldConnectionValue": "la dirección de arriba",
+    "chatgptFieldAuth": "Autenticación",
+    "chatgptFieldAuthValue": "OAuth",
     "connectApproval": "El asistente te devolverá aquí para que lo apruebes antes de poder ver nada.",
     "copied": "Copiado"
   }
