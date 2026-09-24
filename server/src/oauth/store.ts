@@ -244,9 +244,8 @@ export const rotateTokens = async (
       // this late, so the whole connection ends — every token this
       // (user, client) pair holds, not only the ones descended from this one
       // grant (see `revokeConnection`'s own docstring for why that narrower
-      // scoping was dropped). No retry here: this row was already read above,
-      // so what needs deleting is known to exist and is not mid-write, unlike
-      // the authorization-code replay path below.
+      // scoping was dropped). No retry: this row was already read above, so
+      // what needs deleting is known to exist and is not mid-write.
       try {
         await revokeConnection(doc.userId.toString(), clientId)
       } catch (error) {
@@ -296,27 +295,20 @@ export const rotateTokens = async (
   })
 }
 
-/** A short, bounded pause — used only to close the narrow window where a
- * genuinely concurrent double-exchange's loser checks a connection for
- * tokens to revoke before the winner has finished writing them (see
- * `revokeConnection`). */
-const sleep = (ms: number): Promise<void> =>
-  new Promise(resolve => setTimeout(resolve, ms))
-
 /**
- * Outstanding fire-and-forget work from `revokeConnection` and the
- * authorization-code replay path, so a test can wait for it deterministically
- * instead of a fixed pause (rework round 2: the previous fix for the flake
- * this caused was a sleep in `beforeEach`, which is exactly the kind of
- * timing-dependent guess this project's own testing guidance says to avoid —
- * it happened to be long enough here, and would not reliably stay that way on
- * a slower or more loaded machine).
+ * Outstanding fire-and-forget work from `revokeConnection`'s notify email, so
+ * a test can wait for it deterministically instead of a fixed pause (rework
+ * round 2: the previous fix for the flake this caused was a sleep in
+ * `beforeEach`, which is exactly the kind of timing-dependent guess this
+ * project's own testing guidance says to avoid — it happened to be long
+ * enough here, and would not reliably stay that way on a slower or more
+ * loaded machine).
  *
  * Production code never reads this set or awaits `drainPendingSideEffects`
- * — the calls tracked here stay genuinely fire-and-forget for their callers,
- * which is what finding 6 (the timing-oracle review) requires. Tracking them
- * costs one `Set` insert and a `.catch`/`.finally` per call, paid only by the
- * revocation path, and is otherwise inert.
+ * — the notify email tracked here stays genuinely fire-and-forget for its
+ * caller, which is what root cause F2 (the mail-relay timing oracle) requires.
+ * Tracking it costs one `Set` insert and a `.catch`/`.finally` per call, paid
+ * only by the revocation path, and is otherwise inert.
  */
 const pendingSideEffects = new Set<Promise<unknown>>()
 
@@ -324,10 +316,11 @@ const pendingSideEffects = new Set<Promise<unknown>>()
  * Fires `promise` without making the caller wait for it, while still letting
  * a test await it deterministically via `drainPendingSideEffects`.
  *
- * The `.catch` is load-bearing, not decoration (finding 2): `.finally`
- * returns a *new* promise that rejects whenever the original does, and the
- * old `void promise.finally(...)` attached no handler to that new promise —
- * an unhandled rejection, which Node terminates the process on by default.
+ * The `.catch` is load-bearing, not decoration (docs/DECISIONS.md's
+ * "Findings 2/3 rescope" entry, its own finding 2): `.finally` returns a
+ * *new* promise that rejects whenever the original does, and the old
+ * `void promise.finally(...)` attached no handler to that new promise — an
+ * unhandled rejection, which Node terminates the process on by default.
  * Every side effect tracked here already catches its own errors internally
  * (`notifyConnectionRevoked`, `revokeConnection`), so this is a backstop
  * against a future caller that does not, not evidence one currently needs it.
@@ -337,32 +330,19 @@ export const trackSideEffect = (promise: Promise<unknown>): void => {
   void promise.catch(() => {}).finally(() => pendingSideEffects.delete(promise))
 }
 
-/**
- * Test-only: resolves once every fire-and-forget call tracked above and
- * still in flight at the time it is called has settled.
- *
- * Loops rather than awaiting one snapshot, because the authorization-code
- * replay path (finding 6) now nests two levels of fire-and-forget: the
- * outer call (`revokeConnectionIfRedeemed` in provider.ts) is tracked but
- * not awaited by its caller, and it in turn awaits `revokeConnection`, which
- * fires the notify email through this same mechanism without waiting for
- * it. A single `Promise.allSettled` over the outer promise resolves before
- * the inner one it spawns has necessarily settled — draining until the set
- * is empty catches whatever a settling promise adds on its way out, at any
- * nesting depth.
- */
+/** Test-only: resolves once every fire-and-forget call tracked above and
+ * still in flight at the time it is called has settled. */
 export const drainPendingSideEffects = async (): Promise<void> => {
-  while (pendingSideEffects.size > 0) {
-    await Promise.allSettled([...pendingSideEffects])
-  }
+  await Promise.allSettled([...pendingSideEffects])
 }
 
 /**
  * Ends a connection outright: every access and refresh token one assistant
  * holds for one user — the same operation the connected-assistants list's own
  * "Disconnect" button performs (`disconnect`, below), reused here as the
- * automatic response to detected token reuse (findings 2/3,
- * docs/plans/OAUTH_CONSENT_SECURITY.md).
+ * automatic response to detected refresh-token reuse (finding 3,
+ * docs/plans/OAUTH_CONSENT_SECURITY.md — the only caller now; see below on
+ * finding 2).
  *
  * This replaces an earlier, tighter design — a per-grant "token family" that
  * could be revoked as the one compromised chain without ever touching a
@@ -379,38 +359,25 @@ export const drainPendingSideEffects = async (): Promise<void> => {
  * through consent independently) loses both when either one's token is
  * reused — a reviewer demonstrated this concretely against the family
  * design's replacement. That is worse than the family design's blast radius,
- * and better than production today, which has no automatic teardown for
+ * and better than production today, which had no automatic teardown for
  * either finding at all. Judged acceptable at MEDIUM severity given the
  * defect rate the tighter alternative was producing.
  *
- * `retry`, when given, repeats the delete a bounded number of times with a
- * short pause between attempts — used only by the authorization-code replay
- * path (`revokeConnectionIfRedeemed` in provider.ts), where a genuinely
- * concurrent double exchange can have its loser reach here before the
- * winner's `issueTokens` (a second, later operation) has finished writing
- * anything to delete. Deliberately does **not** try to stop early once a
- * pass deletes nothing: that was the previous design's own defect (a pass
- * that finds nothing is exactly what "the winner has not written yet" looks
- * like on its first attempt too), so every attempt runs regardless of what
- * the one before it found. Safe to call this way because the caller no
- * longer awaits this function at all on that path (see `trackSideEffect`
- * there) — the retry's total pause no longer costs the HTTP response
- * anything. The refresh-reuse path (`rotateTokens` above) never needs a
- * retry: it always reads the row it is revoking before calling this, so the
- * tokens it is asking to delete are already known to exist and are not
- * mid-write.
+ * **Finding 2 no longer calls this at all** (docs/DECISIONS.md, "Finding 2's
+ * revocation-on-replay was tried and removed"): a replayed authorization code
+ * is refused, full stop, with no automatic teardown. That removed the one
+ * caller that needed a retry (the concurrent-double-exchange race a
+ * fire-and-forget delete had to wait out) — the refresh-reuse path below
+ * never needed one, since it always reads the row it is revoking before
+ * calling this, so the tokens it is asking to delete are already known to
+ * exist and are not mid-write. No `retry` parameter remains as a result;
+ * this is a plain, single-attempt delete.
  */
 export const revokeConnection = async (
   userId: string,
   clientId: string,
-  retry?: { attempts: number; delayMs: number },
 ): Promise<void> => {
-  const attempts = retry?.attempts ?? 1
-  let deletedCount = 0
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    deletedCount += await disconnect(userId, clientId)
-    if (attempt < attempts - 1 && retry) await sleep(retry.delayMs)
-  }
+  const deletedCount = await disconnect(userId, clientId)
 
   if (deletedCount === 0) {
     // Nothing was actually revoked (must-fix 5, rework round 2) — most often
@@ -426,8 +393,8 @@ export const revokeConnection = async (
   // configured SMTP relay is a real network round trip (lib/mailer.ts's own
   // timeouts run to twenty seconds) that would otherwise make a genuine
   // replay's refusal measurably slower than an unknown token's — a timing
-  // oracle for "this token was once real" (root cause F2, and finding 6).
-  // Tracked rather than fully detached so tests can await it deterministically
+  // oracle for "this token was once real" (root cause F2). Tracked rather
+  // than fully detached so tests can await it deterministically
   // (`drainPendingSideEffects`) instead of guessing at a sleep duration.
   trackSideEffect(notifyConnectionRevoked(userId, clientId))
   logConnectionRevoked(userId, clientId, deletedCount)

@@ -19,18 +19,19 @@
  * URI that was not checked, which is why `redirectUri` is stored here and
  * compared on exchange rather than taken from the token request.
  *
- * A replay also ends the connection it minted tokens for (finding 2,
- * docs/plans/OAUTH_CONSENT_SECURITY.md). `codeHash` is what a replay is
- * looked up by (`revokeConnectionIfRedeemed`, oauth/provider.ts) to find this
- * row's `userId` — an earlier design instead snapshotted the minted tokens'
- * hashes onto this row after the fact, which a second, non-atomic write left
- * a window where a genuinely concurrent double exchange's loser found
- * nothing to revoke, because the winner had not finished writing yet.
- * Looking the grant back up by `codeHash` (known before any database round
- * trip, and never changing) needs no snapshot and closes that race on its
- * own; see docs/DECISIONS.md for why the *finer-grained* per-grant
- * revocation this comment used to describe (a "token family") was dropped in
- * favour of ending the whole (user, client) connection.
+ * A replay does **not** end the connection it minted tokens for. Two earlier
+ * designs tried that — first a per-grant "token family", then a blunter
+ * `disconnect(userId, clientId)` — and both were removed; see
+ * docs/DECISIONS.md's "Finding 2's revocation-on-replay was tried and
+ * removed" entry. In short: the realistic way a code leaks (browser history,
+ * a `Referer` header, a proxy log) hands a thief the code without the PKCE
+ * verifier, so `challengeForAuthorizationCode` refuses before a replay ever
+ * reaches this row a second time — nothing this row could record would have
+ * caught that thief. What routinely *does* reach a second exchange is an
+ * honest client's own retry, which held the verifier all along; tearing the
+ * connection down for that punished the common case to (mostly) miss the
+ * one it was meant to catch. The single-use enforcement above (`redeemedAt`)
+ * is unconditional and unaffected by any of this.
  */
 import { Schema, model, Types } from 'mongoose'
 

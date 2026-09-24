@@ -64,6 +64,44 @@ beforeEach(async () => {
   userId = user._id.toString()
 })
 
+describe('an ordinary rotation, under a real grace window', () => {
+  it('shortens usableUntil to the configured grace window, not to now', async () => {
+    // Distinct from the near-expiry test below, and the gap it leaves: that
+    // test hand-writes `usableUntil` via `updateOne` specifically so
+    // `usableUntil > graceEnd` comes out false (the no-op-shortening branch),
+    // which never exercises the line that actually computes and assigns
+    // `graceEnd` from `env.REFRESH_GRACE_SECONDS`. Nothing in the shared
+    // suite (REFRESH_GRACE_SECONDS=0 there) can either, since at grace=0
+    // `graceEnd` and `now` are the same value and a mutation replacing one
+    // with the other would be invisible. This test issues a token with its
+    // ordinary long life (182 days — nowhere near the grace window) and
+    // rotates it once, so `usableUntil > graceEnd` is true and the shortening
+    // assignment actually runs against the real, positive, configured value.
+    const tokens = await issueTokens({
+      clientId: 'client-b',
+      userId,
+      scopes: [SCOPES.read],
+    })
+
+    const before = Date.now()
+    const rotated = await rotateTokens(tokens.refreshToken, 'client-b')
+    expect(rotated).not.toBeNull()
+    const after = Date.now()
+
+    const row = await OAuthTokenModel.findOne({
+      tokenHash: hashToken(tokens.refreshToken),
+    })
+    expect(row!.supersededAt).toBeTruthy()
+    // usableUntil must land within [before, after] + the configured 120s —
+    // loose enough to tolerate real wall-clock time passing during the
+    // test, tight enough that neither "left unmoved" (182 days out) nor
+    // "set to now" (the mutation this test exists to catch) would pass.
+    const usableUntil = row!.usableUntil!.getTime()
+    expect(usableUntil).toBeGreaterThanOrEqual(before + 120_000 - 2_000)
+    expect(usableUntil).toBeLessThanOrEqual(after + 120_000 + 2_000)
+  })
+})
+
 describe('a token rotated within its own last moments, under a real grace window', () => {
   it('is marked superseded even though there is nothing to shorten', async () => {
     const tokens = await issueTokens({

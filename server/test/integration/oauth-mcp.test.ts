@@ -949,12 +949,25 @@ describe('binding the parked request to the browser that started it', () => {
 })
 
 /**
- * Finding 2: a replayed authorization code was refused and nothing else
- * happened, discarding the one useful signal it carries — the code leaked.
+ * Finding 2: a replayed authorization code is refused. It is *not* met with
+ * automatic teardown of the tokens it minted — that was tried (an earlier
+ * pass on this branch) and removed; see docs/DECISIONS.md's "Finding 2's
+ * revocation-on-replay was tried and removed" entry for why. In short: the
+ * realistic way a code leaks (browser history, a `Referer` header, a proxy
+ * log) hands a thief the code but not the PKCE verifier, so
+ * `challengeForAuthorizationCode` refuses before this branch is ever reached
+ * — nothing here would have caught that thief anyway. What *does* reach this
+ * branch, routinely, is an honest client's own retry (a callback reload, a
+ * lost response, a concurrent submit) — it holds the verifier, so it gets
+ * past PKCE and lands squarely on a second exchange of its own code. Tearing
+ * the connection down for that is punishing the honest case to (mostly)
+ * miss the dishonest one. The single-use enforcement itself — the atomic
+ * claim in `exchangeAuthorizationCode` — is unconditional and unaffected by
+ * any of this: a replayed code still never yields a second token pair.
  */
 describe('a replayed authorization code', () => {
-  it('revokes the tokens it minted, and refuses byte-identically to an unknown code', async () => {
-    const session = await registerUser('replay-revokes@example.test')
+  it('is refused byte-identically to an unknown code, without touching the tokens the honest exchange already minted', async () => {
+    const session = await registerUser('replay-refused@example.test')
     const preset = await registerClientDirect()
     const { client, code, verifier, tokens } = await connect(
       session,
@@ -995,19 +1008,16 @@ describe('a replayed authorization code', () => {
     expect(unknown.status).toBe(replay.status)
     expect(unknown.body).toEqual(replay.body)
 
-    // The revocation the replay triggered is fire-and-forget now (finding
-    // 6), so it is not guaranteed to have finished by the time the refusal
-    // above was received.
-    await drainPendingSideEffects()
-
-    // And the tokens the honest exchange produced are gone, not merely the
-    // replay refused — the standard's answer to "this code leaked".
+    // No automatic teardown: the tokens the honest exchange produced still
+    // work. Losing them to a replay of a code the client itself still holds
+    // (its own retry, most commonly) would be the honest-client-punished
+    // failure mode this design deliberately avoids.
     const after = await mcp(tokens.access_token, {
       jsonrpc: '2.0',
       id: 91,
       method: 'initialize',
     })
-    expect(after.status).toBe(401)
+    expect(after.status).toBe(200)
   })
 
   it('does not burn a code on a wrong redirect URI, so a legitimate retry still works', async () => {
@@ -1226,70 +1236,19 @@ describe('replaying an already-rotated refresh token', () => {
 })
 
 /**
- * Root cause A (rework round 1): code-replay revocation used to snapshot
- * the minted tokens' hashes onto the grant row in a second, non-atomic
- * write. A stolen code redeemed and then immediately rotated left both
- * hashes dead, and a genuinely concurrent double exchange left them unset
- * entirely — either way, nothing to revoke. The fix gives every token a
- * family id (the authorization code's own `codeHash`) that survives any
- * number of rotations and needs no snapshot.
+ * A genuinely concurrent double exchange of the same code — two requests
+ * racing at the database level, the shape a lost-response retry or a
+ * double-submitted callback produces. The atomic claim in
+ * `exchangeAuthorizationCode` lets exactly one win; this is the regression
+ * test for the loser's refusal not reaching back and tearing down what the
+ * winner just minted, which a from-scratch reviewer's first instinct
+ * ("revoke on replay") would do and which an earlier pass on this branch
+ * briefly did (see docs/DECISIONS.md, "Finding 2's revocation-on-replay was
+ * tried and removed") — exactly this race was the scenario measured to
+ * punish the honest side.
  */
-describe('code-replay revocation survives rotation and races', () => {
-  it('revokes tokens even after they have since rotated', async () => {
-    // The measured failure from both reviews: attacker redeems the code,
-    // rotates immediately (a legitimate rotation — finding 3 has nothing to
-    // fire on), then the code is replayed by whoever else was holding it. A
-    // hash snapshot taken once at exchange time is already stale by then.
-    const session = await registerUser('a1-rotate-first@example.test')
-    const preset = await registerClientDirect()
-    const { client, code, verifier, tokens } = await connect(
-      session,
-      undefined,
-      preset,
-    )
-
-    const rotated = await request(server)
-      .post('/oauth/token')
-      .type('form')
-      .send({
-        grant_type: 'refresh_token',
-        refresh_token: tokens.refresh_token,
-        client_id: client.client_id,
-      })
-    expect(rotated.status).toBe(200)
-
-    const replay = await request(server)
-      .post('/oauth/token')
-      .type('form')
-      .send({
-        grant_type: 'authorization_code',
-        code,
-        code_verifier: verifier,
-        client_id: client.client_id,
-        redirect_uri: 'https://assistant.test/cb',
-      })
-    expect(replay.status).toBe(400)
-
-    // The revocation this triggers is fire-and-forget now (finding 6 — see
-    // provider.ts's `exchangeAuthorizationCode`), so it is not guaranteed to
-    // have finished by the time the refusal above was received.
-    await drainPendingSideEffects()
-
-    // The rotated pair — several steps removed from what the code itself
-    // minted — is dead too.
-    const afterRotate = await mcp(rotated.body.access_token, {
-      jsonrpc: '2.0',
-      id: 96,
-      method: 'initialize',
-    })
-    expect(afterRotate.status).toBe(401)
-  })
-
-  it('revokes both sides of a genuinely concurrent double exchange', async () => {
-    // The other measured failure: two requests racing on the same code at
-    // the database level. The atomic claim lets exactly one win, but the
-    // loser can reach the revocation check before the winner's `issueTokens`
-    // (a second, later operation) has finished writing anything to revoke.
+describe('a genuinely concurrent double exchange of the same code', () => {
+  it('leaves the winner holding working tokens', async () => {
     const session = await registerUser('a2-concurrent@example.test')
     const client = await registerClientDirect()
     const { verifier, challenge } = pkce()
@@ -1318,19 +1277,12 @@ describe('code-replay revocation survives rotation and races', () => {
     expect(winner.status).toBe(200)
     expect(loser.status).toBe(400)
 
-    // The bounded retry in `revokeConnectionIfRedeemed` must still find and
-    // delete the winner's tokens, even though they did not exist yet the
-    // instant the loser's claim failed. Fire-and-forget now (finding 6), so
-    // draining before checking is what makes this deterministic rather than
-    // depending on how much real time the assertions above happened to take.
-    await drainPendingSideEffects()
-
     const stillWorks = await mcp(winner.body.access_token, {
       jsonrpc: '2.0',
       id: 97,
       method: 'initialize',
     })
-    expect(stillWorks.status).toBe(401)
+    expect(stillWorks.status).toBe(200)
   })
 })
 
@@ -1426,29 +1378,6 @@ describe("the binding cookie's own attributes", () => {
     expect(raw).toMatch(/SameSite=Lax/i)
     expect(raw).toMatch(/Path=\//)
     expect(raw).not.toMatch(/Domain=/i)
-  })
-
-  it('never grows past a fixed number of distinct cookie names (finding 5)', async () => {
-    // Root cause C4's fix (a unique cookie per request) closed the collision
-    // problem at the cost of an unbounded name space: an unauthenticated
-    // `GET /oauth/authorize`, hit repeatedly (an abandoned flow, a retry, a
-    // client's own retry logic), left a new, never-cleared, `Path=/` cookie
-    // sitting in the browser on every hit. At the browser's per-domain
-    // cookie cap that starts evicting cookies this origin actually needs
-    // (`sm_refresh`), and a large enough `Cookie` header can exceed Node's
-    // default 16KB `maxHeaderSize`. `consentCookieName` now hashes onto a
-    // fixed number of slots instead of a truly unique name per request.
-    //
-    // Exercised directly against many distinct (synthetic) request ids,
-    // rather than by actually driving `GET /oauth/authorize` that many
-    // times: the SDK's own `authorizationHandler` applies a 100-per-15-minute
-    // rate limit ahead of `provider.authorize`, which a loop large enough to
-    // demonstrate a bound would hit long before proving anything.
-    const names = new Set<string>()
-    for (let i = 0; i < 500; i++) {
-      names.add(consentCookieName(new Types.ObjectId().toString()))
-    }
-    expect(names.size).toBeLessThan(500)
   })
 })
 
@@ -1645,7 +1574,7 @@ describe('robustness of the revocation side effects', () => {
     // (caught it happening while writing this). Letting the mock resolve
     // itself sidesteps the race entirely: `drainPendingSideEffects` below
     // waits for whatever `notifyConnectionRevoked` promise is already
-    // tracked (tracked synchronously by `endFamily`, before the HTTP
+    // tracked (tracked synchronously by `revokeConnection`, before the HTTP
     // response is sent, so that part is not racy), for however long that
     // takes to settle.
     const mailSpy = vi
@@ -1713,32 +1642,21 @@ describe('robustness of the revocation side effects', () => {
     errorSpy.mockRestore()
   })
 
-  it('does not make an authorization-code replay refusal wait on its own revocation (finding 6)', async () => {
-    // Distinct from "does not make a token refusal wait on a slow mail
-    // relay" above, which covers finding 3's (refresh-reuse) path: this is
-    // finding 2's (authorization-code replay) path, which used to await its
-    // own revocation — a delete plus a bounded, sleep-bearing retry for the
-    // concurrent-double-exchange race (5 attempts × 20ms) — before throwing,
-    // putting real latency on the refusal for exactly the codes that were
-    // genuinely redeemed. Slowing the delete itself (rather than the mail
-    // send) is what isolates this from the mail-relay test above.
-    const session = await registerUser('f6-slow-revoke@example.test')
+  it('does not touch or log anything for a replayed authorization code', async () => {
+    // Finding 2's revocation-on-replay (and the timing-oracle concern that
+    // went with it, once formerly numbered "finding 6") is gone —
+    // docs/DECISIONS.md, "Finding 2's revocation-on-replay was tried and
+    // removed". Nothing runs on this path beyond the ordinary refusal, so
+    // there is no trace to leave and nothing that could wait on a slow
+    // relay; this replaces the two tests that used to prove exactly that
+    // about the (now-deleted) revocation call.
+    const session = await registerUser('code-replay-inert@example.test')
     const preset = await registerClientDirect()
     const { client, code, verifier } = await connect(session, undefined, preset)
 
-    const deleteSpy = vi
-      .spyOn(OAuthTokenModel, 'deleteMany')
-      .mockImplementation(
-        () =>
-          new Promise(resolve =>
-            setTimeout(
-              () => resolve({ acknowledged: true, deletedCount: 0 }),
-              300,
-            ),
-          ) as ReturnType<typeof OAuthTokenModel.deleteMany>,
-      )
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const mailSpy = vi.spyOn(mailer, 'sendMail')
 
-    const start = Date.now()
     const replay = await request(server)
       .post('/oauth/token')
       .type('form')
@@ -1749,48 +1667,17 @@ describe('robustness of the revocation side effects', () => {
         client_id: client.client_id,
         redirect_uri: 'https://assistant.test/cb',
       })
-    const elapsed = Date.now() - start
-
     expect(replay.status).toBe(400)
-    // Comfortably under the mock's own 300ms delay, let alone the retry's
-    // real total (5 attempts, so up to five of these delays chained).
-    expect(elapsed).toBeLessThan(200)
-
-    await drainPendingSideEffects()
-    deleteSpy.mockRestore()
-  })
-
-  it('leaves the same trace for a replayed authorization code', async () => {
-    // F3's justification for telling the user at all applies to finding 2's
-    // revocation path just as much as finding 3's, and both now go through
-    // the same `revokeConnection` helper — this confirms the code path does
-    // too.
-    const session = await registerUser('f3-code-replay@example.test')
-    const preset = await registerClientDirect()
-    const { client, code, verifier } = await connect(session, undefined, preset)
-
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-    await request(server).post('/oauth/token').type('form').send({
-      grant_type: 'authorization_code',
-      code,
-      code_verifier: verifier,
-      client_id: client.client_id,
-      redirect_uri: 'https://assistant.test/cb',
-    })
-
-    // Fire-and-forget now (finding 6) — the log line is written inside the
-    // same background revocation, so it is not guaranteed to have happened
-    // by the time the HTTP response above was received.
-    await drainPendingSideEffects()
 
     expect(
       errorSpy.mock.calls.some(([line]) =>
         String(line).includes('[oauth] connection revoked'),
       ),
-    ).toBe(true)
+    ).toBe(false)
+    expect(mailSpy).not.toHaveBeenCalled()
 
     errorSpy.mockRestore()
+    mailSpy.mockRestore()
   })
 })
 
@@ -1974,115 +1861,12 @@ describe('what supersession does and does not shorten', () => {
   })
 })
 
-/**
- * `revokeConnection`'s retry deliberately never tries to stop early once a
- * pass deletes nothing (see its own docstring in store.ts): `issueTokens`
- * writes the access and refresh rows through a concurrent `Promise.all`, so
- * a delete landing between the two inserts can remove only one, and a retry
- * loop that stopped as soon as one pass found nothing to delete could mistake
- * that gap for "already clean" — a defect an earlier, family-scoped version
- * of this retry had (docs/DECISIONS.md).
- */
-describe('a family teardown racing a concurrent issuance', () => {
-  it('converges on deleting both tokens, not just the first one found', async () => {
-    const session = await registerUser('convergence@example.test')
-    const client = await registerClientDirect()
-    const { verifier, challenge } = pkce()
-    const { requestId, cookie } = await beginAuthorize(
-      client.client_id,
-      challenge,
-    )
-    const approve = await request(server)
-      .post(`/api/oauth/authorization/${requestId}/approve`)
-      .set('Authorization', `Bearer ${session}`)
-      .set('Cookie', cookie)
-      .send({})
-    const code = new URL(approve.body.redirectTo).searchParams.get('code')!
-
-    const exchangeOnce = () =>
-      request(server).post('/oauth/token').type('form').send({
-        grant_type: 'authorization_code',
-        code,
-        code_verifier: verifier,
-        client_id: client.client_id,
-        redirect_uri: 'https://assistant.test/cb',
-      })
-
-    const [a, b] = await Promise.all([exchangeOnce(), exchangeOnce()])
-    const [winner, loser] = a.status === 200 ? [a, b] : [b, a]
-    expect(winner.status).toBe(200)
-    expect(loser.status).toBe(400)
-    await drainPendingSideEffects()
-
-    // Both halves of the winner's pair must be gone — not just the one the
-    // original single-attempt-and-stop logic happened to catch first.
-    const accessDead = await mcp(winner.body.access_token, {
-      jsonrpc: '2.0',
-      id: 101,
-      method: 'initialize',
-    })
-    expect(accessDead.status).toBe(401)
-
-    const refreshDead = await request(server)
-      .post('/oauth/token')
-      .type('form')
-      .send({
-        grant_type: 'refresh_token',
-        refresh_token: winner.body.refresh_token,
-        client_id: client.client_id,
-      })
-    expect(refreshDead.status).toBe(400)
-  })
-})
-
-/**
- * Rework round 2's must-fix 5: `notifyConnectionRevoked` and
- * `logConnectionRevoked` used to fire even when nothing was deleted — an
- * authorization-code row lives 5 minutes, so a second, third, fourth
- * presentation of an already-fully-revoked code each sent another "your
- * assistant may have leaked" email about a connection that, by then, has
- * nothing left to leak.
- */
-describe('replaying an already-revoked code again', () => {
-  it('does not send a second false theft notice', async () => {
-    const session = await registerUser('no-false-notice@example.test')
-    const preset = await registerClientDirect()
-    const { client, code, verifier } = await connect(session, undefined, preset)
-
-    // First replay genuinely revokes the family (covered elsewhere). Its own
-    // notify is fire-and-forget, so it must be drained before the spy goes
-    // up below — otherwise the spy can catch that first, legitimate call
-    // instead of proving the second one sends nothing.
-    await request(server).post('/oauth/token').type('form').send({
-      grant_type: 'authorization_code',
-      code,
-      code_verifier: verifier,
-      client_id: client.client_id,
-      redirect_uri: 'https://assistant.test/cb',
-    })
-    await drainPendingSideEffects()
-
-    const mailSpy = vi.spyOn(mailer, 'sendMail')
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-    // A second replay of the same code finds nothing left to revoke.
-    await request(server).post('/oauth/token').type('form').send({
-      grant_type: 'authorization_code',
-      code,
-      code_verifier: verifier,
-      client_id: client.client_id,
-      redirect_uri: 'https://assistant.test/cb',
-    })
-    await drainPendingSideEffects()
-
-    expect(mailSpy).not.toHaveBeenCalled()
-    expect(
-      errorSpy.mock.calls.some(([line]) =>
-        String(line).includes('[oauth] connection revoked'),
-      ),
-    ).toBe(false)
-
-    mailSpy.mockRestore()
-    errorSpy.mockRestore()
-  })
-})
+// The two describe blocks that used to live here — "a family teardown racing
+// a concurrent issuance" and "replaying an already-revoked code again" —
+// tested the retry-convergence and no-false-notice properties of finding 2's
+// automatic revocation-on-replay. That revocation is gone (docs/DECISIONS.md,
+// "Finding 2's revocation-on-replay was tried and removed"), and with it the
+// `retry` parameter `revokeConnection` used to take. "a genuinely concurrent
+// double exchange of the same code" above and "does not touch or log
+// anything for a replayed authorization code" in the revocation-side-effects
+// describe block cover what remains true of both scenarios.

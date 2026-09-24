@@ -1710,3 +1710,86 @@ atomic redirect-URI/resource filter in `exchangeAuthorizationCode` were out of s
 unchanged — both were independently verified in earlier rounds and none of the seven findings above touch
 them. `server/src/mcp/`, the action layer, and the client-side Connected AI Assistants UI were likewise out of
 scope.
+
+## Finding 2's revocation-on-replay was tried and removed (2026-09-24)
+
+A fifth review of the same branch, reading `provider.ts:406` (`trackSideEffect(revokeConnectionIfRedeemed(...))`,
+as the "Findings 2/3 rescope" entry above left it) rather than driving new traffic. The finding: automatic
+teardown on a replayed authorization code mostly punished the honest case and mostly missed the dishonest one,
+which is the same shape of bug as round 1's root cause B (an honest refresh-token retry torn down as if it
+were theft) — reintroduced on the code path by this branch's own rescope, not inherited from an earlier round.
+
+**Who actually reaches the replay branch.** `exchangeAuthorizationCode`'s failure branch runs whenever the
+atomic single-use claim fails to match — an unknown code, an expired one, a wrong redirect URI, *or* a code
+already redeemed. Only the last of those additionally called `revokeConnectionIfRedeemed`, since that is the
+only one `redeemedAt: { $exists: true }` matches. Three ways to get there:
+
+- **An honest client retrying its own exchange** — a callback page reload, a lost response the client's own
+  code retries, a double-submitted callback (the concurrent-exchange test already in this suite is exactly
+  this shape). It holds the verifier, so nothing about PKCE stops it, and it lands squarely on "this code was
+  already redeemed" seconds after a completely legitimate connect. This is, by a wide margin, the common case
+  in practice.
+- **A code-only thief** — the realistic way a code leaks at all: browser history, a `Referer` header sent to
+  a third party, a proxy or load-balancer access log. None of those carry the PKCE verifier, which never
+  leaves the assistant's own process. `challengeForAuthorizationCode` (the SDK's own PKCE check, which runs
+  *before* `exchangeAuthorizationCode`) refuses this thief outright. They never reach the replay branch, so
+  the automatic teardown never fires for them either.
+- **A thief holding both code and verifier** — the narrow case that does trip the teardown. Already bounded
+  by `AUTHORIZATION_CODE_TTL_SECONDS` (5 minutes): whatever this thief can do, they can do it inside that
+  window regardless of whether a replay is also met with revocation.
+
+So the automatic teardown's actual hit rate skewed toward "an honest client, seconds after connecting,
+suddenly finds its brand-new tokens dead and gets a theft-warning email it did not deserve" and away from
+"a thief is stopped who would not otherwise have been." That is a worse trade than doing nothing.
+
+**Decision: delete it, do not build a narrower grace window for it.** A grace-window fix — tolerate a replay
+within some short window, as `rotateTokens` already does for refresh-token reuse — was considered and
+rejected: finding 3's grace window works because a superseded *refresh* token has an unambiguous next state
+(it was rotated, a specific successor exists) to compare a retry against. A replayed *authorization code* has
+no such comparison available cheaply, and the single-use claim already fully solves the problem finding 2
+exists to describe ("a replayed code must not yield a second token pair") — the automatic teardown was
+additive defence-in-depth, not the fix, and the plan doc's own framing agreed. Removed: the whole
+`revokeConnectionIfRedeemed` function and its call site in `exchangeAuthorizationCode`, `revokeConnection`'s
+now-unused `retry` parameter and the `sleep` helper that supported it (the only caller that ever needed a
+retry no longer exists), and the "finding 6" timing-oracle framing that only applied to this deleted path.
+`revokeConnection` (finding 3's refresh-reuse teardown) is unaffected and unchanged.
+
+The refusal itself is untouched and still byte-identical between a replayed code and an unknown one — the
+single-use enforcement (`redeemedAt` inside the same atomic `findOneAndUpdate` that claims the row) is the
+part that was always correct and remains unconditional.
+
+**Verified** by re-adding a minimal version of the deleted teardown (an inline `disconnect` call on the
+replay branch) and confirming `oauth-mcp.test.ts`'s "is refused byte-identically to an unknown code, without
+touching the tokens the honest exchange already minted" goes red (401 instead of 200 — the honest exchange's
+own tokens die); reverted, green. Four tests that existed only to prove properties of the deleted revocation
+(retry convergence across rotation/races, a trace/notice on the code-replay path, timing) were removed rather
+than rewritten to test nothing; one ("a genuinely concurrent double exchange of the same code") was kept and
+repurposed to prove the positive property that remains true — the loser of a race is refused and the winner's
+tokens are untouched.
+
+## Cookie slots reverted (2026-09-24)
+
+The same review flagged `CONSENT_COOKIE_SLOTS = 64` (the "Findings 2/3 rescope" entry's finding 5 fix,
+`provider.ts`'s `consentCookieName`) as trading an accumulation problem for a cheap denial of service: bounding
+the consent cookie's name space to 64 enumerable-by-volume slots means any cross-site page can spray all 64
+via the unauthenticated `GET /oauth/authorize` — well inside the SDK's own default 100-per-15-minute rate
+limit — deterministically overwriting whichever slot a victim's own genuinely parked flow happens to occupy.
+That is strictly easier than the growth problem it replaced: spraying a *specific* victim's cookie under the
+old, unbounded, unique-per-request scheme needs either the exact cookie name (which an attacker spraying from
+outside never has — cross-origin `fetch`/`img`/iframe requests cannot read the `Set-Cookie` response header)
+or enough volume to fill the browser's *entire* per-domain cookie jar, which the same rate limit makes
+impractical. Bounding the name space handed the attacker the second half of that problem for free.
+
+**Decision: reverted to one truly unique cookie name per request** (`consentCookieName` is `requestId`
+again, no hashing). This is the "legitimate answer" the finding's own framing allowed: unbounded-but-hard-to-
+target beats bounded-and-sprayable. The growth problem the slots were built to solve was already judged real
+but modest in the original note on this (search this file for "cookie accumulation, judged not worth acting
+on this round") — a few hundred bytes of `Cookie` header from a handful of abandoned or retried flows per
+browser, not the systematic multi-cookie eviction the slot scheme's own threat model assumed. That judgment
+stands; a future fix, if this ever needs revisiting, should track actual occupancy (which needs `authorize`
+to see `req`, which the SDK's `OAuthServerProvider` signature does not currently pass it) rather than bound
+the name space, since bounding it is what created the sprayable surface.
+
+Deleted alongside: the `CONSENT_COOKIE_SLOTS`/`consentCookieSlot` machinery, and the
+`oauth-mcp.test.ts` test that asserted the name space stayed under a fixed ceiling (its property no longer
+holds by design — the point now is that the space is *not* artificially small).
