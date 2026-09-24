@@ -61,7 +61,7 @@ import UsagePanel from '../components/UsagePanel'
 import BillingPanel from '../components/BillingPanel'
 import EmailVerificationNotice from '../components/EmailVerificationNotice'
 import ConnectedAssistantsPanel from '../components/ConnectedAssistantsPanel'
-import { getDefaultTemplateId } from '../runtime-config'
+import { getAgentAccessEnabled, getDefaultTemplateId } from '../runtime-config'
 import TemplateDesignPanel from '../components/template/TemplateDesignPanel'
 import TemplateExportSection from '../components/template/TemplateExportSection'
 
@@ -154,10 +154,18 @@ export default function AccountSettingsPage() {
   // An admin sees a shorter strip — Design is the caller's own library, and
   // Connected AI assistants is the panel below that only ever shows the
   // caller's own connections — so a deep link into a tab they do not have
-  // lands on General instead.
-  const tabs: readonly SettingsTab[] = adminUserId
-    ? TABS.filter(name => name !== 'design' && name !== 'assistants')
-    : TABS
+  // lands on General instead. Connected AI assistants also drops out on a
+  // deployment with no MCP OAuth: everything actionable inside the panel is
+  // already gated on getAgentAccessEnabled(), and the guide's own
+  // troubleshooting entry tells a reader that the tab's *absence* is how
+  // they know access is off (shared/src/content/assistants.ts) — a tab that
+  // stayed visible with nothing inside it to use would make that untrue.
+  const tabs: readonly SettingsTab[] = TABS.filter(name => {
+    if (name === 'design' && adminUserId) return false
+    if (name === 'assistants' && (adminUserId || !getAgentAccessEnabled()))
+      return false
+    return true
+  })
   const tab: SettingsTab = tabs.includes(requestedTab as SettingsTab)
     ? (requestedTab as SettingsTab)
     : 'general'
@@ -423,11 +431,18 @@ export default function AccountSettingsPage() {
               this account *is*, Plan is what it may spend. Mixing them meant
               scrolling past a bio to find out why a lecture stopped
               recording. */}
+          {/* No overflow container: it would compute overflow-y to auto and
+              show a scrollbar for the 1px the tabs' -mb-px overlaps the
+              border (the same reasoning AdminNav's own tab strip already
+              documents). The tabs wrap instead if a narrow screen can't fit
+              them — "Connected AI assistants" is roughly twice as long as
+              any other label here and is the one that forces this on a
+              phone-width viewport. */}
           <div
             role="tablist"
             aria-label={t('profile.sections')}
             onKeyDown={onTabKeyDown}
-            className="mb-6 flex gap-1 border-b border-slate-200"
+            className="mb-6 flex flex-wrap gap-1 border-b border-slate-200"
           >
             {tabs.map(name => (
               <button
@@ -441,7 +456,7 @@ export default function AccountSettingsPage() {
                 aria-controls={`settings-panel-${name}`}
                 tabIndex={tab === name ? 0 : -1}
                 onClick={() => setTab(name)}
-                className={`-mb-px rounded-t-md border-b-2 px-4 py-2 text-sm font-medium ${
+                className={`-mb-px rounded-t-md border-b-2 px-4 py-2 text-sm font-medium whitespace-nowrap ${
                   tab === name
                     ? 'border-indigo-600 text-indigo-700'
                     : 'border-transparent text-slate-500 hover:text-slate-900'

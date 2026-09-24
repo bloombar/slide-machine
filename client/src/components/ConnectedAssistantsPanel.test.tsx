@@ -280,6 +280,17 @@ describe('how to connect one', () => {
     expect(screen.getByText('OAuth')).toBeTruthy()
   })
 
+  it('names Developer mode for ChatGPT, and says the connector is a paid feature', async () => {
+    // The app's own guide (shared/src/content/assistants.ts) says a custom
+    // connector is the only thing Developer mode is for, and that adding one
+    // is a paid feature in both clients — a reader who does not know either
+    // fact cannot complete the connection by following this panel alone.
+    renderPanel()
+
+    expect(await screen.findByText(/Developer mode/)).toBeTruthy()
+    expect(screen.getByText(/paid feature/)).toBeTruthy()
+  })
+
   it('gates the per-client instructions the same as the rest of "how to connect"', async () => {
     vi.spyOn(runtimeConfig, 'getAgentAccessEnabled').mockReturnValue(false)
     renderPanel([])
@@ -287,5 +298,7 @@ describe('how to connect one', () => {
     await screen.findByText(/No AI assistants are connected/)
     expect(screen.queryByText(/add a custom connector by URL/)).toBeNull()
     expect(screen.queryByText(/add a new connector/)).toBeNull()
+    expect(screen.queryByText(/Developer mode/)).toBeNull()
+    expect(screen.queryByText(/paid feature/)).toBeNull()
   })
 })

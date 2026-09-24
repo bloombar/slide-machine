@@ -1166,3 +1166,39 @@ true"). Chose `Create and edit lecture slides` — describes what the MCP server
 (`tabs = adminUserId ? TABS.filter(...) : TABS`). Verified by deleting the filter clause and confirming
 `AccountSettingsPage.test.tsx`'s new admin test goes red (a stray tab whose panel is guarded away and never
 renders), then restoring it.
+
+## Rework round 1: gate the tab, correct the ChatGPT copy, fix the stale guide (2026-09-24)
+
+**Gate on `getAgentAccessEnabled()`, not just `adminUserId`.** The tab strip filter became a single predicate
+(`name === 'assistants' && (adminUserId || !getAgentAccessEnabled())`) rather than two separate filters, so
+either reason for hiding the tab reads in one place. Verified by deleting the `getAgentAccessEnabled()` half
+of the guard: both new tests ("drops the tab on a deployment with no MCP OAuth" and "falls back to General
+when a deep link names the assistants tab") went red — one on an unconditional-render assertion, one on a
+timeout waiting for a General-tab element that a still-selected assistants tab never produced. Restored, both
+green again.
+
+**ChatGPT copy now names Developer mode and states the paid-feature caveat.** The panel previously said "open
+connector settings, add a connector" — a click path that does not exist in ChatGPT's UI (the app's own guide,
+`shared/src/content/assistants.ts`, has always said the setting is Developer-mode-only, possibly under
+Advanced). Kept the panel's copy to one line naming Developer mode rather than the guide's full six-step
+path — the "Learn more" link on the tab is where the long form lives. The paid-feature line is said once,
+beside the existing menu-drift caveat, rather than duplicated per client. Verified by temporarily replacing
+both `assistants.chatgptIntro` and `assistants.paidFeature` in en.json with the old/placeholder text and
+confirming the new panel test went red (timeout — the text it looked for was simply not on the page);
+restored afterward.
+
+**Static guide copy (`shared/src/content/assistants.ts` and `docs/CONNECTING_AN_ASSISTANT.md`) updated to say
+"tab" instead of "section"/"scroll to".** The brief's own "out of scope: the `/assistants` guide" line
+predated this round's move from a Privacy-tab section to a top-level tab, which is exactly the click path
+those two files described — the coordinator widened scope to cover this. Both files are English-only (a
+plain re-exported `StaticDocument`, not run through i18next — `client/src/content/assistants.ts` just
+re-exports `ASSISTANTS` from `@slide-machine/shared`), so no locale files needed touching for this part.
+`client/src/content/documents.test.ts` only checks internal links and structural properties of the document
+body, not its prose, so it needed no changes either.
+
+**Tab-strip overflow fix follows `AdminNav.tsx`'s own precedent exactly**: `flex-wrap` on the tablist,
+`whitespace-nowrap` on each tab button, and the same "no overflow container" comment explaining why — an
+`overflow-x-auto`/`overflow-y-auto` wrapper would show a spurious scrollbar for the 1px `-mb-px` overlap.
+Chose the layout fix over shortening the label, since the label itself ("Connected AI assistants") was
+picked deliberately to match the guide's own terminology and the existing `profile.assistantsSection`
+heading, and prior art for exactly this situation already existed in the codebase.

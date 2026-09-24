@@ -55,7 +55,7 @@ Do this once. It is the same address for every assistant.
 1. Sign in to Slide Machine.
 2. Click the **menu button** (the ☰ icon) in the top-left corner.
 3. Choose **Account settings**.
-4. Scroll down to **Connected AI assistants**, and find **Connect an
+4. Open the **Connected AI assistants** tab, and find **Connect an
    assistant** inside it.
 5. Click **Copy**.
 
@@ -141,7 +141,7 @@ and stops it working on last term's lecture by mistake.
 You can undo this at any moment, and it takes effect straight away.
 
 1. Open the **☰ menu** and choose **Account settings**.
-2. Scroll to **Connected AI assistants**.
+2. Open the **Connected AI assistants** tab.
 3. Click **Disconnect** next to the one you want to stop.
 
 The assistant loses access immediately. Nothing it already made for you is
@@ -165,7 +165,7 @@ the other.
 **"It says it cannot delete / share / publish that."** That is intended, not a
 fault — see "What it will never do" above. Do those in the app yourself.
 
-**"There is no 'Connected AI assistants' section in my settings."** Assistant
+**"There is no 'Connected AI assistants' tab in my settings."** Assistant
 access is switched off on the site you are using. Whoever runs it can turn it
 on.
 

@@ -130,9 +130,15 @@ export default function ConnectedAssistantsPanel() {
           in one is a "plugin" or "MCP server" in another — so that caveat is
           said once, up front, rather than pinned to a click path that will go
           stale (bloombot's apps/web/src/pages/Mcp.tsx hit this exact staleness
-          before). */}
+          before). Adding a connector is also a paid feature in both clients
+          (docs/CONNECTING_AN_ASSISTANT.md), said once here rather than per
+          client too — without it, someone on a free plan follows either set
+          of steps to a menu that is simply not there. */}
       <p className="mt-2 text-xs text-slate-500">
         {t('assistants.clientMenuDrift')}
+      </p>
+      <p className="mt-1 text-xs text-slate-500">
+        {t('assistants.paidFeature')}
       </p>
       <div className="mt-2 flex flex-col gap-2 text-xs text-slate-600">
         <p>{t('assistants.claudeInstructions')}</p>
