@@ -90,13 +90,23 @@ export const deckVote = defineAction<
  * The filter for lectures anyone may browse (SOC-2/SOC-3): the caller's own are
  * excluded (both the feed and search show *others'* work), and a lecture counts
  * as public when it overrides to public or, with no override, sits in a public
- * project. Soft-deleted rows are dropped by the model's query middleware.
+ * project. Soft-deleted rows are dropped by the model's query middleware. Decks
+ * with no slides or no title are also excluded (SOC-2/SOC-3): a reader cannot
+ * open or identify either, so neither belongs in a public listing.
  */
 const publicDeckFilter = (
   userId: string,
   publicProjectIds: Types.ObjectId[],
 ) => ({
   ownerId: { $ne: new Types.ObjectId(userId) },
+  // `slideOrder.0` matches only when a first element exists, i.e. the deck
+  // has at least one slide (see lectures.ts / export-bundle.ts, which both
+  // read deck.slideOrder.length as the slide count).
+  'slideOrder.0': { $exists: true },
+  // Title is `{ default: '', trim: true }` (models/deck.ts), so it may be
+  // empty, whitespace-only pre-trim data, or absent on older rows. A regex
+  // requiring a non-whitespace character excludes all three.
+  title: { $regex: /\S/ },
   $or: [
     { 'accessOverride.visibility': 'public' as const },
     {

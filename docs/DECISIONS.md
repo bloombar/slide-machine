@@ -1130,3 +1130,18 @@ title to ≤35 (from 44, 2 lines → 1 line) while leaving the body at its full 
 Left `budget-set-fit.test.ts`'s arithmetic check and `template-load-limits.spec.ts`'s browser check red at
 every intermediate step of this rather than loosen either or add a known fault — both are green again at the
 final numbers (4 bullets, 35-char title, 146-char body, 65-char bullets).
+
+## SOC-3/SOC-2: Discover hides slide-less and untitled lectures, in the feed and in search alike (2026-09-24)
+
+**Problem.** The public listings surfaced lectures a reader could not actually open (no slides yet) or could
+not identify in a results row (no title, or a title that trims to nothing).
+
+**Choice.** Excluded both cases in `publicDeckFilter` (`server/src/actions/social.ts`), the one filter shared
+by `deck.feed` (SOC-3) and `social.search` (SOC-2).
+
+**Why search too, and not just the feed.** `deck.feed` and `social.search` both read the same public listing
+through the one shared `publicDeckFilter` — the brief that scoped this change treats "the public listing" as
+a single thing with two entry points, not two independent lists. A titleless lecture whose transcript happens
+to match a search query is exactly as unopenable and unidentifiable from a search result row as it is from a
+feed row, so carving out an exception for search would reintroduce the defect through the door the feed fix
+just closed it in.

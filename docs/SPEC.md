@@ -1249,7 +1249,7 @@ A simple social layer lets users **browse and search** others' public decks and 
 
 #### SOC-3 Feeds
 
-Two default views surface public content, both searchable/filterable and available for decks and templates: a **"Latest"** feed (sorted by recency) and a **"Top"** feed (sorted by rank). These are the SOC-2 sorts applied to the global public listing.
+Two default views surface public content, both searchable/filterable and available for decks and templates: a **"Latest"** feed (sorted by recency) and a **"Top"** feed (sorted by rank). These are the SOC-2 sorts applied to the global public listing. A lecture with no slides yet or no title is not surfaced, since a reader could not open or identify it.
 
 #### SOC-4 User profiles
 

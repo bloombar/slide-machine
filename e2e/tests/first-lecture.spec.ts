@@ -41,8 +41,9 @@ test('a new user starts a lecture with no project; a default project is created'
   await expect(
     page.getByRole('heading', { name: 'Default project' }),
   ).toBeVisible()
-  // Scoped to "Your work": the Discover sidebar beside it lists other
-  // people's untitled lectures.
+  // Scoped to "Your work": an untitled lecture is unidentifiable in a
+  // listing, so Discover excludes other people's untitled lectures (SOC-3)
+  // and only "Your work" shows it.
   await expect(
     page
       .getByRole('region', { name: 'Your work' })

@@ -45,10 +45,16 @@ const getDeck = (slug: string, token?: string) => {
   return token ? req.set('Authorization', `Bearer ${token}`) : req
 }
 
-/** Creates a public lecture owned by `token`'s user and returns id + slug. */
+/**
+ * Creates a public lecture owned by `token`'s user and returns id + slug. A
+ * lecture starts with zero slides, but the public listings now require at
+ * least one (SOC-3), so this adds one by default; pass `withSlide: false` to
+ * get the empty-deck case the listings must exclude.
+ */
 const makeLecture = async (
   token: string,
   title: string,
+  { withSlide = true }: { withSlide?: boolean } = {},
 ): Promise<{ deckId: string; slug: string }> => {
   const project = await act(token, 'project.create', { title: `${title} proj` })
   const deck = await act(token, 'deck.create', {
@@ -56,7 +62,9 @@ const makeLecture = async (
     title,
     templateId: 'classic',
   })
-  return { deckId: deck.body.id as string, slug: deck.body.permalinkSlug }
+  const deckId = deck.body.id as string
+  if (withSlide) await act(token, 'slide.add', { deckId })
+  return { deckId, slug: deck.body.permalinkSlug }
 }
 
 let ada: string
@@ -203,6 +211,59 @@ describe('deck.feed (SOC-3)', () => {
     const ids = res.body.items.map((i: { id: string }) => i.id)
     expect(ids).not.toContain(deckId)
   })
+
+  // SOC-3: a reader cannot open or identify a lecture with no slides or no
+  // title, so neither belongs in the public feed.
+  it('excludes a public lecture with no slides', async () => {
+    const empty = await makeLecture(bob, 'Empty deck', { withSlide: false })
+    const res = await act(ada, 'deck.feed', { sort: 'latest' })
+    const ids = res.body.items.map((i: { id: string }) => i.id)
+    expect(ids).not.toContain(empty.deckId)
+  })
+
+  it('excludes a public lecture with an empty title', async () => {
+    const untitled = await makeLecture(bob, '')
+    const res = await act(ada, 'deck.feed', { sort: 'latest' })
+    const ids = res.body.items.map((i: { id: string }) => i.id)
+    expect(ids).not.toContain(untitled.deckId)
+  })
+
+  it('excludes a public lecture with a whitespace-only title', async () => {
+    const blank = await makeLecture(bob, 'Blank title')
+    // `DeckModel.updateOne` runs the schema's `trim: true` setter, which
+    // would store '' and silently collapse this into the empty-title case
+    // above. Write through the raw driver instead, past Mongoose, to model
+    // data already stored with whitespace (e.g. from before `trim` existed).
+    await DeckModel.collection.updateOne(
+      { _id: new Types.ObjectId(blank.deckId) },
+      { $set: { title: '   ' } },
+    )
+    // Confirm the write actually landed as whitespace, not ''.
+    const stored = await DeckModel.collection.findOne({
+      _id: new Types.ObjectId(blank.deckId),
+    })
+    expect(stored!.title).toBe('   ')
+    const res = await act(ada, 'deck.feed', { sort: 'latest' })
+    const ids = res.body.items.map((i: { id: string }) => i.id)
+    expect(ids).not.toContain(blank.deckId)
+  })
+
+  it('excludes a public lecture with no title field at all', async () => {
+    const missing = await makeLecture(bob, 'No title field')
+    await DeckModel.updateOne(
+      { _id: missing.deckId },
+      { $unset: { title: '' } },
+    )
+    const res = await act(ada, 'deck.feed', { sort: 'latest' })
+    const ids = res.body.items.map((i: { id: string }) => i.id)
+    expect(ids).not.toContain(missing.deckId)
+  })
+
+  it('includes a public lecture that has both slides and a title', async () => {
+    const res = await act(bob, 'deck.feed', { sort: 'latest' })
+    const ids = res.body.items.map((i: { id: string }) => i.id)
+    expect(ids).toContain(deckId) // ada's Photosynthesis lecture from beforeEach
+  })
 })
 
 describe('deck.feed paging (SOC-2)', () => {
@@ -289,11 +350,13 @@ describe('social.search (SOC-2)', () => {
     // "Catherine" exists. "dog" should match none of them.
     await act(ada, 'deck.rename', { deckId, title: 'Cat Biology' })
     const project = await act(ada, 'project.create', { title: 'Cats project' })
-    await act(ada, 'deck.create', {
+    const kittens = await act(ada, 'deck.create', {
       projectId: project.body.id,
       title: 'Kittens 101',
       templateId: 'classic',
     })
+    // Public listings require a slide (SOC-3), so give this deck one too.
+    await act(ada, 'slide.add', { deckId: kittens.body.id })
     await act(ada, 'project.create', { title: 'Dogs project' })
     await registerUser('catherine@example.com')
   })
@@ -432,6 +495,26 @@ describe('social.search by author and content (SOC-2)', () => {
       visibility: 'restricted',
     })
     const res = await act(bob, 'social.search', { q: 'powerhouse' })
+    expect(res.body.lectures.map((l: { id: string }) => l.id)).not.toContain(
+      adaDeckId,
+    )
+  })
+
+  // SOC-2/SOC-3: an untitled lecture cannot be identified in a results list,
+  // so it stays out of search even when its content matches the query.
+  it('does not match an untitled lecture by its content', async () => {
+    await DeckModel.updateOne({ _id: adaDeckId }, { $set: { title: '' } })
+    const res = await act(bob, 'social.search', { q: 'powerhouse' })
+    expect(res.body.lectures.map((l: { id: string }) => l.id)).not.toContain(
+      adaDeckId,
+    )
+  })
+
+  // SOC-3: a lecture with no slides cannot be opened, so it stays out of
+  // search even when its transcript matches the query.
+  it('does not match a lecture with no slides', async () => {
+    await DeckModel.updateOne({ _id: adaDeckId }, { $set: { slideOrder: [] } })
+    const res = await act(bob, 'social.search', { q: 'chloroplasts' })
     expect(res.body.lectures.map((l: { id: string }) => l.id)).not.toContain(
       adaDeckId,
     )
