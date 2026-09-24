@@ -1202,3 +1202,594 @@ body, not its prose, so it needed no changes either.
 Chose the layout fix over shortening the label, since the label itself ("Connected AI assistants") was
 picked deliberately to match the guide's own terminology and the existing `profile.assistantsSection`
 heading, and prior art for exactly this situation already existed in the codebase.
+
+## OAuth consent security: binding cookie, replay revocation, rotation reuse detection (2026-09-24)
+
+**Correction (rework round 1, same day): two of this entry's claims did not hold up.** Two independent
+reviews running real HTTP traffic against this pass found that finding 2's revocation was defeated by a
+single intervening rotation and never fired at all under genuine concurrency, and that finding 3's design
+tore down an honest client's connection on an ordinary lost-response retry — worse than the plain refusal it
+replaced. The entry below is kept as the record of what was tried and why it read as reasonable at the time;
+it is **not** a description of the code as it now stands. See "Rework round 1" further down for what
+replaced it, in particular the correction to the "token-set-level is tighter" claim two paragraphs down,
+which was wrong in the scenario finding 2 is actually about.
+
+Fixes docs/plans/OAUTH_CONSENT_SECURITY.md's three findings. Judgment calls the brief left open:
+
+**The binding cookie is scoped to `/api/oauth`, not `/oauth`, despite the brief saying `/oauth`.** The three
+person-facing consent endpoints (`GET`/`approve`/`deny`) answer under `/api/oauth/authorization/...` —
+`oauthConsentRouter` is mounted under `/api` in `app.ts`. `/oauth` is the machine-facing SDK router at the
+application root (`/oauth/authorize`, `/oauth/token`, ...) and never reads this cookie. A `Path=/oauth`
+cookie is not a prefix of `/api/oauth/...`, so it would never have been sent on the requests that need it.
+Scoping to `/api/oauth` keeps the brief's actual goal — narrower than `/`, and off everything that is not
+this flow — while working with the paths this codebase actually has.
+
+**Finding 2's token revocation is token-set-level, not `disconnect(userId, clientId)`.** ~~The plan doc names
+`disconnect` as the simpler option and a token-set-level revocation as "tighter"; chose tighter, because
+`disconnect` would tear down every other live token that (user, client) pair holds — including a second,
+unrelated session from the same assistant that never touched the replayed code. The grant row now records
+the hash of the access and refresh token its one exchange minted (`issuedAccessTokenHash` /
+`issuedRefreshTokenHash` on `OAuthAuthorizationModel`), and a replay deletes exactly those two rows.~~
+**Wrong, and corrected in rework round 1.** "Tighter" was true only in the scenario where the code is
+exchanged once and then replayed with nothing else happening in between. It was **strictly weaker** in the
+scenario finding 2 exists for: an attacker who redeems the code and then immediately rotates (a legitimate
+rotation — finding 3 has nothing to fire on) holds new tokens whose hashes were never recorded anywhere,
+because the snapshot was taken once, at the first exchange, and never updated. Reviewers measured this end to
+end: replay refused (400), attacker's rotated access token still 200s against `/api/mcp`. A concurrent double
+exchange broke it the same way from the other direction — the loser's revocation ran before the winner had
+written any hashes to snapshot. The fix is a token **family id** (`OAuthTokenDb.familyId`, the authorization
+code's own `codeHash`) carried forward through every rotation, so revocation needs no snapshot and survives
+any number of rotations — see "Rework round 1" below for the full account.
+
+**Finding 2's ordering question: confirmed the brief's suspicion was right.** Before the fix,
+`exchangeAuthorizationCode` stamped `redeemedAt` in the same atomic update that read the row, then checked
+`redirectUri` and `resource` *afterward* — so a wrong redirect URI (or resource) consumed the code before
+being refused, and a legitimate retry with the correct redirect URI then found the code already spent. PKCE
+was already safe: the SDK calls `challengeForAuthorizationCode` first, which only reads. Fix: the redirect
+URI and resource conditions are now part of the same `findOneAndUpdate` filter that claims the row, so a
+mismatch on either simply fails to match — nothing is consumed, and a later correct exchange still works.
+Verified by deleting the fix (reverting to filter-then-check) and confirming the new "does not burn a code on
+a wrong redirect URI" integration test goes red (400 on the correct retry, where 200 was expected); restored.
+
+**Finding 3's notification path is the existing best-effort account mailer** (`lib/mailer.ts`'s `sendMail` /
+`mailerAvailable`), following the exact shape of `auth/emails.ts`'s verification and password-reset mail:
+silent on failure, `MAIL_PROVIDER=log` in tests and dev. No dedicated in-app notification exists for this
+kind of event and the brief said not to build one if nothing fits, so mail is what shipped.
+
+**Finding 3's reuse detection keeps exactly one generation**, per the brief: a new refresh token's row
+carries `previousTokenHash` (the HMAC of the token it replaced). Presenting a token that is neither live nor
+named as someone's `previousTokenHash` is treated as ordinary unknown/expired — only a token one hop back
+in the chain is recognised as a theft signal, not the whole history. **Superseded in rework round 1**: this
+design also tore down an *honest* client's connection on an ordinary retry of a lost response, since the
+immediate-delete-on-rotation it depended on gave a legitimate retry no way to succeed. The replacement (grace
+window + `supersededAt`, no chain-walking) incidentally makes the one-generation limit described here moot
+too — see "Rework round 1".
+
+**Finding 1b implements two of the plan doc's three suggested additions (account, redirect host), not the
+third (client registration age).** The brief's own instructions for finding 1b named only the first two
+("Return the signed-in account ... and the redirect URI's host"); the plan doc's fuller list also suggested
+showing `client_id_issued_at`. Left out as outside the brief's explicit scope for this slice.
+
+**Test-suite registration budget.** The SDK's `clientRegistrationHandler` rate-limits `/oauth/register` to 20
+requests/hour/IP by default, and `oauth-mcp.test.ts`'s pre-existing tests were already at exactly that
+ceiling. New tests use a `registerClientDirect` helper that calls `provider.clientsStore.registerClient`
+in-process, bypassing the HTTP endpoint's limiter — appropriate here because none of the new tests are about
+registration itself, only about authorize/approve/exchange, so the in-process call is faithful to what is
+under test.
+
+**e2e: not added, and not run as a full-suite regression check.** No existing e2e spec touches the MCP OAuth
+consent flow (grepped for "oauth"/"consent" across `e2e/tests`; the one hit, `public-homepage.spec.ts`, is
+about Google sign-in review, unrelated). This slice's actual risk surface — cookie binding, atomic
+claim-and-check ordering, replay/reuse revocation — is exercised far more faithfully by the 34-case
+integration suite (a real Express server against a real test Mongo, with real `Set-Cookie` handling) than a
+browser driving the already-unit-tested `OAuthConsentPage`. Building a new Playwright spec for this would
+mean re-deriving PKCE/cookie plumbing Playwright has no special leverage over, for a slice already proven at
+the layer where the security properties actually live. Judged disproportionate and skipped, per the brief's
+own allowance to say so explicitly rather than skip silently.
+
+**Regression found and fixed outside the brief's named files:** `server/test/integration/agent-audit.test.ts`
+has its own inline OAuth `connect()` helper (separate from `oauth-mcp.test.ts`'s) that did not forward the
+new binding cookie, so all five of its tests failed with `TypeError: Invalid URL` once the binding check
+landed. Fixed by forwarding the `Set-Cookie` value the same way `oauth-mcp.test.ts` does. Not in the brief's
+file list, but necessary for `npm run test:integration` to pass — reported here rather than silently patched.
+
+## Rework round 1: family-id revocation, rotation grace, `__Host-` cookies (2026-09-24)
+
+Two independent reviews — a max-effort code review with empirical verifiers, and a spec review that
+reproduced the first pass's five delete-the-guard results in a throwaway worktree (all five held up) — ran
+real HTTP traffic against the pass above and found that two of the three fixes did not work in the cases
+they exist for. Four root causes, all fixed the same day on the same branch.
+
+**Root cause A — tokens had no lineage, so revocation chased dead hashes.** The first pass recorded the
+minted access/refresh token hashes on the grant row once, at exchange time, and a replay deleted exactly
+those two rows. Measured failure: attacker redeems the code, rotates immediately (ordinary rotation —
+finding 3 has nothing to fire on), holds A1/R1; the code is then replayed; the snapshot points at A0/R0,
+both already gone from rotation, so A1/R1 survive untouched for the full 182-day idle window. A second,
+independent failure: the hashes were written in a *second*, non-atomic update after `issueTokens`, so a
+genuinely concurrent double exchange's loser could reach the revocation check before the winner had written
+anything to revoke — measured "4/4 concurrent double-exchanges revoked nothing".
+
+Fix: every token issued now carries a **family id** (`OAuthTokenDb.familyId`) — the authorization code's own
+`codeHash` for a grant's first pair, carried forward unchanged through every subsequent rotation
+(`rotateTokens` passes `doc.familyId` to `issueTokens` for the replacement pair). Revocation is
+`deleteMany({ familyId })`: no snapshot to go stale, and it survives any number of rotations because family
+membership is established once, at mint time, and never re-derived from a lookup. `codeHash` being
+deterministic and known before any database round trip is also what closes the concurrency gap: the loser of
+a race knows exactly which family to revoke without needing anything the winner wrote.
+
+The residual concurrency gap (loser reaches the revoke check before the winner's `issueTokens`, a *second*,
+later operation, has finished) is closed with a bounded retry (`endFamily`'s `retry` parameter, 5 attempts ×
+20ms, used only by the authorization-code replay path). **This was not reliably exercised by the new
+integration test on this machine** — the race window between the atomic claim and `issueTokens` completing
+is narrow enough that a single attempt already wins consistently in local runs. Verified the retry's value
+directly instead: with a 50ms artificial delay inserted before `issueTokens` (temporarily, to widen the
+race), the test failed reliably with the retry removed and passed reliably with it restored; the artificial
+delay was then removed. Recorded here because "the guard-deletion test still passed" would otherwise read as
+proof the retry does nothing, when the honest reading is "this environment's timing didn't demonstrate the
+gap either way".
+
+Root cause A also makes root cause A3's first bug (below) moot as a side effect, not by design intent.
+
+**Root cause A3 — the old blast radius and detection depth were both wrong.** Finding 3's reuse detection
+used `disconnect(userId, clientId)`, which tears down *every* live connection that (user, client) pair
+holds — verified: a bystander connection through the same client (same user, two connections; also tested
+with two different users sharing a client) went from 200 to 401 on a replay that had nothing to do with it.
+Family-scoped revocation fixes this by construction: two connections from separate `authorize` flows have
+different `familyId`s (different `codeHash`s), so a family-wide delete can never reach a sibling connection.
+Separately, the old design only recorded one hop of rotation history (`previousTokenHash`), so a token
+replayed two or more generations behind current was invisible — verified before the fix: after R0→R1→R2,
+replaying R0 gave a plain 400 with everything else untouched. Root cause B's redesign (below) removes
+chain-walking entirely, so this is now also fixed: a presented token's own row still knows its family and
+its own supersession regardless of how many further rotations happened after it, within the window before
+the TTL reaper physically removes the row (see root cause B).
+
+**Root cause B — reuse detection could not tell a thief from a retry.** `rotateTokens` deleted the presented
+refresh token immediately on a successful rotation. The `@modelcontextprotocol/sdk` client (1.30.0) has no
+single-flight around refresh — four independent `await auth(...)` call sites in `client/streamableHttp.js`,
+no mutex in `client/auth.js` — so if a rotation response is lost (timeout, proxy reset, crash) the client's
+only recourse is to retry with the token it has, which is now gone. The first pass's finding-3 fix treated
+that retry exactly like theft: full teardown, false "connection revoked" mail, no recovery short of full
+re-consent. Reviewers measured this as 100% deterministic (zero timing needed — one dropped response is
+enough) and also reproduced concurrent double-refresh independently at 1/10 and 1/5.
+
+Fix mirrors `auth/refresh-store.ts`'s own session-rotation grace exactly, including the detail that made it
+correct there: `rotateTokens` no longer deletes the presented row on success. It shortens `expiresAt` to
+`now + REFRESH_GRACE_SECONDS` and stamps `supersededAt`, but **only once** — the shortening is a one-way
+ratchet (`if (doc.expiresAt > graceEnd)`), so repeatedly replaying the same token cannot keep extending its
+own life. A presentation while `expiresAt` is still in the future (live, or within grace) mints another fresh
+pair, exactly as `auth/refresh-store.ts`'s `rotateRefreshToken` does on every valid presentation, not only
+the first. A presentation after `expiresAt` has passed is judged by whether `supersededAt` was ever set: if
+not, it is a plain idle expiry (ordinary, no action); if so, the token was rotated away and its grace window
+has since closed, which is the theft signal, and the whole family ends.
+
+This reuses `REFRESH_GRACE_SECONDS`, the same env var `auth/refresh-store.ts` already reads for the
+session-level equivalent, rather than adding an OAuth-specific knob — same semantic (tolerate a concurrent or
+lost-response retry), one place to reason about it. Tests already run with `REFRESH_GRACE_SECONDS=0`
+("rotated-out tokens must die immediately", per the existing comment in `auth.test.ts`), so the honest-retry
+test simulates a positive grace window the same way `auth.test.ts` already does for the session case:
+directly extending the already-shortened row's `expiresAt`, rather than reconfiguring env per test.
+
+**Root cause C1/C4 — the binding cookie could be planted, and one flow could orphan another.** Two separate
+bugs in the cookie itself.
+
+C1: a signed-in-spirit but unsigned, `httpOnly`/`SameSite=Lax` cookie is not origin-isolated. Both reviewers
+demonstrated the forwarded-link attack finding 1a was built to stop still worked: attacker parks a flow for
+their own redirect URI via the unauthenticated `GET /oauth/authorize`, receives the cookie, and hands the
+*value* to the victim to set for themselves — a same-site actor (subdomain, staging host, plain-http MITM
+wherever `secure` was false) can write a cookie for this origin without needing to compromise it. Signing the
+value would not have helped: the attacker copies a validly-signed cookie from their own legitimate response.
+Fix: the `__Host-` prefix, which the browser refuses to honour at all unless the cookie also carries
+`Secure`, no `Domain` attribute, and `Path=/` — together meaning only a same-origin response can ever set it.
+This is a genuine trade against round 1's own `/api/oauth` path scoping (chosen specifically to keep the
+cookie off every request to the origin): `__Host-` mandates `Path=/`, so the cookie now does ride on every
+request. Judged worth it — a narrower path that can be planted is not a mitigation; a `__Host-` cookie that
+cannot be planted is. `secure: true` is now unconditional (not gated on `NODE_ENV === 'production'`), since
+the prefix requires it and browsers treat `localhost`/`127.0.0.1` as a secure context over plain http anyway
+— the only non-https case `isUsableIssuer` (routes/oauth.ts) permits.
+
+**`__Host-`'s isolation is not independently testable at the integration-test layer.** `supertest` does not
+implement cookie-prefix enforcement (that lives in real browsers), so the planting attack itself cannot be
+reproduced or refuted by an HTTP test — sending a raw `Cookie` header with any value always "succeeds" as far
+as supertest is concerned, regardless of prefix rules. What the suite *can* and does assert is that the
+server emits every attribute the browser-side enforcement depends on (`__Host-` prefix, `Secure`, `HttpOnly`,
+`SameSite=Lax`, `Path=/`, no `Domain`) — the executable proxy for the property, verified by deleting each
+attribute in turn and confirming the assertion catches it. This also closes the caveat the spec reviewer
+raised about the first pass's e2e reasoning: the integration tests hand-carry the cookie via
+`.set('Cookie', ...)`, which can never fail on path scoping, so without this assertion a wrong `Path` would
+have been invisible to the whole suite.
+
+C4: naming the cookie identically for every parked flow meant a second `GET /oauth/authorize` — a second
+assistant connected, a double-clicked Connect button, a client whose own retry logic redirects here twice —
+silently overwrote the first flow's cookie, and its request then refused identically to the attack case it
+is deliberately indistinguishable from (verified before the fix: GET flow2 → 200, GET flow1 → 404 with the
+row neither expired nor answered). Fix: `consentCookieName(requestId)` — one cookie per parked request,
+named after the id. No server-side id→nonce map needed; the association lives in the cookie's own name.
+
+**Root cause D1/D2 — the disclosure finding 1b relies on could render blank or actively wrong.** Both
+reviewers noted 1b is the *only* mitigation for the authorize-URL variant of finding 1, so these are
+load-bearing, not polish.
+
+D1: `URL.hostname` on the redirect URI drops the port a loopback client (RFC 8252) is told apart by, and
+misreads a custom-scheme redirect URI outright — `myapp://cb/x` reads as host `cb`, an attacker-chosen string
+shaped exactly like a real one; `com.example.app:/oauth2redirect` (no authority) reads as the empty string,
+rendering "Access will be sent to .". Fix: `URL.origin`, which is honest about the failure case instead —
+WHATWG URL gives the literal string `"null"` for a non-special scheme's origin regardless of whether there is
+an authority, so both custom-scheme cases are detected the same way and fall back to showing the whole URI,
+which a person can at least read. The response field was renamed `redirectHost` → `redirectTarget` (with the
+client type, the `OAuthConsentPage` prop, and the `oauth.sendsTo` i18n placeholder `{host}` → `{target}`,
+across all five locale bundles) since it is no longer always a host.
+
+D2: the only way `requireAuth` can verify a session yet have it name an account that fails to load is a
+deleted account with a still-valid JWT. The first pass rendered a hardcoded English literal ("your account")
+spliced into a translated ICU sentence — wrong on its own, i18n-wise — and, worse, *affirmed* a connection
+was about to happen instead of refusing one, in exactly the situation that most warrants refusing. Fix:
+`GET /oauth/authorization/:id` now throws the same 401 `requireAuth` would for any other invalid session.
+Not extended to `POST .../approve`, which still stamps `userId: req.userId` without checking the user loads
+— a real, smaller gap (a dangling grant rather than a false affirmation) left as-is because it was not named
+in this round's findings; worth a line if a future pass touches this file.
+
+**Root cause F1/F2/F3 — the revocation side effects were not robust.** F1: a lookup failure inside
+`rotateTokens`'s reuse check is now caught and treated as "this token does not work" (ordinary 400) rather
+than propagating — the SDK maps anything that is not its own `OAuthError` subclass to a 500, which would
+have made a transient database hiccup a *more* informative answer than an unknown token, breaking the
+uniform-refusal property the rest of this file works to preserve. F2: `endFamily`'s notify-the-user and
+log-the-event calls are fired without being awaited (`void notifyConnectionRevoked(...)`) — a configured SMTP
+relay is a real network round trip (`lib/mailer.ts`'s own timeouts run to 10s connect / 10s greeting / 20s
+socket), and awaiting it inline would have made a genuine replay's refusal measurably slower than an unknown
+token's, a timing oracle for "this token was once real" that the test suite's `MAIL_PROVIDER=log` (which
+returns instantly) could not have caught. F3: the trace of a teardown no longer depends on mail being
+configured — `console.error('[oauth] connection revoked: ...')` fires unconditionally, independent of
+`mailerAvailable()`, and covers both revocation paths (code replay and rotation reuse), since both now go
+through the shared `endFamily`. Considered wiring this into one of the existing audit tables
+(`audit/log.ts`, `audit/agent-log.ts`, `audit/settings-log.ts`) instead; none fit without bending its schema
+— each is shaped for a specific actor (an admin, an MCP tool call driven by a dispatcher with a
+`requestId`, a settings edit with an owner/entity pair), and "the token endpoint ended a connection on its
+own initiative, no request in flight" does not have a natural slot in any of them. `console.error` was
+judged the honest minimal fix; a dedicated table is a reasonable future step if this event ever needs to be
+queryable rather than grep-able.
+
+**Test-suite budget, again.** `oauth-mcp.test.ts` also exercises `/oauth/token` far more than the previous
+round's registration-endpoint fix anticipated — the SDK's `tokenHandler` carries its own default limiter (50
+requests / 15 minutes / IP), and this file alone legitimately exceeds it once the new root-cause coverage was
+added. Rather than routing more of the file around the real HTTP endpoint (which is what several of these
+tests are *for*), added `OAUTH_TOKEN_RATE_LIMIT` (`config/env.ts`, defaulting to the SDK's own 50 so an
+unconfigured deployment sees no change) following the exact precedent `DECK_VIEW_RATE_LIMIT` already set for
+this situation, and raised it in `vitest.config.ts` for tests only.
+
+**Migration note.** ~~`browserNonceHash` on `OAuthAuthorizationModel` and `familyId` on `OAuthTokenModel` are
+both `required: true` with no migration. Consents parked, or tokens issued, before this deploys become
+unanswerable/unrotatable after — both fail closed, which is correct, but worth knowing if this ever needs a
+rolling deploy story.~~ **`familyId`'s half of this was wrong, and rework round 2's must-fix 1 corrects it**:
+"fails closed" undersold what actually happened. Traced fully, the failure mode split on an incidental
+timing branch — a forced re-auth in the ordinary case, but an uncaught 500 when a pre-existing token happened
+to already be within `REFRESH_GRACE_SECONDS` of its own expiry — and refresh tokens live 182 days, not the 15
+minutes a parked consent does, so "no migration, fails closed" was the wrong call at that lifetime entirely.
+See "Rework round 2" below for the fix. `browserNonceHash` was correctly assessed and needed no change: a
+15-minute-lived row failing closed with no migration is genuinely fine.
+
+## Rework round 2: five defects in the family/grace machinery, final round (2026-09-24)
+
+Third review, reading the code rather than driving new HTTP traffic. Credited (per the brief) as already
+correct and left alone: the family-id redesign's shape, the grace window's mirror of
+`auth/refresh-store.ts` including its one-way ratchet, `__Host-` with per-request cookie names, and round
+1's honesty about A2 being unprovable on this machine. All five items below live inside `store.ts`
+(`endFamily`/`rotateTokens`/`issueTokens`/`store`) and the model it writes to; nothing rippled beyond them,
+so the slice did not need re-splitting.
+
+**Must-fix 1 — pre-existing refresh tokens broke on deploy.** `familyId` was `required: true` with no
+migration, and every token issued before this deploy has none. Traced by the reviewer to two different
+outcomes depending on an incidental timing branch: ordinarily `doc.save()`'s full-document validation threw
+on the missing field, caught by root cause F1's guard, and the client just re-authorized; but for a token
+already within `REFRESH_GRACE_SECONDS` of its own expiry, the shortening branch was skipped entirely,
+execution fell through to `issueTokens(..., undefined)`, `OAuthTokenModel.create` threw, and **nothing
+caught it** — a 500 where every other refusal in this file is a plain 400. Fixed by making `familyId` (and
+the new `usableUntil`, see must-fix 3) optional on the model, with `rotateTokens` reading `doc.familyId ??
+generateToken()` when issuing a legacy token's replacement — the connection is upgraded to a real family on
+its very next rotation. `endFamily` falls back to `disconnect(userId, clientId)` when `familyId` is
+`undefined`, since there is nothing to converge on for a row that predates the field; documented as
+narrower protection bounded to connections that predate the deploy, closing as each one rotates or expires.
+
+Verified with two tests structurally invisible to the existing suite (both simulate a legacy row via
+`$unset`, since a fresh test database never has one): a legacy token already close to its own expiry
+rotates without a 500 (the exact branch traced above), and — separately, since making the field merely
+optional is not the same as proving the *upgrade* happens — a second test rotates a legacy token twice and
+confirms a bystander connection through the same client survives a replay of the (now-upgraded) second
+token; deleting the `?? generateToken()` fallback took the bystander out too (200 → 401), confirming the
+fallback, not just the optional field, is what the second test needs.
+
+**Must-fix 2 — the grace ratchet also gated the `supersededAt` stamp.** `if (doc.expiresAt > graceEnd) {
+doc.expiresAt = graceEnd; doc.supersededAt = now }` meant a token rotated within its own last moments —
+nothing to shorten — was never marked superseded at all, so a later replay of it looked like a plain
+unknown token rather than reuse. Fixed by stamping `supersededAt` unconditionally on first rotation and
+letting the shortening (now of `usableUntil`, see must-fix 3) stay a separate, independently-gated line —
+they record two different facts ("has this been rotated" vs. "when did tolerance for a retry end").
+
+**Structurally blind under this project's own test env, and the reason a second test file exists.** With
+`REFRESH_GRACE_SECONDS=0` (pinned in `vitest.config.ts`, "rotated-out tokens must die immediately"), `now +
+grace` is just `now`, and "the token's own `usableUntil` already precedes the grace window" collapses into
+"the token has already expired" — the early-return branch above the one this bug lives in. The two
+conditions are mathematically the same at grace=0, so no test running under the shared env can ever tell
+them apart, in either direction. `oauth-token-grace.test.ts` mocks `config/env` with a positive
+`REFRESH_GRACE_SECONDS` instead (`vi.mock`, following the pattern `vitest.config.ts` itself names — "tests
+that need live mode mock the env module themselves"), imports `store.ts`'s functions directly against the
+same test Mongo rather than going through the full app, and is the only place must-fix 2 is actually
+proven: deleting the fix there red on `supersededAt` being unset; restoring it, green. The corresponding
+test in `oauth-mcp.test.ts` is kept too, renamed to be honest about what it actually covers (a live token
+near its own expiry still rotates and is later caught on replay) rather than claiming to isolate the bug it
+cannot, at grace=0, isolate.
+
+**Must-fix 3 — reuse detection expired after about a minute.** `expiresAt` did two jobs: spendability (is
+this token still usable) and retention (how long the TTL index keeps the row at all). Marking a token
+superseded shortened `expiresAt` to the grace window, so the TTL reaper removed the row roughly a minute
+after grace closed — meaning finding 3 protected a window a couple of minutes wide against a threat (a
+leaked or stolen token) that plays out over days, and every test in the suite replays immediately, so none
+of them could see the gap. Split the two: added `usableUntil` to `OAuthTokenDb`, read by `rotateTokens` for
+the live/superseded decision and written on supersession; `expiresAt` is now never touched after issuance,
+staying at its full original value (up to 182 days for a refresh token) and doing only retention, which is
+what the TTL index (`expireAfterSeconds: 0` on `expiresAt`) already assumed it meant. Chose a second field
+over, say, a `retentionUntil` naming that inverted which field the index reads, or repurposing
+`createdAt` + a duration — a second date field reads directly at each call site and needed no index change,
+since the TTL index was already correctly pointed at `expiresAt`.
+
+Verified by reverting the shortening to `doc.expiresAt = graceEnd` (the pre-fix line) and confirming a new
+test — which asserts retention (`expiresAt`) is unchanged after supersession while `usableUntil` alone moved
+— goes red (unmoved-value assertion fails, since the old code moved the wrong field); restored, green. A
+storage trade-off follows from this and is worth recording rather than leaving implicit: a connection
+rotated daily for the life of a refresh token can now carry on the order of dozens to low hundreds of
+superseded-but-still-retained rows at once (bounded by rotations within the last 182 days, not unbounded),
+where the previous design held at most one. Judged acceptable — the whole point of must-fix 3 is that
+detection needs the row to survive — and each row still expires and is reaped on its own original schedule.
+
+**Must-fix 4 — `endFamily` could stop half-way.** The retry loop `break`d on the first attempt that deleted
+*something*, but `issueTokens` writes the access and refresh rows through a concurrent `Promise.all`, so a
+delete landing between the two inserts could remove only one and call itself done, leaving the other alive
+inside a family that was supposed to be dead. Fixed by converging on "nothing left in this family" instead:
+after each delete, if more attempts remain, pause and recheck via `countDocuments`, only stopping early once
+a pass that deleted nothing is *confirmed* by that recheck to have found nothing — so a straggler from a
+still-in-flight concurrent write gets another pass rather than being mistaken for "already clean".
+
+The existing concurrent-double-exchange test only ever asserted on the access token
+(`oauth-mcp.test.ts`, originally around line 1296), which cannot see this bug — extended it to also assert
+the refresh token is dead. Verified by reverting to "stop on first successful delete" *and* — because the
+race between the two `Promise.all` writes is too narrow to hit reliably on this machine, the same honest
+limitation round 1 hit with must-fix A2 — temporarily inserting a 50ms delay before the concurrent
+`store('refresh', ...)` call to widen it: with the delay, the reverted logic left the refresh token alive
+(200 where 400 was expected) reliably; restoring the convergence loop fixed it reliably. Both temporary
+changes (the delay and the reversion) were removed afterward; only the convergence fix and the extended
+assertion remain.
+
+**Must-fix 5 — false "your assistant may have leaked" emails.** `notifyConnectionRevoked` and
+`logConnectionRevoked` fired even when `deletedCount === 0`. An authorization-code row lives 5 minutes, so a
+second, third, or later presentation of an already-fully-revoked code — nothing left to delete — each sent
+another theft notice about a connection that, by then, had nothing left to leak. Fixed with a guard: `if
+(deletedCount === 0) return` before either fires. Verified by removing the guard and confirming the new test
+(replay an already-revoked code a second time, assert `sendMail` was not called and no `[oauth] connection
+revoked` line was logged) goes red — the first, genuine revocation's notify had to be drained
+(`drainPendingSideEffects`) before the spies went up, or the test caught that legitimate first call instead
+of proving the second sends nothing; restored, green.
+
+**The flake fix from round 1 was itself timing-dependent, per this project's own guidance to fix the defect
+rather than the instrument.** The 20ms `beforeEach` sleep worked on this machine but would not reliably on a
+slower or more loaded one. Replaced with a deterministic drain: `pendingSideEffects`, a module-level
+`Set<Promise<unknown>>` in `store.ts` that `endFamily` adds its fire-and-forget `notifyConnectionRevoked`
+call to (removing itself via `.finally` once settled), and an exported `drainPendingSideEffects()` that
+awaits whatever is currently in the set. Production code never reads the set or calls the drain function —
+the notify call stays genuinely fire-and-forget for real callers, which root cause F2 requires; the tracking
+costs one `Set` insert and a `.finally` per revocation and is otherwise inert. `beforeEach` now awaits the
+drain instead of sleeping.
+
+While writing this, found and fixed a **second, genuine race in the F2 test itself**, not the flake being
+replaced: it resolved a manually-toggled mock promise (`resolveMail()`) immediately after the HTTP response
+returned, but `notifyConnectionRevoked` only reaches the mocked `sendMail` call after its own `await`s (the
+user/client lookups) settle, on a timeline the test does not control — calling `resolveMail()` too early hit
+a stale closure from before the real one was assigned, and the promise it should have unblocked hung
+forever. Fixed by having the mock resolve itself after a fixed delay (300ms, comfortably under
+`lib/mailer.ts`'s real SMTP timeouts and long enough to make the "response returned first" assertion
+meaningful) rather than needing external triggering — `drainPendingSideEffects` then correctly waits for
+whatever is already tracked, regardless of what internal awaits it still has to pass through. This is not
+hypothetical: it reproduced deterministically once must-fix 2's `beforeEach` change made the drain path run
+for real instead of masking the race behind a fixed sleep.
+
+**Note — cookie accumulation, judged not worth acting on this round.** `/oauth/authorize` is unauthenticated
+and sets a uniquely-named, `Path=/`, 15-minute cookie per hit (root cause C4, rework round 1); only the
+answered one is ever cleared. Roughly 100 hits — within the SDK's own default token-endpoint rate limit, and
+authorize itself carries none — could leave on the order of 8.5 KB of `Cookie` header on every request to
+the origin, risking crowding out the app's own refresh cookie or drawing a 431 from an intermediary. Left
+unfixed this round: it is in `provider.ts`, not the `store.ts` machinery this round's findings live in, a
+real fix (a cap, a sweep of stale cookies, or reusing a slot per browser) is more design than a final round
+should absorb, and there is no evidence it has been exercised in practice. Flagging it here rather than
+silently deferring it — a cap or sweep is the natural next step if it ever is.
+
+## Findings 2/3 rescope: the token-family design is gone, replaced by `disconnect(userId, clientId)` (2026-09-24)
+
+A fourth review, in fresh context — reading the code rather than driving new HTTP traffic, same as round 2's
+review — of the family/grace machinery rework round 2 had just finished patching. Three consecutive reviews
+each finding a fresh defect in the same design is the signal this round treats as decisive: the design
+itself, not the latest patch, was expensive to keep correct. Findings 2 and 3 are both MEDIUM, and the
+brief's own framing (docs/plans/OAUTH_CONSENT_SECURITY.md) recommended `disconnect(userId, clientId)` for
+both from the start — the token-family/grace redesign that rounds 1-3 built and rebuilt was already more
+machinery than either finding asked for.
+
+**Decision: reduce, not patch a fourth time.** `familyId` and the whole per-grant revocation path
+(`endFamily`, its retry/convergence loop, the "legacy row without a family" fallback) are deleted. Both
+findings' automatic teardown now calls a single new function, `revokeConnection(userId, clientId, retry?)` in
+`store.ts` — the same operation the user's own "Disconnect" button already performed via `disconnect`, reused
+here. The rotation-grace mechanism (`usableUntil`/`supersededAt`, tolerating the MCP SDK client's lack of
+single-flight around refresh — round 1's root cause B, a real and separately-demonstrated bug) is **kept**:
+it is orthogonal to the family question and was never where a defect was found.
+
+**The accepted trade.** A user holding two separate connections to the same assistant (the same `client_id`
+— two devices, say, each having gone through consent independently) loses both when either one's token is
+reused, because `disconnect` is keyed on `(userId, clientId)` alone and cannot tell them apart. Round 1's own
+review demonstrated this concretely against `disconnect`-based designs, which is exactly why the family
+design was built in the first place. Judged acceptable here: worse than the family design's blast radius,
+better than production before this branch (which had no automatic teardown for either finding at all), and
+MEDIUM severity does not justify a fourth round on a design with this defect rate. `oauth-mcp.test.ts`'s "also
+disconnects a second connection the same user holds through the same client — the accepted blast radius" test
+is the record of the trade: if it ever needs to change, that should be a deliberate design decision, not a
+silent regression.
+
+Seven findings drove this, three read from the code independently and confirmed by this round, one already
+independently verified before this round started:
+
+**1 — `connectionsFor` listed a disconnected assistant as connected for months.** `store.ts`'s
+`connectionsFor` filtered only on `expiresAt`, but rotation (round 1's fix for root cause B/must-fix 3, rework
+round 2) deliberately retains a superseded refresh row at its **full original `expiresAt`** — up to 182 days
+— as evidence for reuse detection. A row an individual revoke or the "Disconnect" button had already removed
+the *live* copy of still passed that filter via its superseded copy, so the Connected AI Assistants panel
+(promoted to its own settings tab the same day, #392) kept showing an assistant as connected long after it
+was not. Fixed by filtering on `usableUntil` (falling back to `expiresAt` for a row written before that field
+existed) *in addition to* `expiresAt`, not instead of it — retention lapsing is itself reason enough to drop a
+row, for the same reason `verifyToken` checks `expiresAt` explicitly rather than trusting the TTL sweep to
+have run already. Verified by reverting to the `expiresAt`-only filter and confirming a new regression test
+(rotate a token, then delete the live replacement, leaving only the superseded row) goes red — the list showed
+the assistant as connected with only a dead row left to justify it; restored, green.
+
+**2 — `trackSideEffect` could crash the process on a rejecting side effect.** `void promise.finally(...)`:
+`.finally()` returns a *new* promise that rejects whenever the original does, and `void` attached no handler
+to that new promise — an unhandled rejection, which Node terminates the process on by default. Latent only
+because every current caller (`notifyConnectionRevoked`, and `revokeConnection`'s own internals) happens to
+catch its own errors and never reject; not a property worth betting the process on for whichever future
+caller does not share it. Fixed with `promise.catch(() => {}).finally(...)`. Verified with a unit test that
+tracks a promise built to reject and asserts no `unhandledRejection` event fires; reverting to the bare
+`.finally()` version reproduces the crash-shaped event reliably.
+
+**3 — the retry loop's early-exit was backwards.** `endFamily`'s bounded retry broke on
+`remaining === 0 && deletedCount === 0` — exactly the state "the concurrent winner has not written its rows
+yet" produces on an early attempt, which is the case the retry existed to wait out. Dropped along with the
+rest of `endFamily`: `revokeConnection`'s replacement retry runs every attempt unconditionally, with no
+early-exit condition to get backwards, which is the general fix — a clever "stop once nothing changes"
+shortcut on a retry meant to wait out a not-yet-visible write is the wrong shape of check regardless of the
+exact condition. Affordable because finding 6 (below) also made this retry's caller stop awaiting it: the
+full multi-attempt pause no longer costs the HTTP response anything.
+
+**4 — a legacy row (no `familyId`) was never actually upgraded.** `rotateTokens` never wrote a `familyId`
+onto a legacy row when superseding it, so the claim that such a connection "upgrades to a real family on its
+next rotation" did not hold for the row itself — replaying it always fell back to `disconnect`, which,
+ironically, is now just what every replay does. Moot after the rescope: there is no `familyId` to migrate,
+optional or otherwise, and no upgrade path to get wrong.
+
+**5 — an unbounded consent-cookie name space.** `provider.ts`'s `consentCookieName`, added in round 1 to stop
+a second parked flow from clobbering the first's cookie (root cause C4), named every cookie uniquely per
+request — flagged and deliberately deferred at the end of rework round 2 (the note just above this entry) as
+more design than that round should absorb. In scope now: `GET /oauth/authorize` is unauthenticated, and only
+the one flow that gets *answered* ever clears its own cookie, so an abandoned or repeatedly retried flow
+leaves its cookie sitting for the full 15-minute window — unbounded, that evicts other cookies this origin
+needs (`sm_refresh`, notably) at the browser's per-domain cap, and a large enough `Cookie` header can exceed
+Node's default 16KB `maxHeaderSize`. Fixed with slot reuse: every request id now hashes onto one of a fixed
+number of cookie names (`CONSENT_COOKIE_SLOTS = 64`) rather than getting a unique one, bounding the name
+space at the cost of an accepted, low-probability collision between two flows parked close together (the
+earlier one's cookie is silently overwritten by the later, reproducing root cause C4's original symptom for
+that unlucky pair rather than eliminating it). `authorize` only receives `res`, not `req` (the SDK's own
+signature), so bounding the name space was the available fix — tracking actual occupancy was not. Verified by
+reverting to the unbounded name function and confirming a unit test (500 synthetic request ids, asserting the
+set of cookie names produced stays under 500) goes red at exactly 500; restored, green.
+
+**6 — a timing oracle on the code-replay refusal path.** `exchangeAuthorizationCode`'s failure branch awaited
+`revokeFamilyIfRedeemed` — a delete plus finding 3's own bounded, sleep-bearing retry (5 attempts × 20ms) —
+before throwing, putting 40-100ms of real latency on a refusal, but *only* for a code that really had been
+redeemed before. That is measurable, and it re-creates exactly the oracle root cause F2 already avoids for
+the notification email a few lines further down the same function. Fixed by making the whole revocation
+fire-and-forget from the caller's point of view (`trackSideEffect`, the same mechanism already used for the
+notify email), rather than only the notify step inside it — the retry no longer needs to be fast, since
+nothing downstream is waiting on it. Verified by reverting to an awaited call and confirming a new test (mock
+`OAuthTokenModel.deleteMany` to take 300ms, assert the refusal returns in under 200ms) measures ~1.6 seconds
+instead — the retry's full five-attempt budget, not just one delay — and goes red; restored, green.
+
+**7 — `approve`/`deny` stamped a dead session's `userId` unchecked.** The D2 guard (root cause D2, rework
+round 1) was added only to `GET /oauth/authorization/:id`; `approve` still stamped `userId: req.userId` onto
+the grant with nothing checking that id still named anyone, so a session surviving its own account's deletion
+could mint a real, redeemable authorization code for it. Flagged as a known gap in a code comment by the
+round-1 pass, left for later. Fixed with a shared `requireLiveUser(req)` check, called from `approve` and
+`deny` (the latter for uniformity — it does not stamp anything, but a dead session should refuse everywhere,
+not only where it happens to write something). Verified by deleting each call in turn and confirming a
+dedicated test for each goes red (200 instead of the expected 401); restored, green.
+
+**What was not touched.** Finding 1 (the consent binding, `__Host-` cookie, and screen disclosure) and the
+atomic redirect-URI/resource filter in `exchangeAuthorizationCode` were out of scope for this round and are
+unchanged — both were independently verified in earlier rounds and none of the seven findings above touch
+them. `server/src/mcp/`, the action layer, and the client-side Connected AI Assistants UI were likewise out of
+scope.
+
+## Finding 2's revocation-on-replay was tried and removed (2026-09-24)
+
+A fifth review of the same branch, reading `provider.ts:406` (`trackSideEffect(revokeConnectionIfRedeemed(...))`,
+as the "Findings 2/3 rescope" entry above left it) rather than driving new traffic. The finding: automatic
+teardown on a replayed authorization code mostly punished the honest case and mostly missed the dishonest one,
+which is the same shape of bug as round 1's root cause B (an honest refresh-token retry torn down as if it
+were theft) — reintroduced on the code path by this branch's own rescope, not inherited from an earlier round.
+
+**Who actually reaches the replay branch.** `exchangeAuthorizationCode`'s failure branch runs whenever the
+atomic single-use claim fails to match — an unknown code, an expired one, a wrong redirect URI, *or* a code
+already redeemed. Only the last of those additionally called `revokeConnectionIfRedeemed`, since that is the
+only one `redeemedAt: { $exists: true }` matches. Three ways to get there:
+
+- **An honest client retrying its own exchange** — a callback page reload, a lost response the client's own
+  code retries, a double-submitted callback (the concurrent-exchange test already in this suite is exactly
+  this shape). It holds the verifier, so nothing about PKCE stops it, and it lands squarely on "this code was
+  already redeemed" seconds after a completely legitimate connect. This is, by a wide margin, the common case
+  in practice.
+- **A code-only thief** — the realistic way a code leaks at all: browser history, a `Referer` header sent to
+  a third party, a proxy or load-balancer access log. None of those carry the PKCE verifier, which never
+  leaves the assistant's own process. `challengeForAuthorizationCode` (the SDK's own PKCE check, which runs
+  *before* `exchangeAuthorizationCode`) refuses this thief outright. They never reach the replay branch, so
+  the automatic teardown never fires for them either.
+- **A thief holding both code and verifier** — the narrow case that does trip the teardown. Already bounded
+  by `AUTHORIZATION_CODE_TTL_SECONDS` (5 minutes): whatever this thief can do, they can do it inside that
+  window regardless of whether a replay is also met with revocation.
+
+So the automatic teardown's actual hit rate skewed toward "an honest client, seconds after connecting,
+suddenly finds its brand-new tokens dead and gets a theft-warning email it did not deserve" and away from
+"a thief is stopped who would not otherwise have been." That is a worse trade than doing nothing.
+
+**Decision: delete it, do not build a narrower grace window for it.** A grace-window fix — tolerate a replay
+within some short window, as `rotateTokens` already does for refresh-token reuse — was considered and
+rejected: finding 3's grace window works because a superseded *refresh* token has an unambiguous next state
+(it was rotated, a specific successor exists) to compare a retry against. A replayed *authorization code* has
+no such comparison available cheaply, and the single-use claim already fully solves the problem finding 2
+exists to describe ("a replayed code must not yield a second token pair") — the automatic teardown was
+additive defence-in-depth, not the fix, and the plan doc's own framing agreed. Removed: the whole
+`revokeConnectionIfRedeemed` function and its call site in `exchangeAuthorizationCode`, `revokeConnection`'s
+now-unused `retry` parameter and the `sleep` helper that supported it (the only caller that ever needed a
+retry no longer exists), and the "finding 6" timing-oracle framing that only applied to this deleted path.
+`revokeConnection` (finding 3's refresh-reuse teardown) is unaffected and unchanged.
+
+The refusal itself is untouched and still byte-identical between a replayed code and an unknown one — the
+single-use enforcement (`redeemedAt` inside the same atomic `findOneAndUpdate` that claims the row) is the
+part that was always correct and remains unconditional.
+
+**Verified** by re-adding a minimal version of the deleted teardown (an inline `disconnect` call on the
+replay branch) and confirming `oauth-mcp.test.ts`'s "is refused byte-identically to an unknown code, without
+touching the tokens the honest exchange already minted" goes red (401 instead of 200 — the honest exchange's
+own tokens die); reverted, green. Four tests that existed only to prove properties of the deleted revocation
+(retry convergence across rotation/races, a trace/notice on the code-replay path, timing) were removed rather
+than rewritten to test nothing; one ("a genuinely concurrent double exchange of the same code") was kept and
+repurposed to prove the positive property that remains true — the loser of a race is refused and the winner's
+tokens are untouched.
+
+## Cookie slots reverted (2026-09-24)
+
+The same review flagged `CONSENT_COOKIE_SLOTS = 64` (the "Findings 2/3 rescope" entry's finding 5 fix,
+`provider.ts`'s `consentCookieName`) as trading an accumulation problem for a cheap denial of service: bounding
+the consent cookie's name space to 64 enumerable-by-volume slots means any cross-site page can spray all 64
+via the unauthenticated `GET /oauth/authorize` — well inside the SDK's own default 100-per-15-minute rate
+limit — deterministically overwriting whichever slot a victim's own genuinely parked flow happens to occupy.
+That is strictly easier than the growth problem it replaced: spraying a *specific* victim's cookie under the
+old, unbounded, unique-per-request scheme needs either the exact cookie name (which an attacker spraying from
+outside never has — cross-origin `fetch`/`img`/iframe requests cannot read the `Set-Cookie` response header)
+or enough volume to fill the browser's *entire* per-domain cookie jar, which the same rate limit makes
+impractical. Bounding the name space handed the attacker the second half of that problem for free.
+
+**Decision: reverted to one truly unique cookie name per request** (`consentCookieName` is `requestId`
+again, no hashing). This is the "legitimate answer" the finding's own framing allowed: unbounded-but-hard-to-
+target beats bounded-and-sprayable. The growth problem the slots were built to solve was already judged real
+but modest in the original note on this (search this file for "cookie accumulation, judged not worth acting
+on this round") — a few hundred bytes of `Cookie` header from a handful of abandoned or retried flows per
+browser, not the systematic multi-cookie eviction the slot scheme's own threat model assumed. That judgment
+stands; a future fix, if this ever needs revisiting, should track actual occupancy (which needs `authorize`
+to see `req`, which the SDK's `OAuthServerProvider` signature does not currently pass it) rather than bound
+the name space, since bounding it is what created the sprayable surface.
+
+Deleted alongside: the `CONSENT_COOKIE_SLOTS`/`consentCookieSlot` machinery, and the
+`oauth-mcp.test.ts` test that asserted the name space stayed under a fixed ceiling (its property no longer
+holds by design — the point now is that the space is *not* artificially small).

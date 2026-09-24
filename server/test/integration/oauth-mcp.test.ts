@@ -11,8 +11,17 @@
  * server, register itself, send the user to consent, exchange the code with
  * PKCE, then call a tool.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  vi,
+} from 'vitest'
 import request from 'supertest'
+import { Types } from 'mongoose'
 import { createHash, randomBytes } from 'node:crypto'
 import { env } from '../../src/config/env'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
@@ -23,10 +32,14 @@ import { OAuthClientModel } from '../../src/models/oauth-client'
 import { OAuthTokenModel } from '../../src/models/oauth-token'
 import { OAuthAuthorizationModel } from '../../src/models/oauth-authorization'
 import { SCOPES } from '../../src/oauth/scopes'
+import { consentCookieName, provider } from '../../src/oauth/provider'
 import {
   AUTHORIZATION_CODE_TTL_SECONDS,
   CONSENT_REQUEST_TTL_SECONDS,
+  drainPendingSideEffects,
+  hashToken,
 } from '../../src/oauth/store'
+import * as mailer from '../../src/lib/mailer'
 
 const server = createApp().listen(0)
 afterAll(() => server.close())
@@ -63,37 +76,120 @@ const registerClient = async (redirectUri = 'https://assistant.test/cb') => {
 }
 
 /**
- * Walks the whole flow and returns the tokens, so the tests below can each
- * attack one step rather than restating the other five.
+ * Registers a client through the store directly, bypassing the HTTP
+ * endpoint's own rate limiter (the SDK's `clientRegistrationHandler` allows
+ * 20 registrations per hour per IP by default, and this file's existing
+ * tests already use most of that budget exercising the real endpoint —
+ * legitimately, since some of them are about registration itself). What the
+ * tests below this point exercise is authorize/approve/exchange, not
+ * registration, so calling `provider.clientsStore` in-process is faithful to
+ * what is under test while not spending shared budget the rest of the file
+ * needs.
  */
-const connect = async (
-  sessionToken: string,
-  scopes: string[] = [SCOPES.read, SCOPES.write],
+const registerClientDirect = async (
+  redirectUri = 'https://assistant.test/cb',
 ) => {
-  const client = await registerClient()
-  const { verifier, challenge } = pkce()
+  const full = await provider.clientsStore.registerClient!({
+    client_name: 'Test Assistant',
+    redirect_uris: [redirectUri],
+    token_endpoint_auth_method: 'none',
+    grant_types: ['authorization_code', 'refresh_token'],
+    response_types: ['code'],
+  })
+  return { client_id: full.client_id }
+}
 
+/** The full raw `Set-Cookie` header for the binding cookie belonging to
+ * `requestId` (rework round 1's root cause C4 — the cookie is not one fixed
+ * name, so finding it needs the id; finding 5 later bounded the name space
+ * to a fixed number of slots, so this goes through the real
+ * `consentCookieName` rather than reconstructing the name itself, which
+ * would need to know the slotting scheme too). */
+const rawConsentCookie = (
+  res: { headers: Record<string, unknown> },
+  requestId: string,
+): string => {
+  const raw = res.headers['set-cookie'] as string[] | undefined
+  const prefix = `${consentCookieName(requestId)}=`
+  const found = raw?.find(c => c.startsWith(prefix))
+  if (!found) throw new Error('authorize did not set the binding cookie')
+  return found
+}
+
+/** The `Set-Cookie` header's value with attributes stripped, for handing
+ * straight to `.set('Cookie', ...)` on the next request from "the same
+ * browser". `supertest` does not carry cookies between calls on its own
+ * (that is `superagent`'s `.agent()`, which these tests deliberately do not
+ * use — several of them need to send the *wrong* browser on purpose). */
+const cookieHeader = (
+  res: { headers: Record<string, unknown> },
+  requestId: string,
+): string => rawConsentCookie(res, requestId).split(';')[0]!
+
+/**
+ * Starts a flow and returns the parked request id, the binding cookie the
+ * browser that started it was given, and the raw `Set-Cookie` header (for
+ * asserting its security attributes — see "the binding cookie's own
+ * attributes" below) — everything every consent-endpoint call needs
+ * (finding 1a, docs/plans/OAUTH_CONSENT_SECURITY.md).
+ */
+const beginAuthorize = async (
+  clientId: string,
+  challenge: string,
+  scopes: string[] = [SCOPES.read, SCOPES.write],
+  redirectUri = 'https://assistant.test/cb',
+) => {
   const authorize = await request(server)
     .get('/oauth/authorize')
     .query({
-      client_id: client.client_id,
+      client_id: clientId,
       response_type: 'code',
-      redirect_uri: 'https://assistant.test/cb',
+      redirect_uri: redirectUri,
       code_challenge: challenge,
       code_challenge_method: 'S256',
       scope: scopes.join(' '),
       state: 'client-state-123',
     })
   expect(authorize.status).toBe(302)
-
   const requestId = new URL(
     authorize.headers.location!,
     'http://localhost',
   ).searchParams.get('request')!
+  return {
+    requestId,
+    cookie: cookieHeader(authorize, requestId),
+    rawCookie: rawConsentCookie(authorize, requestId),
+  }
+}
+
+/**
+ * Walks the whole flow and returns the tokens, so the tests below can each
+ * attack one step rather than restating the other five. Carries the binding
+ * cookie from the authorize step into approve, exactly as a real browser
+ * would — this is "the same browser" case; tests for finding 1a construct
+ * the mismatched-cookie case by hand instead of through this helper.
+ */
+const connect = async (
+  sessionToken: string,
+  scopes: string[] = [SCOPES.read, SCOPES.write],
+  // Pre-registered client for tests that need several connections and would
+  // otherwise spend the registration endpoint's rate-limit budget on
+  // repeats of the same registration; see `registerClientDirect`.
+  presetClient?: { client_id: string },
+) => {
+  const client = presetClient ?? (await registerClient())
+  const { verifier, challenge } = pkce()
+
+  const { requestId, cookie } = await beginAuthorize(
+    client.client_id,
+    challenge,
+    scopes,
+  )
 
   const approve = await request(server)
     .post(`/api/oauth/authorization/${requestId}/approve`)
     .set('Authorization', `Bearer ${sessionToken}`)
+    .set('Cookie', cookie)
     .send({})
   expect(approve.status).toBe(200)
 
@@ -111,6 +207,7 @@ const connect = async (
   return {
     client,
     requestId,
+    cookie,
     verifier,
     code,
     tokens: token.body as {
@@ -145,6 +242,18 @@ afterAll(async () => {
 })
 
 beforeEach(async () => {
+  // A revocation's notify/log side effects are deliberately fire-and-forget
+  // (root cause F2, rework round 1) and so are still in flight past the
+  // point the test that triggered them already returned. Left undrained, one
+  // of those straggling calls (a `UserModel.findById`, most often) can land
+  // after this wipe and before the next test's own fixtures exist, producing
+  // a flake whose failure moves around depending on which test happened to
+  // trigger a revocation most recently. `drainPendingSideEffects` (store.ts)
+  // awaits exactly the outstanding work rather than a fixed pause — rework
+  // round 2 flagged a sleep here as timing-dependent and likely to
+  // eventually flake on a slower or more loaded machine even if it held on
+  // this one.
+  await drainPendingSideEffects()
   await Promise.all([
     UserModel.deleteMany({}),
     ProjectModel.deleteMany({}),
@@ -245,17 +354,10 @@ describe('how long each half of the flow lasts', () => {
     const client = await registerClient()
     const { challenge } = pkce()
 
-    const authorize = await request(server).get('/oauth/authorize').query({
-      client_id: client.client_id,
-      response_type: 'code',
-      redirect_uri: 'https://assistant.test/cb',
-      code_challenge: challenge,
-      code_challenge_method: 'S256',
-    })
-    const requestId = new URL(
-      authorize.headers.location!,
-      'http://localhost',
-    ).searchParams.get('request')!
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      challenge,
+    )
 
     // Stand where a slow reader stands: the request is nearly out of time.
     const nearlyGone = new Date(Date.now() + 2000)
@@ -267,6 +369,7 @@ describe('how long each half of the flow lasts', () => {
     await request(server)
       .post(`/api/oauth/authorization/${requestId}/approve`)
       .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', cookie)
       .send({})
 
     const after = await OAuthAuthorizationModel.findById(requestId)
@@ -461,21 +564,15 @@ describe('attempts to get in without consent', () => {
     const client = await registerClient()
     const { challenge } = pkce()
 
-    const authorize = await request(server).get('/oauth/authorize').query({
-      client_id: client.client_id,
-      response_type: 'code',
-      redirect_uri: 'https://assistant.test/cb',
-      code_challenge: challenge,
-      code_challenge_method: 'S256',
-    })
-    const requestId = new URL(
-      authorize.headers.location!,
-      'http://localhost',
-    ).searchParams.get('request')!
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      challenge,
+    )
 
     const approve = await request(server)
       .post(`/api/oauth/authorization/${requestId}/approve`)
       .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', cookie)
       .send({})
     const code = new URL(approve.body.redirectTo).searchParams.get('code')!
 
@@ -495,20 +592,18 @@ describe('attempts to get in without consent', () => {
   it('refuses to mint a code for someone who is not signed in', async () => {
     const client = await registerClient()
     const { challenge } = pkce()
-    const authorize = await request(server).get('/oauth/authorize').query({
-      client_id: client.client_id,
-      response_type: 'code',
-      redirect_uri: 'https://assistant.test/cb',
-      code_challenge: challenge,
-      code_challenge_method: 'S256',
-    })
-    const requestId = new URL(
-      authorize.headers.location!,
-      'http://localhost',
-    ).searchParams.get('request')!
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      challenge,
+    )
 
+    // No Authorization header at all — requireAuth refuses this before the
+    // binding cookie is even considered, and it is the binding cookie that
+    // is being forwarded correctly here, so this stays a clean test of
+    // requireAuth alone.
     const res = await request(server)
       .post(`/api/oauth/authorization/${requestId}/approve`)
+      .set('Cookie', cookie)
       .send({})
     expect(res.status).toBe(401)
   })
@@ -542,45 +637,52 @@ describe('attempts to get in without consent', () => {
   })
 
   it('refuses a consent request that was already answered', async () => {
+    // The cookie is forwarded here deliberately (E2, rework round 1): without
+    // it the 404 below would come from the missing-cookie branch, not from
+    // `codeHash` already being set, and this test would stop testing what its
+    // name says. Reusing the value the server already asked the browser to
+    // clear is fine for this assertion — supertest does not track cookie
+    // jars, so nothing here relies on the browser having "forgotten" it.
     const session = await registerUser('twice@example.test')
-    const { requestId } = await connect(session)
+    const { requestId, cookie } = await connect(session)
 
     const res = await request(server)
       .post(`/api/oauth/authorization/${requestId}/approve`)
       .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', cookie)
       .send({})
     expect(res.status).toBe(404)
   })
 })
 
 describe('what consent actually decided', () => {
-  it('shows the consent screen who is asking and for what', async () => {
+  it('shows the consent screen who is asking, for what, to which account, and where', async () => {
     const session = await registerUser('screen@example.test')
     const client = await registerClient()
     const { challenge } = pkce()
 
-    const authorize = await request(server).get('/oauth/authorize').query({
-      client_id: client.client_id,
-      response_type: 'code',
-      redirect_uri: 'https://assistant.test/cb',
-      code_challenge: challenge,
-      code_challenge_method: 'S256',
-      scope: SCOPES.read,
-    })
-    const requestId = new URL(
-      authorize.headers.location!,
-      'http://localhost',
-    ).searchParams.get('request')!
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      challenge,
+      [SCOPES.read],
+    )
 
     const res = await request(server)
       .get(`/api/oauth/authorization/${requestId}`)
       .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', cookie)
 
     expect(res.status).toBe(200)
     expect(res.body.clientName).toBe('Test Assistant')
     expect(res.body.scopes).toEqual([
       { scope: SCOPES.read, description: expect.stringContaining('See your') },
     ])
+    // finding 1b: the two facts a server-side check alone cannot supply —
+    // which account is about to be connected, and where the code will be
+    // sent. Both come straight from the parked row and the session, never
+    // from anything the assistant supplied at exchange time.
+    expect(res.body.account).toBe('screen@example.test')
+    expect(res.body.redirectTarget).toBe('https://assistant.test')
   })
 
   it('holds a read-only connection to reading, however capable the account', async () => {
@@ -744,3 +846,1027 @@ describe('the link an assistant hands back', () => {
     expect(asStranger.status).toBe(404)
   })
 })
+
+/**
+ * Finding 1 (docs/plans/OAUTH_CONSENT_SECURITY.md): a parked request could be
+ * approved by whoever the link was forwarded to, not only by the browser
+ * that started the flow. Both variants the doc names are covered here on
+ * purpose — a suite that only tried "the attacker sends the consent link"
+ * is exactly what let the authorize-URL variant go unnoticed at wikistreets.
+ */
+describe('binding the parked request to the browser that started it', () => {
+  it('refuses approval when the attacker parks the request and hands the victim only the consent link', async () => {
+    const victim = await registerUser('victim-consent-link@example.test')
+    const client = await registerClientDirect()
+    const { challenge } = pkce()
+
+    // The attacker's own browser is the one that reached /oauth/authorize
+    // and holds the resulting cookie; the victim never had it.
+    const { requestId } = await beginAuthorize(client.client_id, challenge)
+
+    const approve = await request(server)
+      .post(`/api/oauth/authorization/${requestId}/approve`)
+      .set('Authorization', `Bearer ${victim}`)
+      .send({})
+    expect(approve.status).toBe(404)
+  })
+
+  it('cannot refuse the harder variant — the victim’s own browser starting the flow — which is what finding 1b exists for', async () => {
+    const victim = await registerUser('victim-own-browser@example.test')
+    // The attacker registers a client with a redirect URI they control.
+    const client = await registerClientDirect('https://attacker.test/cb')
+    const { challenge } = pkce()
+
+    // The victim clicks a link straight to /oauth/authorize (not the
+    // consent screen) — their own browser makes this request and
+    // legitimately ends up holding the binding cookie. The binding check
+    // alone cannot tell this apart from a genuine flow, because it is one.
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      challenge,
+      [SCOPES.read, SCOPES.write],
+      'https://attacker.test/cb',
+    )
+
+    const approve = await request(server)
+      .post(`/api/oauth/authorization/${requestId}/approve`)
+      .set('Authorization', `Bearer ${victim}`)
+      .set('Cookie', cookie)
+      .send({})
+    expect(approve.status).toBe(200)
+    expect(new URL(approve.body.redirectTo).host).toBe('attacker.test')
+  })
+
+  it('answers missing, expired, already-answered, wrong-browser and malformed ids identically', async () => {
+    const session = await registerUser('uniform-refusal@example.test')
+    const client = await registerClientDirect()
+
+    const missing = await request(server)
+      .get(`/api/oauth/authorization/${new Types.ObjectId().toString()}`)
+      .set('Authorization', `Bearer ${session}`)
+
+    const { requestId: expiredId, cookie: expiredCookie } =
+      await beginAuthorize(client.client_id, pkce().challenge)
+    await OAuthAuthorizationModel.updateOne(
+      { _id: expiredId },
+      { $set: { expiresAt: new Date(Date.now() - 1000) } },
+    )
+    const expired = await request(server)
+      .get(`/api/oauth/authorization/${expiredId}`)
+      .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', expiredCookie)
+
+    const { requestId: answeredId, cookie: answeredCookie } =
+      await beginAuthorize(client.client_id, pkce().challenge)
+    await request(server)
+      .post(`/api/oauth/authorization/${answeredId}/approve`)
+      .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', answeredCookie)
+      .send({})
+    const answered = await request(server)
+      .get(`/api/oauth/authorization/${answeredId}`)
+      .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', answeredCookie)
+
+    const { requestId: wrongBrowserId } = await beginAuthorize(
+      client.client_id,
+      pkce().challenge,
+    )
+    const wrongBrowser = await request(server)
+      .get(`/api/oauth/authorization/${wrongBrowserId}`)
+      .set('Authorization', `Bearer ${session}`)
+    // deliberately no Cookie header at all
+
+    const malformed = await request(server)
+      .get('/api/oauth/authorization/not-an-object-id')
+      .set('Authorization', `Bearer ${session}`)
+
+    for (const res of [expired, answered, wrongBrowser, malformed]) {
+      expect(res.status).toBe(missing.status)
+      expect(res.body).toEqual(missing.body)
+    }
+  })
+})
+
+/**
+ * Finding 2: a replayed authorization code is refused. It is *not* met with
+ * automatic teardown of the tokens it minted — that was tried (an earlier
+ * pass on this branch) and removed; see docs/DECISIONS.md's "Finding 2's
+ * revocation-on-replay was tried and removed" entry for why. In short: the
+ * realistic way a code leaks (browser history, a `Referer` header, a proxy
+ * log) hands a thief the code but not the PKCE verifier, so
+ * `challengeForAuthorizationCode` refuses before this branch is ever reached
+ * — nothing here would have caught that thief anyway. What *does* reach this
+ * branch, routinely, is an honest client's own retry (a callback reload, a
+ * lost response, a concurrent submit) — it holds the verifier, so it gets
+ * past PKCE and lands squarely on a second exchange of its own code. Tearing
+ * the connection down for that is punishing the honest case to (mostly)
+ * miss the dishonest one. The single-use enforcement itself — the atomic
+ * claim in `exchangeAuthorizationCode` — is unconditional and unaffected by
+ * any of this: a replayed code still never yields a second token pair.
+ */
+describe('a replayed authorization code', () => {
+  it('is refused byte-identically to an unknown code, without touching the tokens the honest exchange already minted', async () => {
+    const session = await registerUser('replay-refused@example.test')
+    const preset = await registerClientDirect()
+    const { client, code, verifier, tokens } = await connect(
+      session,
+      undefined,
+      preset,
+    )
+
+    // The tokens from the honest exchange work before the replay.
+    const before = await mcp(tokens.access_token, {
+      jsonrpc: '2.0',
+      id: 90,
+      method: 'initialize',
+    })
+    expect(before.status).toBe(200)
+
+    const replay = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'authorization_code',
+        code,
+        code_verifier: verifier,
+        client_id: client.client_id,
+        redirect_uri: 'https://assistant.test/cb',
+      })
+    expect(replay.status).toBe(400)
+
+    const unknown = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'authorization_code',
+        code: 'this-code-was-never-issued',
+        code_verifier: verifier,
+        client_id: client.client_id,
+        redirect_uri: 'https://assistant.test/cb',
+      })
+    expect(unknown.status).toBe(replay.status)
+    expect(unknown.body).toEqual(replay.body)
+
+    // No automatic teardown: the tokens the honest exchange produced still
+    // work. Losing them to a replay of a code the client itself still holds
+    // (its own retry, most commonly) would be the honest-client-punished
+    // failure mode this design deliberately avoids.
+    const after = await mcp(tokens.access_token, {
+      jsonrpc: '2.0',
+      id: 91,
+      method: 'initialize',
+    })
+    expect(after.status).toBe(200)
+  })
+
+  it('does not burn a code on a wrong redirect URI, so a legitimate retry still works', async () => {
+    // The ordering question the plan doc raises: nothing may consume the row
+    // before every binding on it — including the redirect URI — has matched.
+    const session = await registerUser('ordering@example.test')
+    const client = await registerClientDirect()
+    const { verifier, challenge } = pkce()
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      challenge,
+    )
+    const approve = await request(server)
+      .post(`/api/oauth/authorization/${requestId}/approve`)
+      .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', cookie)
+      .send({})
+    const code = new URL(approve.body.redirectTo).searchParams.get('code')!
+
+    const wrongRedirect = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'authorization_code',
+        code,
+        code_verifier: verifier,
+        client_id: client.client_id,
+        redirect_uri: 'https://not-the-registered-callback.example/cb',
+      })
+    expect(wrongRedirect.status).toBe(400)
+
+    // The same code, presented with the correct redirect URI, still works —
+    // the wrong attempt above did not consume it.
+    const correctRedirect = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'authorization_code',
+        code,
+        code_verifier: verifier,
+        client_id: client.client_id,
+        redirect_uri: 'https://assistant.test/cb',
+      })
+    expect(correctRedirect.status).toBe(200)
+  })
+})
+
+/**
+ * Finding 3: rotation is correct (a refresh token is worth one exchange),
+ * but replaying an already-rotated-out token was silently refused, which
+ * discards the one case that signal actually means something — a race the
+ * legitimate client lost to a thief who rotated first.
+ */
+describe('replaying an already-rotated refresh token', () => {
+  it('ends the whole connection, not just the one exchange, and tells the user', async () => {
+    const session = await registerUser('rotation-reuse@example.test')
+    const preset = await registerClientDirect()
+    const { client, tokens } = await connect(session, undefined, preset)
+
+    const rotated = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+        client_id: client.client_id,
+      })
+    expect(rotated.status).toBe(200)
+
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+    // Replay the ORIGINAL, now-superseded token — the stolen-token race,
+    // presented by whichever side lost it.
+    const replay = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+        client_id: client.client_id,
+      })
+    expect(replay.status).toBe(400)
+
+    // The legitimate side's rotated-to access token is dead too: the
+    // connection was ended outright, which is the only visible trace of the
+    // attempt a user gets.
+    const afterReplay = await mcp(rotated.body.access_token, {
+      jsonrpc: '2.0',
+      id: 92,
+      method: 'initialize',
+    })
+    expect(afterReplay.status).toBe(401)
+
+    // And they are told, via whatever notification path already exists
+    // (the best-effort account mailer — MAIL_PROVIDER=log in tests, so the
+    // send lands in the console rather than an inbox).
+    expect(
+      infoSpy.mock.calls.some(([line]) =>
+        String(line).includes('was disconnected'),
+      ),
+    ).toBe(true)
+    infoSpy.mockRestore()
+  })
+
+  it('leaves an unrelated, never-rotated refresh token alone', async () => {
+    // Both connections share the same registered client on purpose (E5,
+    // rework round 1 — an earlier version of this comment said "a different
+    // client registration", which was never true of the test itself): what
+    // must hold is that a revocation triggered by one *connection* — one
+    // token family — never reaches a second, unrelated one even when they
+    // share a (user, client) pair the old `disconnect`-based design keyed
+    // its blast radius on.
+    const session = await registerUser('rotation-unrelated@example.test')
+    const other = await registerUser('rotation-bystander@example.test')
+    const preset = await registerClientDirect()
+    const first = await connect(session, undefined, preset)
+    const second = await connect(other, undefined, preset)
+
+    await request(server).post('/oauth/token').type('form').send({
+      grant_type: 'refresh_token',
+      refresh_token: first.tokens.refresh_token,
+      client_id: first.client.client_id,
+    })
+    // Replay first's now-superseded token.
+    await request(server).post('/oauth/token').type('form').send({
+      grant_type: 'refresh_token',
+      refresh_token: first.tokens.refresh_token,
+      client_id: first.client.client_id,
+    })
+
+    // second's connection, a different user through the same client, is
+    // untouched.
+    const stillWorks = await mcp(second.tokens.access_token, {
+      jsonrpc: '2.0',
+      id: 93,
+      method: 'initialize',
+    })
+    expect(stillWorks.status).toBe(200)
+  })
+
+  it('also disconnects a second connection the same user holds through the same client — the accepted blast radius', async () => {
+    // Root cause A3's original blast-radius bug, reproduced deliberately
+    // rather than fixed: "where one user holds two connections through one
+    // client_id, a replay on one kills the other" was true of `disconnect`
+    // before this branch, and a per-grant "token family" was built
+    // specifically to avoid it. Three reviews of that machinery each found a
+    // fresh defect, and the rescope documented in docs/DECISIONS.md ("Findings
+    // 2/3 rescope") went back to `disconnect(userId, clientId)` — the plan
+    // doc's own original recommendation — accepting this exact blast radius
+    // as the cost. This test is the record of that trade, not a bug report:
+    // if it starts failing because someone reintroduces per-grant scoping,
+    // that is a design change worth a deliberate decision, not a silent
+    // regression.
+    const session = await registerUser('sameuser-twoconns@example.test')
+    const preset = await registerClientDirect()
+    const first = await connect(session, undefined, preset)
+    const second = await connect(session, undefined, preset)
+
+    await request(server).post('/oauth/token').type('form').send({
+      grant_type: 'refresh_token',
+      refresh_token: first.tokens.refresh_token,
+      client_id: preset.client_id,
+    })
+    await request(server).post('/oauth/token').type('form').send({
+      grant_type: 'refresh_token',
+      refresh_token: first.tokens.refresh_token,
+      client_id: preset.client_id,
+    })
+
+    const secondStillWorks = await mcp(second.tokens.access_token, {
+      jsonrpc: '2.0',
+      id: 94,
+      method: 'initialize',
+    })
+    expect(secondStillWorks.status).toBe(401)
+  })
+
+  it('catches reuse even after two further rotations, not only the immediate successor', async () => {
+    // Root cause A3's first bug: the old design only recorded one hop of
+    // rotation history, so replaying a token more than one generation back
+    // was invisible. This does not chain-walk at all — it reads the
+    // presented token's own row, which still knows its own supersession
+    // regardless of how many further rotations happened after it, and tears
+    // down the whole (user, client) connection rather than needing to trace
+    // a chain — so this is the regression test for that no longer being a
+    // limitation.
+    const session = await registerUser('deep-reuse@example.test')
+    const preset = await registerClientDirect()
+    const { client, tokens } = await connect(session, undefined, preset)
+    const original = tokens.refresh_token
+
+    const rotate = (refreshToken: string) =>
+      request(server).post('/oauth/token').type('form').send({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: client.client_id,
+      })
+
+    const first = await rotate(original)
+    expect(first.status).toBe(200)
+    const second = await rotate(first.body.refresh_token)
+    expect(second.status).toBe(200)
+
+    // Replay the ORIGINAL token — two generations behind what is live now.
+    const replay = await rotate(original)
+    expect(replay.status).toBe(400)
+
+    // The whole family is gone, including the twice-rotated-forward pair.
+    const afterReplay = await mcp(second.body.access_token, {
+      jsonrpc: '2.0',
+      id: 95,
+      method: 'initialize',
+    })
+    expect(afterReplay.status).toBe(401)
+  })
+})
+
+/**
+ * A genuinely concurrent double exchange of the same code — two requests
+ * racing at the database level, the shape a lost-response retry or a
+ * double-submitted callback produces. The atomic claim in
+ * `exchangeAuthorizationCode` lets exactly one win; this is the regression
+ * test for the loser's refusal not reaching back and tearing down what the
+ * winner just minted, which a from-scratch reviewer's first instinct
+ * ("revoke on replay") would do and which an earlier pass on this branch
+ * briefly did (see docs/DECISIONS.md, "Finding 2's revocation-on-replay was
+ * tried and removed") — exactly this race was the scenario measured to
+ * punish the honest side.
+ */
+describe('a genuinely concurrent double exchange of the same code', () => {
+  it('leaves the winner holding working tokens', async () => {
+    const session = await registerUser('a2-concurrent@example.test')
+    const client = await registerClientDirect()
+    const { verifier, challenge } = pkce()
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      challenge,
+    )
+    const approve = await request(server)
+      .post(`/api/oauth/authorization/${requestId}/approve`)
+      .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', cookie)
+      .send({})
+    const code = new URL(approve.body.redirectTo).searchParams.get('code')!
+
+    const exchangeOnce = () =>
+      request(server).post('/oauth/token').type('form').send({
+        grant_type: 'authorization_code',
+        code,
+        code_verifier: verifier,
+        client_id: client.client_id,
+        redirect_uri: 'https://assistant.test/cb',
+      })
+
+    const [a, b] = await Promise.all([exchangeOnce(), exchangeOnce()])
+    const [winner, loser] = a.status === 200 ? [a, b] : [b, a]
+    expect(winner.status).toBe(200)
+    expect(loser.status).toBe(400)
+
+    const stillWorks = await mcp(winner.body.access_token, {
+      jsonrpc: '2.0',
+      id: 97,
+      method: 'initialize',
+    })
+    expect(stillWorks.status).toBe(200)
+  })
+})
+
+/**
+ * Root cause B (rework round 1): rotation used to delete the presented
+ * token immediately, so a lost response's retry — the MCP SDK client has no
+ * single-flight around refresh — replayed the client's own last token and
+ * was torn down as if it were theft. Zero timing needed; a single dropped
+ * response is enough.
+ */
+describe('an honest retry of a rotated token', () => {
+  it('is tolerated within the grace window rather than torn down', async () => {
+    const session = await registerUser('b1-honest-retry@example.test')
+    const preset = await registerClientDirect()
+    const { client, tokens } = await connect(session, undefined, preset)
+
+    const rotated = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+        client_id: client.client_id,
+      })
+    expect(rotated.status).toBe(200)
+
+    // Tests run with REFRESH_GRACE_SECONDS=0 (rotated-out tokens must die
+    // immediately, by design — see test/integration/auth.test.ts's own
+    // comment on the session-level equivalent). Simulate a positive grace
+    // window the same way that file does: extend the already-shortened
+    // superseded row directly, rather than reconfiguring env per test.
+    // `usableUntil`, not `expiresAt` — root cause 3, rework round 2 split
+    // spendability from retention, and `expiresAt` is retention now.
+    await OAuthTokenModel.updateOne(
+      { tokenHash: hashToken(tokens.refresh_token) },
+      { $set: { usableUntil: new Date(Date.now() + 60_000) } },
+    )
+
+    const withinGrace = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+        client_id: client.client_id,
+      })
+    expect(withinGrace.status).toBe(200)
+
+    // Not a teardown: the pair minted moments earlier by the first rotation
+    // is untouched.
+    const stillWorks = await mcp(rotated.body.access_token, {
+      jsonrpc: '2.0',
+      id: 98,
+      method: 'initialize',
+    })
+    expect(stillWorks.status).toBe(200)
+  })
+})
+
+/**
+ * Root cause C1/C3 (rework round 1): a merely `httpOnly`/`SameSite=Lax`
+ * cookie can still be *planted* — an attacker parks their own flow and hands
+ * the victim the resulting cookie's value to set for themselves, since
+ * cookies are not origin-isolated by default. `__Host-` closes that by
+ * making the browser refuse the cookie unless it also carries `Secure`, no
+ * `Domain`, and `Path=/` — properties enforced by real browsers, which
+ * `supertest` does not implement. Asserting the server actually emits them
+ * is the executable proxy for that property at this layer; the isolation
+ * itself is not independently exercisable without a real browser (the
+ * reasoning is recorded in full where the cookie options are defined,
+ * oauth/provider.ts).
+ */
+describe("the binding cookie's own attributes", () => {
+  it('carries every attribute the origin-isolation property depends on', async () => {
+    const client = await registerClientDirect()
+    const { challenge } = pkce()
+    const authorize = await request(server).get('/oauth/authorize').query({
+      client_id: client.client_id,
+      response_type: 'code',
+      redirect_uri: 'https://assistant.test/cb',
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+    })
+    const requestId = new URL(
+      authorize.headers.location!,
+      'http://localhost',
+    ).searchParams.get('request')!
+    const raw = rawConsentCookie(authorize, requestId)
+
+    expect(raw).toMatch(/^__Host-sm_oauth_consent_/)
+    expect(raw).toMatch(/HttpOnly/i)
+    expect(raw).toMatch(/Secure/i)
+    expect(raw).toMatch(/SameSite=Lax/i)
+    expect(raw).toMatch(/Path=\//)
+    expect(raw).not.toMatch(/Domain=/i)
+  })
+})
+
+/**
+ * Root cause C4 (rework round 1): one fixed cookie name meant a second
+ * `/oauth/authorize` — a second assistant, a double-clicked Connect button —
+ * silently overwrote the first flow's cookie, orphaning it with no way to
+ * recover except starting over (the refusal is deliberately indistinguishable
+ * from the attack case).
+ */
+describe('a second parked flow', () => {
+  it('does not orphan the first — each request gets its own cookie', async () => {
+    const session = await registerUser('c4-two-flows@example.test')
+    const client = await registerClientDirect()
+
+    const first = await beginAuthorize(client.client_id, pkce().challenge)
+    const second = await beginAuthorize(client.client_id, pkce().challenge)
+    expect(first.requestId).not.toBe(second.requestId)
+
+    const firstGet = await request(server)
+      .get(`/api/oauth/authorization/${first.requestId}`)
+      .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', first.cookie)
+    expect(firstGet.status).toBe(200)
+
+    const secondGet = await request(server)
+      .get(`/api/oauth/authorization/${second.requestId}`)
+      .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', second.cookie)
+    expect(secondGet.status).toBe(200)
+  })
+})
+
+/**
+ * Root cause D1 (rework round 1): `redirectHost` used `URL.hostname`, which
+ * drops the port a loopback client (RFC 8252) is told apart by, and is
+ * actively misleading for a custom-scheme redirect URI — `myapp://cb/x`
+ * read as the host `cb`, an attacker-chosen string shaped like a real one.
+ * `origin` fixes the first case and is honest about the second: WHATWG URL
+ * gives the literal string `"null"` for a non-special scheme's origin, which
+ * is why that case falls back to the whole URI instead.
+ */
+describe('what the consent screen says about where access goes', () => {
+  it('includes the port for a loopback redirect client', async () => {
+    const session = await registerUser('d1-loopback@example.test')
+    const redirectUri = 'http://127.0.0.1:51234/cb'
+    const client = await registerClientDirect(redirectUri)
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      pkce().challenge,
+      [SCOPES.read],
+      redirectUri,
+    )
+
+    const res = await request(server)
+      .get(`/api/oauth/authorization/${requestId}`)
+      .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', cookie)
+    expect(res.body.redirectTarget).toBe('http://127.0.0.1:51234')
+  })
+
+  it('falls back to the whole URI for a custom-scheme redirect, not a misleading fragment', async () => {
+    const session = await registerUser('d1-customscheme@example.test')
+    const redirectUri = 'com.example.app:/oauth2redirect'
+    const client = await registerClientDirect(redirectUri)
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      pkce().challenge,
+      [SCOPES.read],
+      redirectUri,
+    )
+
+    const res = await request(server)
+      .get(`/api/oauth/authorization/${requestId}`)
+      .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', cookie)
+    expect(res.body.redirectTarget).toBe(redirectUri)
+  })
+})
+
+/**
+ * Root cause D2 (rework round 1): the only way a session can authenticate
+ * yet name an account that does not load is a deleted account with a still
+ * valid JWT. The old code rendered a hardcoded "your account" into a
+ * translated sentence and *affirmed* a connection was about to happen; the
+ * fix refuses exactly like any other invalid session.
+ */
+describe('a session whose account no longer exists', () => {
+  it('refuses the consent read rather than affirming a connection', async () => {
+    const session = await registerUser('d2-ghost@example.test')
+    const client = await registerClientDirect()
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      pkce().challenge,
+    )
+    await UserModel.deleteOne({ email: 'd2-ghost@example.test' })
+
+    const res = await request(server)
+      .get(`/api/oauth/authorization/${requestId}`)
+      .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', cookie)
+    expect(res.status).toBe(401)
+  })
+
+  it('refuses approve too, rather than minting a code for a dead account (finding 7)', async () => {
+    // D2's guard was added only to the `GET` above; `approve` still stamped
+    // `userId: req.userId` onto the grant with nothing checking that id
+    // still named anyone, so a session surviving its own account's deletion
+    // could mint a real, redeemable authorization code for it.
+    const session = await registerUser('finding7-approve@example.test')
+    const client = await registerClientDirect()
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      pkce().challenge,
+    )
+    await UserModel.deleteOne({ email: 'finding7-approve@example.test' })
+
+    const res = await request(server)
+      .post(`/api/oauth/authorization/${requestId}/approve`)
+      .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', cookie)
+      .send({})
+    expect(res.status).toBe(401)
+
+    // Nothing was minted: the row is still answerable, not consumed.
+    const stillPending = await OAuthAuthorizationModel.findOne({
+      _id: requestId,
+    })
+    expect(stillPending?.codeHash).toBeUndefined()
+  })
+
+  it('refuses deny too, for the same reason', async () => {
+    const session = await registerUser('finding7-deny@example.test')
+    const client = await registerClientDirect()
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      pkce().challenge,
+    )
+    await UserModel.deleteOne({ email: 'finding7-deny@example.test' })
+
+    const res = await request(server)
+      .post(`/api/oauth/authorization/${requestId}/deny`)
+      .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', cookie)
+      .send({})
+    expect(res.status).toBe(401)
+  })
+})
+
+/**
+ * Root cause F1/F2/F3 (rework round 1): a lookup failure during reuse
+ * detection must not surface as a 500 (F1); the notify/log side effects
+ * must not make a refusal wait on a real mail round trip, which would be a
+ * timing oracle (F2); and a teardown must leave a trace even when mail is
+ * not configured, which is a real, documented deployment state (F3).
+ */
+describe('robustness of the revocation side effects', () => {
+  it('answers a lookup failure with an ordinary refusal, not a 500', async () => {
+    const session = await registerUser('f1-lookup-fails@example.test')
+    const preset = await registerClientDirect()
+    const { client, tokens } = await connect(session, undefined, preset)
+
+    const findOneSpy = vi
+      .spyOn(OAuthTokenModel, 'findOne')
+      .mockRejectedValueOnce(new Error('boom'))
+
+    const res = await request(server).post('/oauth/token').type('form').send({
+      grant_type: 'refresh_token',
+      refresh_token: tokens.refresh_token,
+      client_id: client.client_id,
+    })
+    expect(res.status).toBe(400)
+
+    findOneSpy.mockRestore()
+  })
+
+  it('does not make a token refusal wait on a slow mail relay', async () => {
+    const session = await registerUser('f2-slow-mail@example.test')
+    const preset = await registerClientDirect()
+    const { client, tokens } = await connect(session, undefined, preset)
+
+    await request(server).post('/oauth/token').type('form').send({
+      grant_type: 'refresh_token',
+      refresh_token: tokens.refresh_token,
+      client_id: client.client_id,
+    })
+
+    // Resolves on its own after a delay well past what an HTTP response
+    // should ever wait for, rather than needing to be triggered from the
+    // test: `notifyConnectionRevoked` reaches this call only after its own
+    // `await`s (looking up the user and client) settle, on a timeline the
+    // test does not control, so a manually-toggled promise risks resolving
+    // before that closure is ever assigned — a real race, not hypothetical
+    // (caught it happening while writing this). Letting the mock resolve
+    // itself sidesteps the race entirely: `drainPendingSideEffects` below
+    // waits for whatever `notifyConnectionRevoked` promise is already
+    // tracked (tracked synchronously by `revokeConnection`, before the HTTP
+    // response is sent, so that part is not racy), for however long that
+    // takes to settle.
+    const mailSpy = vi
+      .spyOn(mailer, 'sendMail')
+      .mockImplementation(
+        () => new Promise(resolve => setTimeout(resolve, 300)),
+      )
+
+    const start = Date.now()
+    const replay = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+        client_id: client.client_id,
+      })
+    const elapsed = Date.now() - start
+
+    expect(replay.status).toBe(400)
+    // Comfortably under both the mock's own 300ms delay and lib/mailer.ts's
+    // real SMTP timeouts (10s connect, 10s greeting, 20s socket) — proves
+    // the response did not wait on the mail promise.
+    expect(elapsed).toBeLessThan(200)
+
+    // The fire-and-forget notify call (root cause F2) is, by construction,
+    // still pending past the point the HTTP response already returned —
+    // that is the property this test exists to prove. Drained deterministically
+    // (`drainPendingSideEffects`, not a guessed pause — rework round 2)
+    // before moving on, so it does not straggle into the next test's
+    // `beforeEach` collection wipe.
+    await drainPendingSideEffects()
+    mailSpy.mockRestore()
+  })
+
+  it('leaves a trace of the teardown even when mail is unavailable', async () => {
+    const session = await registerUser('f3-no-mail@example.test')
+    const preset = await registerClientDirect()
+    const { client, tokens } = await connect(session, undefined, preset)
+
+    await request(server).post('/oauth/token').type('form').send({
+      grant_type: 'refresh_token',
+      refresh_token: tokens.refresh_token,
+      client_id: client.client_id,
+    })
+
+    const mailerAvailableSpy = vi
+      .spyOn(mailer, 'mailerAvailable')
+      .mockReturnValue(false)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await request(server).post('/oauth/token').type('form').send({
+      grant_type: 'refresh_token',
+      refresh_token: tokens.refresh_token,
+      client_id: client.client_id,
+    })
+
+    expect(
+      errorSpy.mock.calls.some(([line]) =>
+        String(line).includes('[oauth] connection revoked'),
+      ),
+    ).toBe(true)
+
+    mailerAvailableSpy.mockRestore()
+    errorSpy.mockRestore()
+  })
+
+  it('does not touch or log anything for a replayed authorization code', async () => {
+    // Finding 2's revocation-on-replay (and the timing-oracle concern that
+    // went with it, once formerly numbered "finding 6") is gone —
+    // docs/DECISIONS.md, "Finding 2's revocation-on-replay was tried and
+    // removed". Nothing runs on this path beyond the ordinary refusal, so
+    // there is no trace to leave and nothing that could wait on a slow
+    // relay; this replaces the two tests that used to prove exactly that
+    // about the (now-deleted) revocation call.
+    const session = await registerUser('code-replay-inert@example.test')
+    const preset = await registerClientDirect()
+    const { client, code, verifier } = await connect(session, undefined, preset)
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const mailSpy = vi.spyOn(mailer, 'sendMail')
+
+    const replay = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'authorization_code',
+        code,
+        code_verifier: verifier,
+        client_id: client.client_id,
+        redirect_uri: 'https://assistant.test/cb',
+      })
+    expect(replay.status).toBe(400)
+
+    expect(
+      errorSpy.mock.calls.some(([line]) =>
+        String(line).includes('[oauth] connection revoked'),
+      ),
+    ).toBe(false)
+    expect(mailSpy).not.toHaveBeenCalled()
+
+    errorSpy.mockRestore()
+    mailSpy.mockRestore()
+  })
+})
+
+/**
+ * `usableUntil` is optional on the model (a row written before that field
+ * existed has none — see the model's own note), independent of the
+ * token-family question these tests used to also cover: an earlier design
+ * gave every token a `familyId` too and needed to migrate that field for
+ * pre-existing rows; the rescope in docs/DECISIONS.md ("Findings 2/3
+ * rescope") dropped `familyId` (and the field) entirely, so only
+ * `usableUntil`'s optionality remains real here. These simulate a
+ * pre-existing row directly (`$unset`) rather than relying on there being one
+ * lying around, which there never is in a fresh test database.
+ */
+describe('a refresh token that predates usableUntil', () => {
+  it('rotates without a 500, even when it is already close to its own expiry', async () => {
+    // The exact branch traced by hand in an earlier review: a legacy token
+    // whose own `expiresAt` already precedes what a fresh grace window would
+    // be means "shorten it" is a no-op, which used to also skip stamping
+    // `supersededAt` and, separately, fall through to a write with nothing to
+    // catch a resulting error — a 500 where every other refusal in this file
+    // is a plain 400.
+    const session = await registerUser('legacy-near-expiry@example.test')
+    const preset = await registerClientDirect()
+    const { client, tokens } = await connect(session, undefined, preset)
+
+    const soon = new Date(Date.now() + 500)
+    await OAuthTokenModel.updateOne(
+      { tokenHash: hashToken(tokens.refresh_token) },
+      { $set: { expiresAt: soon }, $unset: { usableUntil: '' } },
+    )
+
+    const res = await request(server).post('/oauth/token').type('form').send({
+      grant_type: 'refresh_token',
+      refresh_token: tokens.refresh_token,
+      client_id: client.client_id,
+    })
+    expect(res.status).toBe(200)
+  })
+
+  it('still detects reuse once rotated', async () => {
+    const session = await registerUser('legacy-reuse@example.test')
+    const preset = await registerClientDirect()
+    const { client, tokens } = await connect(session, undefined, preset)
+
+    // Strip the field the way a row written before it existed would arrive.
+    await OAuthTokenModel.updateOne(
+      { tokenHash: hashToken(tokens.refresh_token) },
+      { $unset: { usableUntil: '' } },
+    )
+
+    const rotated = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+        client_id: client.client_id,
+      })
+    expect(rotated.status).toBe(200)
+
+    // Replay the legacy token — `rotateTokens` falls back to `doc.usableUntil
+    // ?? doc.expiresAt` for the spendability check, so the missing field does
+    // not stop reuse from being caught.
+    const replay = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+        client_id: client.client_id,
+      })
+    expect(replay.status).toBe(400)
+
+    const afterReplay = await mcp(rotated.body.access_token, {
+      jsonrpc: '2.0',
+      id: 99,
+      method: 'initialize',
+    })
+    expect(afterReplay.status).toBe(401)
+  })
+})
+
+/**
+ * Related to rework round 2's must-fix 2 (the isolated proof, with a real
+ * positive grace window, is `oauth-token-grace.test.ts` — this suite runs
+ * with `REFRESH_GRACE_SECONDS=0`, under which "the token's own expiry
+ * already precedes the grace window" and "the token has already expired"
+ * are the same condition, so the specific bug cannot be told apart from the
+ * ordinary case here). This covers the same shape of scenario end to end
+ * through the real HTTP flow instead: a live token near its own natural
+ * expiry still rotates, gets marked, and a later replay is still caught.
+ */
+describe('a token rotated within its own last moments', () => {
+  it('rotates, is marked superseded, and a later replay is still caught', async () => {
+    const session = await registerUser('near-expiry-supersede@example.test')
+    const preset = await registerClientDirect()
+    const { client, tokens } = await connect(session, undefined, preset)
+
+    const soon = new Date(Date.now() + 500)
+    await OAuthTokenModel.updateOne(
+      { tokenHash: hashToken(tokens.refresh_token) },
+      { $set: { expiresAt: soon, usableUntil: soon } },
+    )
+
+    const rotated = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+        client_id: client.client_id,
+      })
+    expect(rotated.status).toBe(200)
+
+    const row = await OAuthTokenModel.findOne({
+      tokenHash: hashToken(tokens.refresh_token),
+    })
+    expect(row!.supersededAt).toBeTruthy()
+
+    // Past its own (short, untouched) natural life, then replayed — reuse
+    // detection needs `supersededAt` to have been set above to catch this.
+    await new Promise(resolve => setTimeout(resolve, 600))
+    const replay = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+        client_id: client.client_id,
+      })
+    expect(replay.status).toBe(400)
+
+    const afterReplay = await mcp(rotated.body.access_token, {
+      jsonrpc: '2.0',
+      id: 100,
+      method: 'initialize',
+    })
+    expect(afterReplay.status).toBe(401)
+  })
+})
+
+/**
+ * Rework round 2's must-fix 3: `expiresAt` used to do two jobs — spendability
+ * and retention — so superseding a token shortened `expiresAt` to the grace
+ * window, and the TTL reaper then removed the row roughly a minute later.
+ * Reuse detection protected a window a couple of minutes wide against a
+ * threat that plays out over days. `usableUntil` now carries spendability
+ * alone; `expiresAt` is untouched retention.
+ */
+describe('what supersession does and does not shorten', () => {
+  it('leaves retention (expiresAt) at its original value, only usableUntil moves', async () => {
+    const session = await registerUser('retention-untouched@example.test')
+    const preset = await registerClientDirect()
+    const { client, tokens } = await connect(session, undefined, preset)
+
+    const before = await OAuthTokenModel.findOne({
+      tokenHash: hashToken(tokens.refresh_token),
+    })
+    const originalExpiry = before!.expiresAt.getTime()
+    // A fresh refresh token's original TTL is 182 days — sanity-check the
+    // fixture before asserting it survives supersession unchanged.
+    expect(originalExpiry).toBeGreaterThan(
+      Date.now() + 170 * 24 * 60 * 60 * 1000,
+    )
+
+    await request(server).post('/oauth/token').type('form').send({
+      grant_type: 'refresh_token',
+      refresh_token: tokens.refresh_token,
+      client_id: client.client_id,
+    })
+
+    const after = await OAuthTokenModel.findOne({
+      tokenHash: hashToken(tokens.refresh_token),
+    })
+    expect(after!.expiresAt.getTime()).toBe(originalExpiry)
+    // Unspendable (REFRESH_GRACE_SECONDS=0 in tests), but still retained for
+    // up to its full original 182 days rather than the ~1 minute the old
+    // design gave a replay to be caught in.
+    expect(after!.usableUntil!.getTime()).toBeLessThanOrEqual(Date.now())
+  })
+})
+
+// The two describe blocks that used to live here — "a family teardown racing
+// a concurrent issuance" and "replaying an already-revoked code again" —
+// tested the retry-convergence and no-false-notice properties of finding 2's
+// automatic revocation-on-replay. That revocation is gone (docs/DECISIONS.md,
+// "Finding 2's revocation-on-replay was tried and removed"), and with it the
+// `retry` parameter `revokeConnection` used to take. "a genuinely concurrent
+// double exchange of the same code" above and "does not touch or log
+// anything for a replayed authorization code" in the revocation-side-effects
+// describe block cover what remains true of both scenarios.

@@ -1448,6 +1448,8 @@
   "oauth": {
     "title": "Connecter un assistant",
     "asking": "{name} demande à se connecter à votre compte Slide Machine. Si vous acceptez, il pourra :",
+    "signedInAs": "La connexion se fera en tant que {account}.",
+    "sendsTo": "L'accès sera envoyé à {target}.",
     "limits": "Il ne peut rien supprimer, ni partager un cours, ni publier un quiz, ni modifier votre formule — cela reste dans l'application. Vous pouvez le déconnecter à tout moment depuis les paramètres de votre compte.",
     "allow": "Autoriser",
     "deny": "Refuser",

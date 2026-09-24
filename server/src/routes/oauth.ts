@@ -19,7 +19,7 @@
  * re-read from that row here — never taken from the browser, which is where an
  * attacker would edit it.
  */
-import { Router } from 'express'
+import { Router, type Request } from 'express'
 import {
   createOAuthMetadata,
   mcpAuthMetadataRouter,
@@ -32,7 +32,13 @@ import { requireAuth } from '../middleware/auth'
 import { HttpError } from '../middleware/error'
 import { OAuthAuthorizationModel } from '../models/oauth-authorization'
 import { OAuthClientModel } from '../models/oauth-client'
-import { provider, supportedScopes } from '../oauth/provider'
+import { UserModel } from '../models/user'
+import {
+  provider,
+  supportedScopes,
+  consentCookieName,
+  clearConsentCookie,
+} from '../oauth/provider'
 import {
   AUTHORIZATION_CODE_TTL_SECONDS,
   generateToken,
@@ -140,7 +146,18 @@ export const oauthAuthRouter = (): Router => {
     path(metadata.authorization_endpoint),
     authorizationHandler({ provider }),
   )
-  router.use(path(metadata.token_endpoint), tokenHandler({ provider }))
+  router.use(
+    path(metadata.token_endpoint),
+    // `rateLimit.max` is configurable (OAUTH_TOKEN_RATE_LIMIT, config/env.ts)
+    // for the same reason DECK_VIEW_RATE_LIMIT is: a test suite that drives
+    // real authorize/rotate/replay flows over real HTTP legitimately makes
+    // more than the SDK's default 50 requests per 15 minutes in one run.
+    // Unconfigured, this is the SDK's own default and nothing changes.
+    tokenHandler({
+      provider,
+      rateLimit: { windowMs: 15 * 60 * 1000, max: env.OAUTH_TOKEN_RATE_LIMIT },
+    }),
+  )
   router.use(
     path(metadata.registration_endpoint!),
     clientRegistrationHandler({ clientsStore: provider.clientsStore }),
@@ -166,17 +183,77 @@ export const oauthAuthRouter = (): Router => {
 export const oauthConsentRouter = Router()
 
 /**
+ * A value `browserNonceHash` can never equal, so a missing binding cookie
+ * falls through to the same "not found" outcome as every other refusal
+ * rather than getting a query with no hash condition at all (which would
+ * match any row with any nonce). `hashToken` output is 64 lower case hex
+ * characters; this is neither hex nor that length.
+ */
+const NO_CONSENT_COOKIE = 'no-consent-cookie'
+
+/**
+ * The HMAC the parked row must carry for this request to be answerable from
+ * this browser (finding 1a, docs/plans/OAUTH_CONSENT_SECURITY.md).
+ *
+ * The cookie is named after the request id (`consentCookieName`,
+ * oauth/provider.ts — root cause C4, rework round 1), so there is no id to
+ * split back out of the value: whichever cookie answers to *this* id's name
+ * is the only one that could ever be relevant, and its value is the raw
+ * nonce directly.
+ */
+const browserNonceHash = (req: Request, id: string): string => {
+  const raw = req.cookies?.[consentCookieName(id)]
+  if (typeof raw !== 'string' || !raw) return NO_CONSENT_COOKIE
+  return hashToken(raw)
+}
+
+/**
+ * Refuses to act for a session naming an account that no longer exists
+ * (root cause D2, finding 7): the only way `requireAuth` can verify a JWT yet
+ * name an account that does not load is the account having been deleted
+ * after the token was signed.
+ *
+ * Originally only the `GET` below carried this check, added for D2's own
+ * reason — rendering the consent screen for a ghost account affirmed a
+ * connection that could never actually complete. `approve` and `deny` need
+ * it just as much and did not have it (finding 7,
+ * docs/plans/OAUTH_CONSENT_SECURITY.md): `approve` stamps `userId:
+ * req.userId` onto the grant with nothing checking that id still names
+ * anyone, minting a real, redeemable authorization code for a deleted
+ * account. `deny` does not stamp anything, but refusing it too keeps every
+ * action a dead session can still trigger uniformly refused, rather than
+ * "reads and denies are refused, approvals are not" being a fact only this
+ * file's plumbing explains.
+ */
+const requireLiveUser = async (req: Request): Promise<void> => {
+  const user = await UserModel.findById(req.userId)
+  if (!user) {
+    throw new HttpError(401, 'unauthorized', 'Sign in to continue')
+  }
+}
+
+/**
  * Loads a pending request, refusing anything that is not one.
  *
- * Already-approved requests are refused alongside missing and expired ones:
- * a consent screen reloaded after approval must not be able to mint a second
- * code, and the three cases are indistinguishable to the caller by design.
+ * Already-approved, expired and missing requests are refused identically —
+ * and so, now, is a request that exists and is still open but was not parked
+ * by this browser (finding 1a). All four are folded into one query rather
+ * than checked in a second step, so there is no way for a distinguishing
+ * error to slip in later: the binding check is not an extra `if`, it is a
+ * fourth condition next to the three that were already here.
+ *
+ * A malformed id (not an ObjectId) makes `findOne` throw a CastError rather
+ * than resolve to null, which the `.catch` here turns back into the same
+ * refusal instead of letting it surface as a 500 — a shape nothing else in
+ * this function produces, and so one an attacker could otherwise use to tell
+ * "not a valid id" apart from everything else.
  */
-const pendingRequest = async (id: string) => {
+const pendingRequest = async (req: Request, id: string) => {
   const request = await OAuthAuthorizationModel.findOne({
     _id: id,
     codeHash: { $exists: false },
     expiresAt: { $gt: new Date() },
+    browserNonceHash: browserNonceHash(req, id),
   }).catch(() => null)
   if (!request) {
     throw new HttpError(
@@ -205,21 +282,67 @@ const redirectWith = (
 }
 
 /**
- * What the consent screen shows: who is asking, and for what.
+ * The redirect target, in the most specific readable form available
+ * (finding 1b / root cause D1, rework round 1).
+ *
+ * `origin` rather than `hostname`: for a loopback client (RFC 8252) the
+ * *port* is the only thing telling two of them apart, and `hostname` drops
+ * it. For a custom-scheme redirect URI — which registers just fine, the
+ * SDK's schema only refuses `javascript:`/`data:`/`vbscript:` — `hostname`
+ * is actively misleading rather than merely incomplete: `myapp://cb/x`
+ * yields `cb`, an attacker-chosen string shaped exactly like a real host,
+ * and `com.example.app:/oauth2redirect` (no authority at all) yields the
+ * empty string, rendering "Access will be sent to .". `origin` fails more
+ * honestly for the second case — WHATWG URL gives the literal string
+ * `"null"` for a non-special scheme with no authority — which is why that
+ * case falls back to the whole URI instead: something a person can actually
+ * read beats a word that looks like an answer but is not one.
+ */
+const redirectDisplay = (uri: string): string => {
+  try {
+    const origin = new URL(uri).origin
+    return origin && origin !== 'null' ? origin : uri
+  } catch {
+    return uri
+  }
+}
+
+/**
+ * What the consent screen shows: who is asking, for what, to which account,
+ * and where the answer goes.
  *
  * The client's name is whatever it registered, so it is a label and never a
  * claim — anything may register under any name. That is a real limitation of
- * open registration and the reason the screen names the permissions in the
- * user's own words rather than relying on them recognising the assistant.
+ * open registration, and the reason the screen also says which account is
+ * about to be connected and the redirect target (finding 1b,
+ * docs/plans/OAUTH_CONSENT_SECURITY.md): a link the user's own browser
+ * genuinely started passes every server-side check there is, so these two
+ * facts are the only defence left, and they are read straight off the parked
+ * row and the signed-in session rather than trusted from anywhere the
+ * assistant could reach.
  */
 oauthConsentRouter.get(
   '/oauth/authorization/:id',
   requireAuth,
   async (req, res) => {
-    const request = await pendingRequest(String(req.params.id))
-    const client = await OAuthClientModel.findOne({
-      clientId: request.clientId,
-    })
+    const request = await pendingRequest(req, String(req.params.id))
+    const [client, user] = await Promise.all([
+      OAuthClientModel.findOne({ clientId: request.clientId }),
+      UserModel.findById(req.userId),
+    ])
+    if (!user) {
+      // The only way `requireAuth` can verify a token yet name an account
+      // that does not load: a session whose account was deleted after the
+      // JWT was signed (root cause D2, and see `requireLiveUser` above for
+      // why `approve`/`deny` need the same check). The earlier version
+      // rendered a hardcoded English "your account" spliced into a
+      // translated sentence — wrong on its own — and, worse, *affirmed*
+      // that a connection was about to happen instead of refusing one.
+      // Treat it exactly like any other invalid session. (Fetched inline
+      // here rather than via `requireLiveUser`, which only checks existence
+      // — this handler needs the loaded document's `email` regardless.)
+      throw new HttpError(401, 'unauthorized', 'Sign in to continue')
+    }
 
     res.json({
       clientName: client?.clientName ?? 'An unnamed assistant',
@@ -228,6 +351,8 @@ oauthConsentRouter.get(
         description:
           SCOPE_DESCRIPTIONS[scope as Scope] ?? 'An unrecognised permission',
       })),
+      account: user.email,
+      redirectTarget: redirectDisplay(request.redirectUri),
     })
   },
 )
@@ -243,7 +368,10 @@ oauthConsentRouter.post(
   '/oauth/authorization/:id/approve',
   requireAuth,
   async (req, res) => {
-    const request = await pendingRequest(String(req.params.id))
+    // finding 7: without this, a session for a deleted account could still
+    // mint a real, redeemable authorization code stamped with that dead id.
+    await requireLiveUser(req)
+    const request = await pendingRequest(req, String(req.params.id))
 
     const code = generateToken()
     // Re-based on the answer, not on the request. The window a person had to
@@ -270,6 +398,8 @@ oauthConsentRouter.post(
       )
     }
 
+    // The flow has an answer; the binding cookie's job is done.
+    clearConsentCookie(res, request._id.toString())
     res.json({
       redirectTo: redirectWith(request.redirectUri, request.state, { code }),
     })
@@ -287,9 +417,13 @@ oauthConsentRouter.post(
   '/oauth/authorization/:id/deny',
   requireAuth,
   async (req, res) => {
-    const request = await pendingRequest(String(req.params.id))
+    // finding 7: kept uniform with `approve` — a dead session refuses here
+    // too, rather than only where it happens to stamp something.
+    await requireLiveUser(req)
+    const request = await pendingRequest(req, String(req.params.id))
     await OAuthAuthorizationModel.deleteOne({ _id: request._id })
 
+    clearConsentCookie(res, request._id.toString())
     res.json({
       redirectTo: redirectWith(request.redirectUri, request.state, {
         error: 'access_denied',

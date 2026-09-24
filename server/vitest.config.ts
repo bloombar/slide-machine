@@ -53,6 +53,10 @@ export default defineConfig({
       // rather than six hundred; the guard's behaviour is what is under test,
       // not the size of its budget.
       DECK_VIEW_RATE_LIMIT: '20',
+      // The MCP SDK's own /oauth/token limiter defaults to 50 requests per
+      // 15 minutes per IP; oauth-mcp.test.ts alone legitimately exceeds that
+      // driving real authorize/rotate/replay flows over real HTTP.
+      OAUTH_TOKEN_RATE_LIMIT: '1000',
       // Uploads land on disk in an isolated test dir
       STORAGE_PROVIDER: 'local',
       STORAGE_LOCAL_DIR: '.uploads-test',

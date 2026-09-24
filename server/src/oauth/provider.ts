@@ -67,6 +67,106 @@ import { ALL_SCOPES, isScope, SCOPES } from './scopes'
 export const CONSENT_PATH = '/oauth/consent'
 
 /**
+ * The name of the cookie that proves the browser reading, approving or
+ * denying a parked request is the one that started it (finding 1a,
+ * docs/plans/OAUTH_CONSENT_SECURITY.md). Carries the raw nonce; only its
+ * HMAC is ever written down, matching every other secret in this subsystem —
+ * "signed" in earlier drafts of this fix overstated it, since nothing here
+ * uses `cookie-parser`'s signing (`app.ts` never gives it a secret).
+ *
+ * **Named per request** rather than one fixed name for every flow (root
+ * cause C4, rework round 1): a single shared cookie name meant a *second*
+ * `GET /oauth/authorize` — a second assistant connected, a double-clicked
+ * Connect button, a client whose own retry logic redirects here twice —
+ * silently overwrote the first flow's cookie. The first flow's request then
+ * looked "not mine" to its own browser and refused identically to the
+ * attack case it cannot be told apart from, with no way to recover except
+ * starting over. Naming the cookie after the request id it belongs to means
+ * two concurrently parked flows simply hold two different cookies.
+ *
+ * **Left genuinely unbounded** (finding 5, docs/plans/OAUTH_CONSENT_SECURITY.md
+ * — one truly unique name per request, not one of a fixed set of slots). A
+ * bounded-slots version of this was tried and reverted: hashing every
+ * request id onto one of a small fixed number of cookie names does bound an
+ * *honest* browser's own cookie count, but it also means an unauthenticated
+ * `GET /oauth/authorize`, hit enough times by any cross-site page (no
+ * authentication or CSRF token guards it), reliably **sprays every slot** —
+ * the SDK's own default rate limit (100 requests/15 minutes) is already more
+ * than enough to cover 64 of them — deterministically overwriting whichever
+ * slot a victim's own genuine parked flow happened to land on. That is a
+ * cheap, reliable denial of service the unbounded scheme cannot produce:
+ * spraying an attacker-chosen victim's *specific* cookie needs either
+ * knowing its exact unique name (which the attacker does not) or enough
+ * volume to fill the browser's entire per-domain cookie jar (which the rate
+ * limit above makes impractical). See docs/DECISIONS.md's "Cookie slots
+ * reverted" entry for the full reasoning, and its older "cookie
+ * accumulation" note for why the growth problem the slots were built to
+ * solve is real but was already judged modest in practice.
+ * Unbounded-but-hard-to-target beats bounded-and-sprayable.
+ */
+export const consentCookieName = (requestId: string): string =>
+  `__Host-sm_oauth_consent_${requestId}`
+
+/**
+ * Cookie attributes for the binding cookie (finding 1a / root cause C1,
+ * rework round 1).
+ *
+ * **`__Host-` prefixed, which is not decoration.** Both reviewers
+ * demonstrated that an `httpOnly`/`SameSite=Lax` cookie alone can still be
+ * *planted*: an attacker parks their own flow via the unauthenticated
+ * `GET /oauth/authorize`, receives a validly-issued (if this file ever
+ * claimed "signed", validly-*signed*) cookie, and hands the victim that
+ * cookie's value to set for themselves — cookies are not origin-isolated by
+ * default, so any same-site actor (a subdomain, a staging host, a plain-http
+ * MITM) can write one for this origin. `__Host-` closes exactly that: the
+ * browser refuses to honour the prefix at all unless the cookie also carries
+ * `Secure`, no `Domain` attribute, and `Path=/`, which together mean **only
+ * a response from this exact origin can ever set it**. A victim's browser
+ * can then only ever hold a value this application itself handed it, for a
+ * flow their own browser actually requested — which is precisely the
+ * harder variant `GET /oauth/authorization/:id` returning the account and
+ * redirect target (routes/oauth.ts) exists to catch, not a new hole.
+ *
+ * `Path=/` is mandatory for the prefix, so this **no longer avoids riding on
+ * every request to the origin** the way scoping to `/api/oauth` did in
+ * round 1 — a real cost (a request logger or APM now sees it everywhere),
+ * accepted because a narrower path that can be planted is not a mitigation
+ * at all, and a `__Host-` cookie that cannot be planted is.
+ *
+ * `secure: true` unconditionally, not only in production: the prefix
+ * requires it, and browsers treat `localhost`/`127.0.0.1` as a secure
+ * context even over plain http, which is the only place `isUsableIssuer`
+ * (routes/oauth.ts) ever lets this feature run non-https anyway.
+ */
+const consentCookieOptions = {
+  httpOnly: true,
+  sameSite: 'lax',
+  secure: true,
+  path: '/',
+} as const
+
+/** Sets the binding cookie for a freshly parked request. */
+const setConsentCookie = (
+  res: Response,
+  requestId: string,
+  nonce: string,
+): void => {
+  res.cookie(consentCookieName(requestId), nonce, {
+    ...consentCookieOptions,
+    maxAge: CONSENT_REQUEST_TTL_SECONDS * 1000,
+  })
+}
+
+/**
+ * Clears it once the flow has an answer. `clearCookie` needs the same
+ * options (minus `maxAge`) or the browser keeps the cookie — the same Express
+ * gotcha routes/auth.ts already works around for the refresh cookie.
+ */
+export const clearConsentCookie = (res: Response, requestId: string): void => {
+  res.clearCookie(consentCookieName(requestId), consentCookieOptions)
+}
+
+/**
  * Clients register themselves (RFC 7591) and are stored as they registered.
  *
  * Registration is open, which is the point — an assistant nobody arranged in
@@ -140,6 +240,10 @@ export const provider: OAuthServerProvider = {
     params: AuthorizationParams,
     res: Response,
   ): Promise<void> => {
+    // finding 1a: a nonce this browser alone will hold, so approving or
+    // denying the request later can be checked against the browser that
+    // began it rather than only against a guessable-enough request id.
+    const nonce = generateToken()
     const request = await OAuthAuthorizationModel.create({
       clientId: client.client_id,
       // Already validated against the client's registration by the SDK's
@@ -149,9 +253,11 @@ export const provider: OAuthServerProvider = {
       scopes: requestedScopes(params.scopes),
       codeChallenge: params.codeChallenge,
       resource: params.resource?.href,
+      browserNonceHash: hashToken(nonce),
       expiresAt: new Date(Date.now() + CONSENT_REQUEST_TTL_SECONDS * 1000),
     })
 
+    setConsentCookie(res, request._id.toString(), nonce)
     res.redirect(`${CONSENT_PATH}?request=${request._id.toString()}`)
   },
 
@@ -176,6 +282,15 @@ export const provider: OAuthServerProvider = {
    * atomic operation that reads the row, and a row already carrying one does
    * not match. A replayed code is a stolen session, so this cannot be a
    * read-then-write with a gap in the middle.
+   *
+   * The redirect URI and resource checks are part of that same atomic filter
+   * rather than run afterward (finding 2, docs/plans/OAUTH_CONSENT_SECURITY.md):
+   * a version that stamped `redeemedAt` first and validated second let anyone
+   * holding a code burn it with a wrong redirect URI — a repeatable denial of
+   * connection for the legitimate client, since the row never gets a second
+   * chance. PKCE has no such gap: the SDK's token handler calls
+   * `challengeForAuthorizationCode` (below) first, which reads the row
+   * without writing to it.
    */
   exchangeAuthorizationCode: async (
     client: OAuthClientInformationFull,
@@ -184,28 +299,44 @@ export const provider: OAuthServerProvider = {
     redirectUri?: string,
     resource?: URL,
   ): Promise<OAuthTokens> => {
+    const codeHash = hashToken(authorizationCode)
     const grant = await OAuthAuthorizationModel.findOneAndUpdate(
       {
-        codeHash: hashToken(authorizationCode),
+        codeHash,
         clientId: client.client_id,
         redeemedAt: { $exists: false },
         expiresAt: { $gt: new Date() },
+        // OAuth 2.1 requires the redirect URI to match the one the flow began
+        // with, when the request carried one at all.
+        ...(redirectUri !== undefined ? { redirectUri } : {}),
+        // RFC 8707: a token minted for one resource must not be spendable at
+        // another. A grant with no resource on file is unrestricted, so only
+        // a genuine mismatch excludes the row.
+        ...(resource
+          ? {
+              $or: [
+                { resource: { $exists: false } },
+                { resource: resource.href },
+              ],
+            }
+          : {}),
       },
       { $set: { redeemedAt: new Date() } },
     )
     if (!grant?.userId) {
+      // Nothing was consumed above — either the code never matched at all, or
+      // it did and one of the bindings did not, and either way the row is
+      // untouched and can still be exchanged correctly later. What is left to
+      // rule out is the other case: a code that really was already spent.
+      //
+      // No automatic teardown on that case (finding 2 — see
+      // docs/plans/OAUTH_CONSENT_SECURITY.md and docs/DECISIONS.md's
+      // "Finding 2's revocation-on-replay was tried and removed" entry for
+      // the reasoning): the single-use enforcement above is what actually
+      // matters and is unconditional regardless of why this branch is
+      // reached. A byte-identical refusal either way — nothing here
+      // distinguishes "never existed" from "already redeemed".
       throw new InvalidGrantError('Authorization code is not valid')
-    }
-
-    // OAuth 2.1 requires the redirect URI to match the one the flow began
-    // with, when the request carried one at all.
-    if (redirectUri !== undefined && redirectUri !== grant.redirectUri) {
-      throw new InvalidGrantError('Redirect URI does not match the request')
-    }
-    // RFC 8707: a token minted for one resource must not be spendable at
-    // another. Mismatches are refused rather than quietly re-scoped.
-    if (resource && grant.resource && resource.href !== grant.resource) {
-      throw new InvalidGrantError('Resource does not match the request')
     }
 
     const tokens = await issueTokens({

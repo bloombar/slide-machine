@@ -19,9 +19,12 @@ import {
   REFRESH_TOKEN_TTL_SECONDS,
   connectionsFor,
   disconnect,
+  drainPendingSideEffects,
+  hashToken,
   issueTokens,
   revokeToken,
   rotateTokens,
+  trackSideEffect,
   verifyToken,
 } from '../../src/oauth/store'
 import { runAction } from '../../src/actions/dispatch'
@@ -152,7 +155,13 @@ describe('how long a connection lasts', () => {
     const rotated = await rotateTokens(first.refreshToken, 'client-a')
     expect(rotated).not.toBeNull()
 
-    const replacement = await OAuthTokenModel.findOne({ kind: 'refresh' })
+    // Rotation no longer deletes the presented row (it is kept, shortened,
+    // as evidence for reuse detection — rework round 1's root cause B), so
+    // two `kind: 'refresh'` rows exist now. The replacement is the live one.
+    const replacement = await OAuthTokenModel.findOne({
+      kind: 'refresh',
+      supersededAt: { $exists: false },
+    })
     expect(replacement!.expiresAt.getTime()).toBeGreaterThan(aged.getTime())
     expect(replacement!.expiresAt.getTime()).toBeGreaterThan(
       issued!.expiresAt.getTime() - 1000,
@@ -290,6 +299,42 @@ describe('the connected-assistants list', () => {
     expect(await connectionsFor(userId)).toEqual([])
   })
 
+  it('leaves out an assistant whose only refresh token has been superseded, even though it is still in its long retention window', async () => {
+    // Finding 1, docs/plans/OAUTH_CONSENT_SECURITY.md, and a regression this
+    // branch's rotation-grace design introduced: rotation keeps a superseded
+    // refresh row around at its full original `expiresAt` (up to 182 days)
+    // as evidence for reuse detection, rather than deleting it. Filtering
+    // `connectionsFor` on `expiresAt` alone — the pre-fix query — would still
+    // list this assistant as connected for the rest of that window, even
+    // though `Disconnect` (or an individual revoke) already removed the only
+    // token that mattered.
+    const tokens = await issueTokens({
+      clientId: 'client-a',
+      userId,
+      scopes: [SCOPES.read],
+    })
+    const rotated = await rotateTokens(tokens.refreshToken, 'client-a')
+    expect(rotated).not.toBeNull()
+
+    // The superseded row is still present, `expiresAt` untouched and far in
+    // the future — only `usableUntil` moved (must-fix 3's own guarantee).
+    const superseded = await OAuthTokenModel.findOne({
+      tokenHash: hashToken(tokens.refreshToken),
+    })
+    expect(superseded!.expiresAt.getTime()).toBeGreaterThan(Date.now())
+    expect(superseded!.usableUntil!.getTime()).toBeLessThanOrEqual(Date.now())
+
+    // Delete the *live* replacement too, so nothing about this assistant is
+    // actually still usable — only the superseded row is left, and it alone
+    // must not make the list say "connected".
+    await OAuthTokenModel.deleteOne({
+      tokenHash: hashToken(rotated!.refreshToken),
+    })
+    await OAuthTokenModel.deleteMany({ kind: 'access' })
+
+    expect(await connectionsFor(userId)).toEqual([])
+  })
+
   it('names the assistant, and says what it may do in plain words', async () => {
     await OAuthClientModel.create({
       clientId: 'client-a',
@@ -347,5 +392,34 @@ describe('disconnecting through the action layer', () => {
       clientId: 'never-seen',
     })
     expect(result).toEqual({ disconnected: 0 })
+  })
+})
+
+/**
+ * Finding 2 (docs/plans/OAUTH_CONSENT_SECURITY.md): `trackSideEffect` used to
+ * fire a tracked promise with `void promise.finally(...)`. `.finally()`
+ * returns a *new* promise that rejects whenever the original does, and `void`
+ * attached no handler to that new promise — an unhandled rejection, which
+ * Node terminates the process on by default. Every current caller
+ * (`notifyConnectionRevoked`, `revokeConnection`) happens not to reject, so
+ * this was latent rather than observed; the fix is a backstop for whichever
+ * future caller does not share that property.
+ */
+describe('a fire-and-forget side effect that rejects', () => {
+  it('does not become an unhandled rejection', async () => {
+    const seen: unknown[] = []
+    const onUnhandledRejection = (reason: unknown): void => {
+      seen.push(reason)
+    }
+    process.on('unhandledRejection', onUnhandledRejection)
+
+    trackSideEffect(Promise.reject(new Error('a side effect that fails')))
+    await drainPendingSideEffects()
+    // `unhandledRejection` fires asynchronously; give the event loop a turn
+    // past the promise settling to let it surface if it is going to.
+    await new Promise(resolve => setImmediate(resolve))
+
+    process.off('unhandledRejection', onUnhandledRejection)
+    expect(seen).toEqual([])
   })
 })

@@ -439,6 +439,18 @@ const envSchema = z
      */
     DECK_VIEW_RATE_LIMIT: z.coerce.number().int().positive().default(600),
     /**
+     * The MCP SDK's own `/oauth/token` rate limiter (`tokenHandler` in
+     * oauth/routes.ts): 50 requests per 15 minutes per IP by default, which
+     * this deployment inherits unchanged. Configurable for the same reason
+     * `DECK_VIEW_RATE_LIMIT` is — an integration suite that exercises real
+     * authorize/rotate/replay flows over real HTTP legitimately makes more
+     * than 50 token requests in one run, and the alternative (bypassing the
+     * endpoint) would stop testing the thing several of those tests exist to
+     * test. The default matches the SDK's own, so an unconfigured deployment
+     * sees no behaviour change.
+     */
+    OAUTH_TOKEN_RATE_LIMIT: z.coerce.number().int().positive().default(50),
+    /**
      * How long raw cost-ledger events are kept before a complete month is
      * rolled up and its rows removed (BILL-7/P-11). 0 = keep every event
      * forever, which is fine for a small deployment and unwise for a busy one:

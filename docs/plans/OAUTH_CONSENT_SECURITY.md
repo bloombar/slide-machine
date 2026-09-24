@@ -1,13 +1,105 @@
 # OAuth consent: three security findings
 
-Status: **reported, not fixed.** Written 2026-09-19.
+Status: **all three addressed**; finding 1 fixed and verified end to end
+(including a real-browser e2e spec, `e2e/tests/oauth-consent.spec.ts`),
+finding 3 fixed, finding 2's single-use enforcement fixed but its
+automatic-revocation "nicety" deliberately **not implemented** — see below.
+Written 2026-09-19; first pass fixed 2026-09-24 on `fix/oauth-consent-binding`;
+two independent reviews of that pass found that two of the three fixes did
+not hold up under real HTTP traffic (one made things worse for honest
+clients), and a second pass the same day fixed the underlying causes. A third
+review of the second pass — reading the code rather than running new
+traffic — found five further defects, all inside a **token-family and
+rotation-grace** design the second pass introduced for findings 2/3: a
+required field with no migration path for tokens issued before it existed, a
+stamp gated behind the wrong condition, a retention window too short for the
+reuse detection it was meant to serve, a revocation loop that could stop
+having only partly finished, and a false theft notice on a no-op teardown. A
+third pass the same day fixed those. A **fourth review**, in fresh context,
+found two more defects in the same machinery plus five further issues nearby
+(a regression in the connected-assistants list, an unhandled-rejection crash
+risk, an unbounded consent-cookie name space, a timing oracle, and an
+unauthenticated-account gap in `approve`/`deny`) — three consecutive reviews
+each finding a fresh defect in the same design being the signal that the
+design itself, not the latest patch, was the problem. That review's
+resolution dropped the token-family design in favour of
+`disconnect(userId, clientId)` for both findings 2 and 3 (see
+`docs/DECISIONS.md`'s "Findings 2/3 rescope" entry).
 
-These were found while reviewing the equivalent code in another project
-(wikistreets), which had the first of them as a live account-takeover bug.
-Slide Machine has the same shape. Nothing here has been fixed, and no code in
-this repository was changed to produce this document — it is a read of
-`server/src/routes/oauth.ts`, `server/src/oauth/provider.ts` and
-`server/src/oauth/store.ts` as they stand.
+**A fifth review, the same day, found that the rescope's finding 2 fix
+inherited a bug of its own shape.** Automatic revocation on a replayed
+authorization code mostly punishes an honest client's own retry (which holds
+the PKCE verifier, so nothing stops it reaching the replay branch) and mostly
+misses a real thief (who realistically has the code but not the verifier, and
+is refused earlier, by PKCE, before ever reaching the replay branch at all) —
+the same "honest retry torn down as theft" shape round 1's root cause B was.
+**Resolution: finding 2's automatic revocation-on-replay is not
+implemented.** A replayed code is refused — byte-identically to an unknown
+one — and nothing else happens; the single-use enforcement (the atomic
+`redeemedAt` claim) is what actually matters for finding 2 and is unconditional
+and unaffected. The same review also reverted finding 5's cookie-slot bounding
+(sprayable by an unauthenticated attacker, worse than the growth problem it
+solved) back to one unique cookie name per request, and added the real-browser
+e2e spec this plan calls for below. See `docs/DECISIONS.md`'s "Finding 2's
+revocation-on-replay was tried and removed" and "Cookie slots reverted"
+entries.
+
+- **Finding 1.** Both parts. (a): `provider.authorize` sets a browser-binding
+  cookie, `__Host-` prefixed and named uniquely per request, `Path=/`. The
+  `__Host-` prefix is load-bearing, not decoration: a merely
+  `httpOnly`/`SameSite=Lax` cookie can still be *planted* — an attacker parks
+  their own flow and hands the victim the resulting cookie's value to set for
+  themselves, since cookies are not origin-isolated by default — and both
+  reviewers demonstrated exactly that against the first pass. `__Host-`
+  closes it: only a same-origin response can ever set the cookie at all.
+  `GET`/`approve`/`deny` in `routes/oauth.ts` fold the binding check into the
+  same query that already refused missing/expired/already-answered requests,
+  so all refusals stay identical; `approve`/`deny` also now refuse outright
+  for a session naming a deleted account (finding 7 of the rescope, below),
+  which the `GET` alone used to. Verified against a real browser, not only
+  `supertest` (which implements none of the cookie attributes above) —
+  `e2e/tests/oauth-consent.spec.ts` drives the full consent flow and a
+  wrong-browser refusal, with a positive control proving the refusal really
+  is gated by the cookie. (b): the `GET` returns the signed-in account and the
+  redirect **origin** (falling back to the whole URI when an origin is not a
+  meaningful answer — see finding-1b's D1 note in `docs/DECISIONS.md`), and
+  refuses outright rather than affirming a connection when the session names a
+  deleted account (D2). The harder variant — the victim's own browser
+  starting the flow — is still not something a server-side check can refuse;
+  (b) is what a person reading the screen has to work with.
+- **Finding 2.** `exchangeAuthorizationCode` puts the redirect URI and
+  resource checks inside the same atomic `findOneAndUpdate` that claims the
+  row, so nothing is consumed until every binding matches — this part is
+  unchanged and still verified; single-use enforcement is unconditional. The
+  "revoke on replay" half of the original recommendation below is
+  **deliberately not implemented** — tried twice (a per-grant "token family",
+  then a blunter `disconnect(userId, clientId)`) and removed both times, most
+  recently because it punished an honest client's own retry far more often
+  than it caught a thief (see the fifth-review summary above, and
+  `docs/DECISIONS.md`'s "Finding 2's revocation-on-replay was tried and
+  removed" entry for the full reasoning). A replayed code is refused,
+  byte-identically to an unknown one, and nothing else happens.
+- **Finding 3.** `rotateTokens` still does not delete a superseded refresh
+  token immediately; it marks the row superseded and shortens a dedicated
+  `usableUntil` field to a grace window, mirroring `auth/refresh-store.ts`'s
+  own session-rotation grace — this part is unchanged. A presentation inside
+  the window is an ordinary retry (the MCP SDK client has no single-flight
+  around refresh); a presentation after it ends the whole connection
+  (`revokeConnection`, not a token family — see the rescope above) and mails
+  the account a best-effort notice, with an unconditional log line as a trace
+  independent of whether mail is configured at all. Retention (`expiresAt`,
+  read by the TTL index) is left at its original value rather than shortened
+  alongside spendability, so a superseded row survives long enough for a
+  realistic replay — days, not the roughly one minute an earlier design gave
+  it. The connected-assistants list (`connectionsFor`) filters on
+  `usableUntil` as well as `expiresAt` for exactly this reason (finding 1 of
+  the rescope) — without it, a superseded row's long retention window made a
+  disconnected or individually-revoked assistant keep showing as connected
+  for up to 182 days, a regression the family/grace design introduced.
+
+See `docs/DECISIONS.md` for the full record of what changed across all four
+passes, the judgment calls made along the way, and the residual limits that
+are now written down rather than left implicit.
 
 The three are ordered by severity. Finding 1 is the one to act on.
 
@@ -128,6 +220,25 @@ delete them — the `disconnect(userId, clientId)` helper in `store.ts` already
 does the deletion, though a token-set-level revocation would be tighter. Keep
 the refusal body byte-identical to the unknown-code refusal so the difference
 is not observable.
+
+**Outcome, recorded after implementation (2026-09-24): the delete-on-replay
+half was built twice and removed both times, and is not implemented.** The
+byte-identical-refusal half above is done and stays. What went wrong with
+"revoke everything already issued from that code": a genuine thief realistic
+enough to leak the code at all (browser history, a `Referer` header, a proxy
+log) does not also have the PKCE verifier, and is refused earlier, by PKCE,
+before ever reaching this replay branch — so the revocation this section asks
+for essentially never fires on the thief this finding is about. What
+*routinely* does reach the replay branch, holding the verifier the whole
+time, is an honest client's own retry (a callback reload, a lost response, a
+concurrent resubmission) — and revoking on that tears down a connection
+seconds after it was legitimately made. See `docs/DECISIONS.md`'s "Finding
+2's revocation-on-replay was tried and removed" entry for the full account,
+including the two designs tried (a per-grant "token family", then this
+section's own `disconnect(userId, clientId)` recommendation) and why both
+were reverted rather than patched further. The single-use enforcement above
+is unconditional and was never in question; it is the part of this finding
+that actually holds the line.
 
 **A related ordering bug worth checking while you are in there.** The
 wikistreets equivalent stamped `redeemedAt` *before* validating the client,

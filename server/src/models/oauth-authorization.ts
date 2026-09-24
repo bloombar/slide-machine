@@ -18,6 +18,20 @@
  * replayed code is a stolen session, and the usual way one leaks is a redirect
  * URI that was not checked, which is why `redirectUri` is stored here and
  * compared on exchange rather than taken from the token request.
+ *
+ * A replay does **not** end the connection it minted tokens for. Two earlier
+ * designs tried that — first a per-grant "token family", then a blunter
+ * `disconnect(userId, clientId)` — and both were removed; see
+ * docs/DECISIONS.md's "Finding 2's revocation-on-replay was tried and
+ * removed" entry. In short: the realistic way a code leaks (browser history,
+ * a `Referer` header, a proxy log) hands a thief the code without the PKCE
+ * verifier, so `challengeForAuthorizationCode` refuses before a replay ever
+ * reaches this row a second time — nothing this row could record would have
+ * caught that thief. What routinely *does* reach a second exchange is an
+ * honest client's own retry, which held the verifier all along; tearing the
+ * connection down for that punished the common case to (mostly) miss the
+ * one it was meant to catch. The single-use enforcement above (`redeemedAt`)
+ * is unconditional and unaffected by any of this.
  */
 import { Schema, model, Types } from 'mongoose'
 
@@ -33,6 +47,15 @@ export interface OAuthAuthorizationDb {
   codeChallenge: string
   /** RFC 8707 resource indicator: which server the token is for. */
   resource?: string
+  /**
+   * HMAC of the nonce set in the browser-binding cookie when this request was
+   * parked (docs/plans/OAUTH_CONSENT_SECURITY.md, finding 1a). Proves the
+   * browser reading, approving or denying this request is the one `authorize`
+   * sent to the consent screen in the first place — the id alone is a Mongo
+   * ObjectId, not a secret, so without this a parked request could be
+   * approved by whoever the link was forwarded to.
+   */
+  browserNonceHash: string
   /** Who approved it. Absent while the request is still pending. */
   userId?: Types.ObjectId
   /** HMAC of the authorization code. Absent until approval. */
@@ -50,6 +73,7 @@ const oauthAuthorizationSchema = new Schema<OAuthAuthorizationDb>({
   scopes: { type: [String], required: true },
   codeChallenge: { type: String, required: true },
   resource: { type: String },
+  browserNonceHash: { type: String, required: true },
   userId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
   codeHash: { type: String, index: true, sparse: true },
   redeemedAt: { type: Date },

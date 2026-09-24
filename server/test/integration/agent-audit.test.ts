@@ -78,10 +78,18 @@ const connect = async (sessionToken: string): Promise<string> => {
     authorize.headers.location!,
     'http://localhost',
   ).searchParams.get('request')!
+  // The browser-binding cookie authorize just set (finding 1a,
+  // docs/plans/OAUTH_CONSENT_SECURITY.md) has to travel with the approval
+  // for it to count as "the same browser" — supertest does not carry
+  // cookies between calls on its own.
+  const consentCookie = (
+    authorize.headers['set-cookie'] as unknown as string[]
+  )[0]!.split(';')[0]!
 
   const approve = await request(server)
     .post(`/api/oauth/authorization/${requestId}/approve`)
     .set('Authorization', `Bearer ${sessionToken}`)
+    .set('Cookie', consentCookie)
     .send({})
   const code = new URL(approve.body.redirectTo).searchParams.get('code')!
 

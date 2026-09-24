@@ -1448,6 +1448,8 @@
   "oauth": {
     "title": "连接助手",
     "asking": "{name} 请求连接到您的 Slide Machine 账户。如果您允许，它将可以：",
+    "signedInAs": "此连接将以 {account} 的身份建立。",
+    "sendsTo": "访问权限将发送到 {target}。",
     "limits": "它无法删除任何内容、分享讲座、发布测验或更改您的套餐——这些仍需在应用中操作。您可以随时在账户设置中断开连接。",
     "allow": "允许",
     "deny": "不允许",
