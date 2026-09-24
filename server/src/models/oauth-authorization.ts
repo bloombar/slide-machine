@@ -33,12 +33,28 @@ export interface OAuthAuthorizationDb {
   codeChallenge: string
   /** RFC 8707 resource indicator: which server the token is for. */
   resource?: string
+  /**
+   * HMAC of the nonce set in the browser-binding cookie when this request was
+   * parked (docs/plans/OAUTH_CONSENT_SECURITY.md, finding 1a). Proves the
+   * browser reading, approving or denying this request is the one `authorize`
+   * sent to the consent screen in the first place — the id alone is a Mongo
+   * ObjectId, not a secret, so without this a parked request could be
+   * approved by whoever the link was forwarded to.
+   */
+  browserNonceHash: string
   /** Who approved it. Absent while the request is still pending. */
   userId?: Types.ObjectId
   /** HMAC of the authorization code. Absent until approval. */
   codeHash?: string
   /** When the code was exchanged. Set once; a second exchange is refused. */
   redeemedAt?: Date
+  /**
+   * HMACs of the access and refresh tokens this grant's code minted, so a
+   * replayed code can revoke exactly what it produced (finding 2) rather than
+   * every token the client and user ever shared. Absent until exchange.
+   */
+  issuedAccessTokenHash?: string
+  issuedRefreshTokenHash?: string
   createdAt: Date
   expiresAt: Date
 }
@@ -50,9 +66,12 @@ const oauthAuthorizationSchema = new Schema<OAuthAuthorizationDb>({
   scopes: { type: [String], required: true },
   codeChallenge: { type: String, required: true },
   resource: { type: String },
+  browserNonceHash: { type: String, required: true },
   userId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
   codeHash: { type: String, index: true, sparse: true },
   redeemedAt: { type: Date },
+  issuedAccessTokenHash: { type: String },
+  issuedRefreshTokenHash: { type: String },
   createdAt: { type: Date, default: Date.now },
   expiresAt: { type: Date, required: true },
 })

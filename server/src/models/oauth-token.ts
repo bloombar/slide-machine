@@ -28,6 +28,14 @@ export interface OAuthTokenDb {
   scopes: string[]
   /** RFC 8707 resource this token is valid for, when the client named one. */
   resource?: string
+  /**
+   * HMAC of the refresh token this one replaced, kept for exactly one
+   * generation (finding 3, docs/plans/OAUTH_CONSENT_SECURITY.md). Rotation
+   * deletes the superseded row, so without this a stolen token that gets
+   * rotated first leaves no trace: the legitimate client's next refresh just
+   * fails, and nobody is told why. Only set on `kind: 'refresh'` rows.
+   */
+  previousTokenHash?: string
   createdAt: Date
   expiresAt: Date
 }
@@ -44,6 +52,7 @@ const oauthTokenSchema = new Schema<OAuthTokenDb>({
   },
   scopes: { type: [String], required: true },
   resource: { type: String },
+  previousTokenHash: { type: String },
   createdAt: { type: Date, default: Date.now },
   expiresAt: { type: Date, required: true },
 })
@@ -51,6 +60,10 @@ const oauthTokenSchema = new Schema<OAuthTokenDb>({
 // One connection is (client, user); the list and the disconnect both key on it.
 oauthTokenSchema.index({ clientId: 1, userId: 1 })
 oauthTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+// Reuse detection looks up "who replaced this token", not "who does this
+// token belong to" — a second index, sparse because only rotated-in refresh
+// tokens carry the field at all.
+oauthTokenSchema.index({ previousTokenHash: 1 }, { sparse: true })
 
 export const OAuthTokenModel = model<OAuthTokenDb>(
   'OAuthToken',

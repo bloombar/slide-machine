@@ -19,7 +19,7 @@
  * re-read from that row here — never taken from the browser, which is where an
  * attacker would edit it.
  */
-import { Router } from 'express'
+import { Router, type Request } from 'express'
 import {
   createOAuthMetadata,
   mcpAuthMetadataRouter,
@@ -32,7 +32,13 @@ import { requireAuth } from '../middleware/auth'
 import { HttpError } from '../middleware/error'
 import { OAuthAuthorizationModel } from '../models/oauth-authorization'
 import { OAuthClientModel } from '../models/oauth-client'
-import { provider, supportedScopes } from '../oauth/provider'
+import { UserModel } from '../models/user'
+import {
+  provider,
+  supportedScopes,
+  CONSENT_COOKIE,
+  clearConsentCookie,
+} from '../oauth/provider'
 import {
   AUTHORIZATION_CODE_TTL_SECONDS,
   generateToken,
@@ -166,17 +172,55 @@ export const oauthAuthRouter = (): Router => {
 export const oauthConsentRouter = Router()
 
 /**
+ * A value `browserNonceHash` can never equal, so a missing or malformed
+ * binding cookie falls through to the same "not found" outcome as every
+ * other refusal rather than getting a query with no hash condition at all
+ * (which would match any row with any nonce). `hashToken` output is 64 lower
+ * case hex characters; this is neither hex nor that length.
+ */
+const NO_CONSENT_COOKIE = 'no-consent-cookie'
+
+/**
+ * The HMAC the parked row must carry for this request to be answerable from
+ * this browser (finding 1a, docs/plans/OAUTH_CONSENT_SECURITY.md).
+ *
+ * The cookie's value is `<requestId>.<nonce>` — checking that the id half
+ * matches the id in the URL means a cookie set for one pending request can
+ * never be reused to answer a different one, even by the same browser.
+ */
+const browserNonceHash = (req: Request, id: string): string => {
+  const raw = req.cookies?.[CONSENT_COOKIE]
+  if (typeof raw !== 'string') return NO_CONSENT_COOKIE
+  const dot = raw.indexOf('.')
+  if (dot < 0) return NO_CONSENT_COOKIE
+  const cookieId = raw.slice(0, dot)
+  const nonce = raw.slice(dot + 1)
+  if (cookieId !== id || !nonce) return NO_CONSENT_COOKIE
+  return hashToken(nonce)
+}
+
+/**
  * Loads a pending request, refusing anything that is not one.
  *
- * Already-approved requests are refused alongside missing and expired ones:
- * a consent screen reloaded after approval must not be able to mint a second
- * code, and the three cases are indistinguishable to the caller by design.
+ * Already-approved, expired and missing requests are refused identically —
+ * and so, now, is a request that exists and is still open but was not parked
+ * by this browser (finding 1a). All four are folded into one query rather
+ * than checked in a second step, so there is no way for a distinguishing
+ * error to slip in later: the binding check is not an extra `if`, it is a
+ * fourth condition next to the three that were already here.
+ *
+ * A malformed id (not an ObjectId) makes `findOne` throw a CastError rather
+ * than resolve to null, which the `.catch` here turns back into the same
+ * refusal instead of letting it surface as a 500 — a shape nothing else in
+ * this function produces, and so one an attacker could otherwise use to tell
+ * "not a valid id" apart from everything else.
  */
-const pendingRequest = async (id: string) => {
+const pendingRequest = async (req: Request, id: string) => {
   const request = await OAuthAuthorizationModel.findOne({
     _id: id,
     codeHash: { $exists: false },
     expiresAt: { $gt: new Date() },
+    browserNonceHash: browserNonceHash(req, id),
   }).catch(() => null)
   if (!request) {
     throw new HttpError(
@@ -205,21 +249,28 @@ const redirectWith = (
 }
 
 /**
- * What the consent screen shows: who is asking, and for what.
+ * What the consent screen shows: who is asking, for what, to which account,
+ * and where the answer goes.
  *
  * The client's name is whatever it registered, so it is a label and never a
  * claim — anything may register under any name. That is a real limitation of
- * open registration and the reason the screen names the permissions in the
- * user's own words rather than relying on them recognising the assistant.
+ * open registration, and the reason the screen also says which account is
+ * about to be connected and the redirect URI's host (finding 1b,
+ * docs/plans/OAUTH_CONSENT_SECURITY.md): a link the user's own browser
+ * genuinely started passes every server-side check there is, so these two
+ * facts are the only defence left, and they are read straight off the parked
+ * row and the signed-in session rather than trusted from anywhere the
+ * assistant could reach.
  */
 oauthConsentRouter.get(
   '/oauth/authorization/:id',
   requireAuth,
   async (req, res) => {
-    const request = await pendingRequest(String(req.params.id))
-    const client = await OAuthClientModel.findOne({
-      clientId: request.clientId,
-    })
+    const request = await pendingRequest(req, String(req.params.id))
+    const [client, user] = await Promise.all([
+      OAuthClientModel.findOne({ clientId: request.clientId }),
+      UserModel.findById(req.userId),
+    ])
 
     res.json({
       clientName: client?.clientName ?? 'An unnamed assistant',
@@ -228,6 +279,8 @@ oauthConsentRouter.get(
         description:
           SCOPE_DESCRIPTIONS[scope as Scope] ?? 'An unrecognised permission',
       })),
+      account: user?.email ?? 'your account',
+      redirectHost: new URL(request.redirectUri).hostname,
     })
   },
 )
@@ -243,7 +296,7 @@ oauthConsentRouter.post(
   '/oauth/authorization/:id/approve',
   requireAuth,
   async (req, res) => {
-    const request = await pendingRequest(String(req.params.id))
+    const request = await pendingRequest(req, String(req.params.id))
 
     const code = generateToken()
     // Re-based on the answer, not on the request. The window a person had to
@@ -270,6 +323,8 @@ oauthConsentRouter.post(
       )
     }
 
+    // The flow has an answer; the binding cookie's job is done.
+    clearConsentCookie(res)
     res.json({
       redirectTo: redirectWith(request.redirectUri, request.state, { code }),
     })
@@ -287,9 +342,10 @@ oauthConsentRouter.post(
   '/oauth/authorization/:id/deny',
   requireAuth,
   async (req, res) => {
-    const request = await pendingRequest(String(req.params.id))
+    const request = await pendingRequest(req, String(req.params.id))
     await OAuthAuthorizationModel.deleteOne({ _id: request._id })
 
+    clearConsentCookie(res)
     res.json({
       redirectTo: redirectWith(request.redirectUri, request.state, {
         error: 'access_denied',

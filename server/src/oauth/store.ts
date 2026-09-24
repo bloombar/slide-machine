@@ -21,7 +21,10 @@
 import { createHmac, randomBytes } from 'node:crypto'
 import { Types } from 'mongoose'
 import { OAuthTokenModel, type OAuthTokenKind } from '../models/oauth-token'
+import { OAuthClientModel } from '../models/oauth-client'
+import { UserModel } from '../models/user'
 import { env } from '../config/env'
+import { mailerAvailable, sendMail } from '../lib/mailer'
 
 /** One hour. Long enough for a working session, short enough to bound a leak. */
 export const ACCESS_TOKEN_TTL_SECONDS = 60 * 60
@@ -104,6 +107,8 @@ const store = async (
     resource?: string
   },
   ttlSeconds: number,
+  /** Only meaningful for `kind: 'refresh'` — see `rotateTokens`. */
+  previousTokenHash?: string,
 ): Promise<void> => {
   await OAuthTokenModel.create({
     tokenHash: hashToken(raw),
@@ -113,21 +118,37 @@ const store = async (
     scopes: grant.scopes,
     resource: grant.resource,
     expiresAt: new Date(Date.now() + ttlSeconds * 1000),
+    ...(previousTokenHash ? { previousTokenHash } : {}),
   })
 }
 
-/** Issues a fresh access/refresh pair for one assistant acting for one user. */
-export const issueTokens = async (grant: {
-  clientId: string
-  userId: string
-  scopes: string[]
-  resource?: string
-}): Promise<IssuedTokens> => {
+/**
+ * Issues a fresh access/refresh pair for one assistant acting for one user.
+ *
+ * `previousRefreshTokenHash`, when given, is recorded on the new refresh
+ * token so a later presentation of the one it replaced can be recognised as a
+ * reuse rather than an ordinary unknown token (see `rotateTokens`).
+ */
+export const issueTokens = async (
+  grant: {
+    clientId: string
+    userId: string
+    scopes: string[]
+    resource?: string
+  },
+  previousRefreshTokenHash?: string,
+): Promise<IssuedTokens> => {
   const accessToken = generateToken()
   const refreshToken = generateToken()
   await Promise.all([
     store('access', accessToken, grant, ACCESS_TOKEN_TTL_SECONDS),
-    store('refresh', refreshToken, grant, REFRESH_TOKEN_TTL_SECONDS),
+    store(
+      'refresh',
+      refreshToken,
+      grant,
+      REFRESH_TOKEN_TTL_SECONDS,
+      previousRefreshTokenHash,
+    ),
   ])
   return {
     accessToken,
@@ -180,7 +201,18 @@ export const rotateTokens = async (
     clientId,
     expiresAt: { $gt: new Date() },
   })
-  if (!doc) return null
+  if (!doc) {
+    // Not a live token — could be unknown, expired, or one this pair already
+    // rotated past. Only the last of those is evidence of anything, so look
+    // for it before answering (finding 3,
+    // docs/plans/OAUTH_CONSENT_SECURITY.md): a stolen token is worth one
+    // exchange to the thief too, and the race is who presents it first. If
+    // this is the loser of that race presenting the token again, the winner's
+    // replacement is sitting right there with `previousTokenHash` pointing
+    // back at it.
+    await detectRotatedReplay(raw, clientId)
+    return null
+  }
 
   // A client may ask for less than it holds, never for more: anything outside
   // the original grant is dropped rather than treated as an error, which is
@@ -189,12 +221,81 @@ export const rotateTokens = async (
     ? narrowedScopes.filter(scope => doc.scopes.includes(scope))
     : doc.scopes
 
-  return issueTokens({
-    clientId: doc.clientId,
-    userId: doc.userId.toString(),
-    scopes,
-    resource: doc.resource,
+  return issueTokens(
+    {
+      clientId: doc.clientId,
+      userId: doc.userId.toString(),
+      scopes,
+      resource: doc.resource,
+    },
+    hashToken(raw),
+  )
+}
+
+/**
+ * Checks whether a presented refresh token is one this (client, user) pair
+ * already rotated away from, and if so ends the connection outright.
+ *
+ * A merely unknown or expired token proves nothing and is left alone — the
+ * lookup below only matches a token that names it as `previousTokenHash`,
+ * which only a real rotation can have written. `disconnect` covers every
+ * token the pair currently holds, not only the one descended from this one,
+ * because a theft anywhere in the chain means the whole connection is
+ * compromised, not one branch of it.
+ */
+const detectRotatedReplay = async (
+  raw: string,
+  clientId: string,
+): Promise<void> => {
+  const successor = await OAuthTokenModel.findOne({
+    kind: 'refresh',
+    clientId,
+    previousTokenHash: hashToken(raw),
   })
+  if (!successor) return
+
+  const userId = successor.userId.toString()
+  await disconnect(userId, clientId)
+  await notifyConnectionRevoked(userId, clientId)
+}
+
+/**
+ * Tells the user their assistant connection was cut, because this is the
+ * only case where a disconnect they did not ask for is the sole visible
+ * trace of a token theft attempt. Best-effort and silent on failure, exactly
+ * like the other account mail in auth/emails.ts — losing this notice is
+ * regrettable, but must never turn a security response into a 500.
+ */
+const notifyConnectionRevoked = async (
+  userId: string,
+  clientId: string,
+): Promise<void> => {
+  if (!mailerAvailable()) return
+  try {
+    const [user, client] = await Promise.all([
+      UserModel.findById(userId),
+      OAuthClientModel.findOne({ clientId }),
+    ])
+    if (!user) return
+    const name = client?.clientName ?? 'An assistant'
+    await sendMail({
+      to: user.email,
+      subject: 'An assistant connection was disconnected',
+      text: [
+        `Hi ${user.displayName},`,
+        '',
+        `"${name}" was disconnected from your Slide Machine account just now.`,
+        'This was not something you asked for: a connection is only cut this',
+        'way when a security token for it was used twice, which can mean it',
+        'leaked.',
+        '',
+        'If you still want to use this assistant, reconnect it from your',
+        'account settings — it will need to ask for permission again.',
+      ].join('\n'),
+    })
+  } catch (error) {
+    console.warn('Could not send the connection-revoked email:', error)
+  }
 }
 
 /** Forgets one token. Idempotent, as RFC 7009 requires. */

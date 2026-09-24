@@ -1,13 +1,43 @@
 # OAuth consent: three security findings
 
-Status: **reported, not fixed.** Written 2026-09-19.
+Status: **all three fixed.** Written 2026-09-19; fixed 2026-09-24 on
+`fix/oauth-consent-binding`.
 
 These were found while reviewing the equivalent code in another project
 (wikistreets), which had the first of them as a live account-takeover bug.
-Slide Machine has the same shape. Nothing here has been fixed, and no code in
-this repository was changed to produce this document — it is a read of
-`server/src/routes/oauth.ts`, `server/src/oauth/provider.ts` and
-`server/src/oauth/store.ts` as they stand.
+Slide Machine has the same shape. What shipped:
+
+- **Finding 1.** Both parts. (a): `provider.authorize` sets a
+  browser-binding cookie (`sm_oauth_consent`, scoped to `/api/oauth`, not
+  `/oauth` — see the fix branch's note below), and `GET`/`approve`/`deny` in
+  `routes/oauth.ts` fold the binding check into the same query that already
+  refused missing/expired/already-answered requests, so all four refusals stay
+  identical (a malformed id's CastError is still caught, too). (b): the `GET`
+  now also returns the signed-in account and the redirect URI's host, and
+  `OAuthConsentPage.tsx` renders both. The harder variant — the victim's own
+  browser starting the flow — is still not something a server-side check can
+  refuse; (b) is what a person reading the screen now has to work with.
+- **Finding 2.** `exchangeAuthorizationCode` puts the redirect URI and
+  resource checks inside the same atomic `findOneAndUpdate` that claims the
+  row, so nothing is consumed until every binding matches — a wrong redirect
+  URI no longer burns a code. A replay of an already-redeemed code now revokes
+  the exact access/refresh tokens that redemption minted (their hashes are
+  recorded on the grant at exchange time), with the refusal body kept
+  byte-identical to an unknown code's.
+- **Finding 3.** `rotateTokens` records the superseded token's hash
+  (`previousTokenHash`) on the row that replaces it. Presenting an
+  already-rotated-out token is recognised via that link and ends the whole
+  connection (`disconnect`), not just the one exchange, and mails the account
+  a best-effort notice via the existing mailer — the only visible trace of the
+  attempt a user gets.
+
+One deviation from the brief worth recording: the cookie is scoped to
+`/api/oauth`, not `/oauth`. The three person-facing consent endpoints answer
+under `/api/oauth/authorization/...` (`routes/oauth.ts`, mounted under `/api`
+in `app.ts`); `/oauth` is where the machine-facing SDK router lives and never
+reads this cookie. A `Path=/oauth` cookie would not have matched the requests
+that needed it at all. See `docs/DECISIONS.md` for the rest of the judgment
+calls made while fixing this.
 
 The three are ordered by severity. Finding 1 is the one to act on.
 

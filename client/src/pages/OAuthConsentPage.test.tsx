@@ -20,6 +20,8 @@ const REQUEST = {
     { scope: 'lectures.read', description: 'See your lectures and slides' },
     { scope: 'lectures.write', description: 'Create and change lectures' },
   ],
+  account: 'ada@example.com',
+  redirectHost: 'assistant.test',
 }
 
 const renderPage = ({
@@ -84,6 +86,15 @@ describe('what the user is told', () => {
     expect(await screen.findByText(/Claude is asking/)).toBeTruthy()
     expect(screen.getByText('See your lectures and slides')).toBeTruthy()
     expect(screen.getByText('Create and change lectures')).toBeTruthy()
+  })
+
+  it('says which account is being connected and where access will be sent', async () => {
+    // The only defence left once the user's own browser genuinely started
+    // the flow (docs/plans/OAUTH_CONSENT_SECURITY.md, finding 1b) — a name
+    // alone cannot show either fact.
+    renderPage()
+    expect(await screen.findByText(/ada@example.com/)).toBeTruthy()
+    expect(screen.getByText(/assistant.test/)).toBeTruthy()
   })
 
   it('states the limits on the screen where the decision is made', async () => {

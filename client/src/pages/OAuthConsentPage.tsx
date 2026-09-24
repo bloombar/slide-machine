@@ -6,7 +6,7 @@
  * only gate that stands between an assistant anybody can register and an
  * instructor's lecture material.
  *
- * Three things it must get right:
+ * Four things it must get right:
  *
  *   - **Say who is asking.** The name comes from the assistant's own
  *     registration, so it is a label rather than a claim — anything may
@@ -15,6 +15,12 @@
  *     than on the user recognising the name.
  *   - **Say what is being granted, in a sentence.** Not a scope string. A
  *     consent screen the user cannot parse is theatre (docs/MCP.md §5.4).
+ *   - **Say which account, and where the answer goes.** A server-side check
+ *     cannot catch the case where the user's own browser genuinely started
+ *     the flow with attacker-chosen parameters — it *is* a legitimate flow at
+ *     that point. The account being connected and the redirect URI's host are
+ *     the only things left that can tell a genuine request from an impostor's
+ *     (docs/plans/OAUTH_CONSENT_SECURITY.md, finding 1b). Not cosmetic.
  *   - **Make declining as easy as accepting**, and send the refusal back to
  *     the assistant, so it can say "you declined" rather than hang.
  *
@@ -118,6 +124,16 @@ export default function OAuthConsentPage() {
 
       <p className="mt-4 text-sm text-slate-700">
         {t('oauth.asking', { name: request.clientName })}
+      </p>
+
+      {/* The two facts a careful reader needs and a name alone cannot give
+          them: which account is about to be connected, and where the code
+          (and later, tokens) will be sent. */}
+      <p className="mt-2 text-sm text-slate-600">
+        {t('oauth.signedInAs', { account: request.account })}
+      </p>
+      <p className="mt-1 text-sm text-slate-600">
+        {t('oauth.sendsTo', { host: request.redirectHost })}
       </p>
 
       <ul className="mt-4 space-y-2">

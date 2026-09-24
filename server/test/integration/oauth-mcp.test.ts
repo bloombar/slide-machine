@@ -11,8 +11,17 @@
  * server, register itself, send the user to consent, exchange the code with
  * PKCE, then call a tool.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  vi,
+} from 'vitest'
 import request from 'supertest'
+import { Types } from 'mongoose'
 import { createHash, randomBytes } from 'node:crypto'
 import { env } from '../../src/config/env'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
@@ -23,6 +32,7 @@ import { OAuthClientModel } from '../../src/models/oauth-client'
 import { OAuthTokenModel } from '../../src/models/oauth-token'
 import { OAuthAuthorizationModel } from '../../src/models/oauth-authorization'
 import { SCOPES } from '../../src/oauth/scopes'
+import { provider } from '../../src/oauth/provider'
 import {
   AUTHORIZATION_CODE_TTL_SECONDS,
   CONSENT_REQUEST_TTL_SECONDS,
@@ -63,37 +73,102 @@ const registerClient = async (redirectUri = 'https://assistant.test/cb') => {
 }
 
 /**
- * Walks the whole flow and returns the tokens, so the tests below can each
- * attack one step rather than restating the other five.
+ * Registers a client through the store directly, bypassing the HTTP
+ * endpoint's own rate limiter (the SDK's `clientRegistrationHandler` allows
+ * 20 registrations per hour per IP by default, and this file's existing
+ * tests already use most of that budget exercising the real endpoint —
+ * legitimately, since some of them are about registration itself). What the
+ * tests below this point exercise is authorize/approve/exchange, not
+ * registration, so calling `provider.clientsStore` in-process is faithful to
+ * what is under test while not spending shared budget the rest of the file
+ * needs.
  */
-const connect = async (
-  sessionToken: string,
-  scopes: string[] = [SCOPES.read, SCOPES.write],
+const registerClientDirect = async (
+  redirectUri = 'https://assistant.test/cb',
 ) => {
-  const client = await registerClient()
-  const { verifier, challenge } = pkce()
+  const full = await provider.clientsStore.registerClient!({
+    client_name: 'Test Assistant',
+    redirect_uris: [redirectUri],
+    token_endpoint_auth_method: 'none',
+    grant_types: ['authorization_code', 'refresh_token'],
+    response_types: ['code'],
+  })
+  return { client_id: full.client_id }
+}
 
+/** The `Set-Cookie` header's value with attributes stripped, for handing
+ * straight to `.set('Cookie', ...)` on the next request from "the same
+ * browser". `supertest` does not carry cookies between calls on its own
+ * (that is `superagent`'s `.agent()`, which these tests deliberately do not
+ * use — several of them need to send the *wrong* browser on purpose). */
+const cookieHeader = (res: { headers: Record<string, unknown> }): string => {
+  const raw = res.headers['set-cookie'] as string[] | undefined
+  const found = raw?.find(c => c.startsWith('sm_oauth_consent='))
+  if (!found) throw new Error('authorize did not set the binding cookie')
+  return found.split(';')[0]!
+}
+
+/**
+ * Starts a flow and returns both the parked request id and the binding
+ * cookie the browser that started it was given — the two things every
+ * consent-endpoint call needs (finding 1a,
+ * docs/plans/OAUTH_CONSENT_SECURITY.md).
+ */
+const beginAuthorize = async (
+  clientId: string,
+  challenge: string,
+  scopes: string[] = [SCOPES.read, SCOPES.write],
+  redirectUri = 'https://assistant.test/cb',
+) => {
   const authorize = await request(server)
     .get('/oauth/authorize')
     .query({
-      client_id: client.client_id,
+      client_id: clientId,
       response_type: 'code',
-      redirect_uri: 'https://assistant.test/cb',
+      redirect_uri: redirectUri,
       code_challenge: challenge,
       code_challenge_method: 'S256',
       scope: scopes.join(' '),
       state: 'client-state-123',
     })
   expect(authorize.status).toBe(302)
+  return {
+    requestId: new URL(
+      authorize.headers.location!,
+      'http://localhost',
+    ).searchParams.get('request')!,
+    cookie: cookieHeader(authorize),
+  }
+}
 
-  const requestId = new URL(
-    authorize.headers.location!,
-    'http://localhost',
-  ).searchParams.get('request')!
+/**
+ * Walks the whole flow and returns the tokens, so the tests below can each
+ * attack one step rather than restating the other five. Carries the binding
+ * cookie from the authorize step into approve, exactly as a real browser
+ * would — this is "the same browser" case; tests for finding 1a construct
+ * the mismatched-cookie case by hand instead of through this helper.
+ */
+const connect = async (
+  sessionToken: string,
+  scopes: string[] = [SCOPES.read, SCOPES.write],
+  // Pre-registered client for tests that need several connections and would
+  // otherwise spend the registration endpoint's rate-limit budget on
+  // repeats of the same registration; see `registerClientDirect`.
+  presetClient?: { client_id: string },
+) => {
+  const client = presetClient ?? (await registerClient())
+  const { verifier, challenge } = pkce()
+
+  const { requestId, cookie } = await beginAuthorize(
+    client.client_id,
+    challenge,
+    scopes,
+  )
 
   const approve = await request(server)
     .post(`/api/oauth/authorization/${requestId}/approve`)
     .set('Authorization', `Bearer ${sessionToken}`)
+    .set('Cookie', cookie)
     .send({})
   expect(approve.status).toBe(200)
 
@@ -111,6 +186,7 @@ const connect = async (
   return {
     client,
     requestId,
+    cookie,
     verifier,
     code,
     tokens: token.body as {
@@ -245,17 +321,10 @@ describe('how long each half of the flow lasts', () => {
     const client = await registerClient()
     const { challenge } = pkce()
 
-    const authorize = await request(server).get('/oauth/authorize').query({
-      client_id: client.client_id,
-      response_type: 'code',
-      redirect_uri: 'https://assistant.test/cb',
-      code_challenge: challenge,
-      code_challenge_method: 'S256',
-    })
-    const requestId = new URL(
-      authorize.headers.location!,
-      'http://localhost',
-    ).searchParams.get('request')!
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      challenge,
+    )
 
     // Stand where a slow reader stands: the request is nearly out of time.
     const nearlyGone = new Date(Date.now() + 2000)
@@ -267,6 +336,7 @@ describe('how long each half of the flow lasts', () => {
     await request(server)
       .post(`/api/oauth/authorization/${requestId}/approve`)
       .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', cookie)
       .send({})
 
     const after = await OAuthAuthorizationModel.findById(requestId)
@@ -461,21 +531,15 @@ describe('attempts to get in without consent', () => {
     const client = await registerClient()
     const { challenge } = pkce()
 
-    const authorize = await request(server).get('/oauth/authorize').query({
-      client_id: client.client_id,
-      response_type: 'code',
-      redirect_uri: 'https://assistant.test/cb',
-      code_challenge: challenge,
-      code_challenge_method: 'S256',
-    })
-    const requestId = new URL(
-      authorize.headers.location!,
-      'http://localhost',
-    ).searchParams.get('request')!
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      challenge,
+    )
 
     const approve = await request(server)
       .post(`/api/oauth/authorization/${requestId}/approve`)
       .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', cookie)
       .send({})
     const code = new URL(approve.body.redirectTo).searchParams.get('code')!
 
@@ -495,20 +559,18 @@ describe('attempts to get in without consent', () => {
   it('refuses to mint a code for someone who is not signed in', async () => {
     const client = await registerClient()
     const { challenge } = pkce()
-    const authorize = await request(server).get('/oauth/authorize').query({
-      client_id: client.client_id,
-      response_type: 'code',
-      redirect_uri: 'https://assistant.test/cb',
-      code_challenge: challenge,
-      code_challenge_method: 'S256',
-    })
-    const requestId = new URL(
-      authorize.headers.location!,
-      'http://localhost',
-    ).searchParams.get('request')!
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      challenge,
+    )
 
+    // No Authorization header at all — requireAuth refuses this before the
+    // binding cookie is even considered, and it is the binding cookie that
+    // is being forwarded correctly here, so this stays a clean test of
+    // requireAuth alone.
     const res = await request(server)
       .post(`/api/oauth/authorization/${requestId}/approve`)
+      .set('Cookie', cookie)
       .send({})
     expect(res.status).toBe(401)
   })
@@ -554,33 +616,33 @@ describe('attempts to get in without consent', () => {
 })
 
 describe('what consent actually decided', () => {
-  it('shows the consent screen who is asking and for what', async () => {
+  it('shows the consent screen who is asking, for what, to which account, and where', async () => {
     const session = await registerUser('screen@example.test')
     const client = await registerClient()
     const { challenge } = pkce()
 
-    const authorize = await request(server).get('/oauth/authorize').query({
-      client_id: client.client_id,
-      response_type: 'code',
-      redirect_uri: 'https://assistant.test/cb',
-      code_challenge: challenge,
-      code_challenge_method: 'S256',
-      scope: SCOPES.read,
-    })
-    const requestId = new URL(
-      authorize.headers.location!,
-      'http://localhost',
-    ).searchParams.get('request')!
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      challenge,
+      [SCOPES.read],
+    )
 
     const res = await request(server)
       .get(`/api/oauth/authorization/${requestId}`)
       .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', cookie)
 
     expect(res.status).toBe(200)
     expect(res.body.clientName).toBe('Test Assistant')
     expect(res.body.scopes).toEqual([
       { scope: SCOPES.read, description: expect.stringContaining('See your') },
     ])
+    // finding 1b: the two facts a server-side check alone cannot supply —
+    // which account is about to be connected, and where the code will be
+    // sent. Both come straight from the parked row and the session, never
+    // from anything the assistant supplied at exchange time.
+    expect(res.body.account).toBe('screen@example.test')
+    expect(res.body.redirectHost).toBe('assistant.test')
   })
 
   it('holds a read-only connection to reading, however capable the account', async () => {
@@ -742,5 +804,298 @@ describe('the link an assistant hands back', () => {
       .get(`/api/decks/${slug}`)
       .set('Authorization', `Bearer ${stranger}`)
     expect(asStranger.status).toBe(404)
+  })
+})
+
+/**
+ * Finding 1 (docs/plans/OAUTH_CONSENT_SECURITY.md): a parked request could be
+ * approved by whoever the link was forwarded to, not only by the browser
+ * that started the flow. Both variants the doc names are covered here on
+ * purpose — a suite that only tried "the attacker sends the consent link"
+ * is exactly what let the authorize-URL variant go unnoticed at wikistreets.
+ */
+describe('binding the parked request to the browser that started it', () => {
+  it('refuses approval when the attacker parks the request and hands the victim only the consent link', async () => {
+    const victim = await registerUser('victim-consent-link@example.test')
+    const client = await registerClientDirect()
+    const { challenge } = pkce()
+
+    // The attacker's own browser is the one that reached /oauth/authorize
+    // and holds the resulting cookie; the victim never had it.
+    const { requestId } = await beginAuthorize(client.client_id, challenge)
+
+    const approve = await request(server)
+      .post(`/api/oauth/authorization/${requestId}/approve`)
+      .set('Authorization', `Bearer ${victim}`)
+      .send({})
+    expect(approve.status).toBe(404)
+  })
+
+  it('cannot refuse the harder variant — the victim’s own browser starting the flow — which is what finding 1b exists for', async () => {
+    const victim = await registerUser('victim-own-browser@example.test')
+    // The attacker registers a client with a redirect URI they control.
+    const client = await registerClientDirect('https://attacker.test/cb')
+    const { challenge } = pkce()
+
+    // The victim clicks a link straight to /oauth/authorize (not the
+    // consent screen) — their own browser makes this request and
+    // legitimately ends up holding the binding cookie. The binding check
+    // alone cannot tell this apart from a genuine flow, because it is one.
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      challenge,
+      [SCOPES.read, SCOPES.write],
+      'https://attacker.test/cb',
+    )
+
+    const approve = await request(server)
+      .post(`/api/oauth/authorization/${requestId}/approve`)
+      .set('Authorization', `Bearer ${victim}`)
+      .set('Cookie', cookie)
+      .send({})
+    expect(approve.status).toBe(200)
+    expect(new URL(approve.body.redirectTo).host).toBe('attacker.test')
+  })
+
+  it('answers missing, expired, already-answered, wrong-browser and malformed ids identically', async () => {
+    const session = await registerUser('uniform-refusal@example.test')
+    const client = await registerClientDirect()
+
+    const missing = await request(server)
+      .get(`/api/oauth/authorization/${new Types.ObjectId().toString()}`)
+      .set('Authorization', `Bearer ${session}`)
+
+    const { requestId: expiredId, cookie: expiredCookie } =
+      await beginAuthorize(client.client_id, pkce().challenge)
+    await OAuthAuthorizationModel.updateOne(
+      { _id: expiredId },
+      { $set: { expiresAt: new Date(Date.now() - 1000) } },
+    )
+    const expired = await request(server)
+      .get(`/api/oauth/authorization/${expiredId}`)
+      .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', expiredCookie)
+
+    const { requestId: answeredId, cookie: answeredCookie } =
+      await beginAuthorize(client.client_id, pkce().challenge)
+    await request(server)
+      .post(`/api/oauth/authorization/${answeredId}/approve`)
+      .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', answeredCookie)
+      .send({})
+    const answered = await request(server)
+      .get(`/api/oauth/authorization/${answeredId}`)
+      .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', answeredCookie)
+
+    const { requestId: wrongBrowserId } = await beginAuthorize(
+      client.client_id,
+      pkce().challenge,
+    )
+    const wrongBrowser = await request(server)
+      .get(`/api/oauth/authorization/${wrongBrowserId}`)
+      .set('Authorization', `Bearer ${session}`)
+    // deliberately no Cookie header at all
+
+    const malformed = await request(server)
+      .get('/api/oauth/authorization/not-an-object-id')
+      .set('Authorization', `Bearer ${session}`)
+
+    for (const res of [expired, answered, wrongBrowser, malformed]) {
+      expect(res.status).toBe(missing.status)
+      expect(res.body).toEqual(missing.body)
+    }
+  })
+})
+
+/**
+ * Finding 2: a replayed authorization code was refused and nothing else
+ * happened, discarding the one useful signal it carries — the code leaked.
+ */
+describe('a replayed authorization code', () => {
+  it('revokes the tokens it minted, and refuses byte-identically to an unknown code', async () => {
+    const session = await registerUser('replay-revokes@example.test')
+    const preset = await registerClientDirect()
+    const { client, code, verifier, tokens } = await connect(
+      session,
+      undefined,
+      preset,
+    )
+
+    // The tokens from the honest exchange work before the replay.
+    const before = await mcp(tokens.access_token, {
+      jsonrpc: '2.0',
+      id: 90,
+      method: 'initialize',
+    })
+    expect(before.status).toBe(200)
+
+    const replay = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'authorization_code',
+        code,
+        code_verifier: verifier,
+        client_id: client.client_id,
+        redirect_uri: 'https://assistant.test/cb',
+      })
+    expect(replay.status).toBe(400)
+
+    const unknown = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'authorization_code',
+        code: 'this-code-was-never-issued',
+        code_verifier: verifier,
+        client_id: client.client_id,
+        redirect_uri: 'https://assistant.test/cb',
+      })
+    expect(unknown.status).toBe(replay.status)
+    expect(unknown.body).toEqual(replay.body)
+
+    // And the tokens the honest exchange produced are gone, not merely the
+    // replay refused — the standard's answer to "this code leaked".
+    const after = await mcp(tokens.access_token, {
+      jsonrpc: '2.0',
+      id: 91,
+      method: 'initialize',
+    })
+    expect(after.status).toBe(401)
+  })
+
+  it('does not burn a code on a wrong redirect URI, so a legitimate retry still works', async () => {
+    // The ordering question the plan doc raises: nothing may consume the row
+    // before every binding on it — including the redirect URI — has matched.
+    const session = await registerUser('ordering@example.test')
+    const client = await registerClientDirect()
+    const { verifier, challenge } = pkce()
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      challenge,
+    )
+    const approve = await request(server)
+      .post(`/api/oauth/authorization/${requestId}/approve`)
+      .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', cookie)
+      .send({})
+    const code = new URL(approve.body.redirectTo).searchParams.get('code')!
+
+    const wrongRedirect = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'authorization_code',
+        code,
+        code_verifier: verifier,
+        client_id: client.client_id,
+        redirect_uri: 'https://not-the-registered-callback.example/cb',
+      })
+    expect(wrongRedirect.status).toBe(400)
+
+    // The same code, presented with the correct redirect URI, still works —
+    // the wrong attempt above did not consume it.
+    const correctRedirect = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'authorization_code',
+        code,
+        code_verifier: verifier,
+        client_id: client.client_id,
+        redirect_uri: 'https://assistant.test/cb',
+      })
+    expect(correctRedirect.status).toBe(200)
+  })
+})
+
+/**
+ * Finding 3: rotation is correct (a refresh token is worth one exchange),
+ * but replaying an already-rotated-out token was silently refused, which
+ * discards the one case that signal actually means something — a race the
+ * legitimate client lost to a thief who rotated first.
+ */
+describe('replaying an already-rotated refresh token', () => {
+  it('ends the whole connection, not just the one exchange, and tells the user', async () => {
+    const session = await registerUser('rotation-reuse@example.test')
+    const preset = await registerClientDirect()
+    const { client, tokens } = await connect(session, undefined, preset)
+
+    const rotated = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+        client_id: client.client_id,
+      })
+    expect(rotated.status).toBe(200)
+
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+    // Replay the ORIGINAL, now-superseded token — the stolen-token race,
+    // presented by whichever side lost it.
+    const replay = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+        client_id: client.client_id,
+      })
+    expect(replay.status).toBe(400)
+
+    // The legitimate side's rotated-to access token is dead too: the
+    // connection was ended outright, which is the only visible trace of the
+    // attempt a user gets.
+    const afterReplay = await mcp(rotated.body.access_token, {
+      jsonrpc: '2.0',
+      id: 92,
+      method: 'initialize',
+    })
+    expect(afterReplay.status).toBe(401)
+
+    // And they are told, via whatever notification path already exists
+    // (the best-effort account mailer — MAIL_PROVIDER=log in tests, so the
+    // send lands in the console rather than an inbox).
+    expect(
+      infoSpy.mock.calls.some(([line]) =>
+        String(line).includes('was disconnected'),
+      ),
+    ).toBe(true)
+    infoSpy.mockRestore()
+  })
+
+  it('leaves an unrelated, never-rotated refresh token alone', async () => {
+    // The lookup must key on the presented token's own hash, not merely on
+    // "this client has ever rotated anything" — otherwise a second, unrelated
+    // connection from the same assistant would be collateral damage.
+    const session = await registerUser('rotation-unrelated@example.test')
+    const other = await registerUser('rotation-bystander@example.test')
+    const preset = await registerClientDirect()
+    const first = await connect(session, undefined, preset)
+    const second = await connect(other, undefined, preset)
+
+    await request(server).post('/oauth/token').type('form').send({
+      grant_type: 'refresh_token',
+      refresh_token: first.tokens.refresh_token,
+      client_id: first.client.client_id,
+    })
+    // Replay first's now-superseded token.
+    await request(server).post('/oauth/token').type('form').send({
+      grant_type: 'refresh_token',
+      refresh_token: first.tokens.refresh_token,
+      client_id: first.client.client_id,
+    })
+
+    // second's connection, made through a different client registration and
+    // never rotated, is untouched.
+    const stillWorks = await mcp(second.tokens.access_token, {
+      jsonrpc: '2.0',
+      id: 93,
+      method: 'initialize',
+    })
+    expect(stillWorks.status).toBe(200)
   })
 })

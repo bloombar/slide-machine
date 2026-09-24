@@ -19,6 +19,13 @@ export interface ConsentRequest {
   /** What the assistant called itself. A label it chose, never a verified claim. */
   clientName: string
   scopes: ConsentScope[]
+  /** The signed-in account this would connect, so a person signed into the
+   * wrong one — or someone else's session — can notice before approving. */
+  account: string
+  /** The host the code (and later, tokens) will be sent to. The one fact a
+   * careful reader can use to tell a genuine assistant from an impostor
+   * registered under the same name (docs/plans/OAUTH_CONSENT_SECURITY.md). */
+  redirectHost: string
 }
 
 export const getConsentRequest = (id: string): Promise<ConsentRequest> =>

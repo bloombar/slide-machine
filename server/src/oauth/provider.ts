@@ -61,10 +61,68 @@ import {
   rotateTokens,
   verifyToken,
 } from './store'
+import { OAuthTokenModel } from '../models/oauth-token'
 import { ALL_SCOPES, isScope, SCOPES } from './scopes'
+import { env } from '../config/env'
 
 /** Where the browser is sent to ask the user (a route in the SPA). */
 export const CONSENT_PATH = '/oauth/consent'
+
+/**
+ * The cookie that proves the browser reading, approving or denying a parked
+ * request is the one that started it (finding 1a,
+ * docs/plans/OAUTH_CONSENT_SECURITY.md). Carries `<requestId>.<nonce>`; only
+ * the nonce's HMAC is ever written down, so the cookie itself is what proves
+ * possession — matching every other secret in this subsystem.
+ *
+ * Necessary but not sufficient: it stops an attacker who parked a request and
+ * handed the *link* to someone else, but not the harder variant where the
+ * victim's own browser makes the authorize request (the binding then passes
+ * honestly, because it is genuinely the same browser). That variant is what
+ * `GET /oauth/authorization/:id` returning the account and redirect host
+ * (routes/oauth.ts) exists to catch instead.
+ */
+export const CONSENT_COOKIE = 'sm_oauth_consent'
+
+/**
+ * Scoped to `/api/oauth` — where the three person-facing consent endpoints
+ * actually answer (routes/oauth.ts) — rather than `/oauth`, which is the
+ * machine-facing SDK router mounted at the application root and never reads
+ * this cookie. A path of `/` would ride along on every request to the
+ * origin, including ones a request logger or APM might capture.
+ *
+ * SameSite=Lax rather than Strict: the one legitimate cross-site moment in
+ * this flow is the assistant's own redirect landing the user on
+ * `/oauth/authorize`, a top-level navigation Lax still allows. It still keeps
+ * the cookie off cross-site fetch/XHR, which is the exposure that matters.
+ */
+const consentCookieOptions = {
+  httpOnly: true,
+  sameSite: 'lax',
+  secure: env.NODE_ENV === 'production',
+  path: '/api/oauth',
+} as const
+
+/** Sets the binding cookie for a freshly parked request. */
+const setConsentCookie = (
+  res: Response,
+  requestId: string,
+  nonce: string,
+): void => {
+  res.cookie(CONSENT_COOKIE, `${requestId}.${nonce}`, {
+    ...consentCookieOptions,
+    maxAge: CONSENT_REQUEST_TTL_SECONDS * 1000,
+  })
+}
+
+/**
+ * Clears it once the flow has an answer. `clearCookie` needs the same
+ * options (minus `maxAge`) or the browser keeps the cookie — the same Express
+ * gotcha routes/auth.ts already works around for the refresh cookie.
+ */
+export const clearConsentCookie = (res: Response): void => {
+  res.clearCookie(CONSENT_COOKIE, consentCookieOptions)
+}
 
 /**
  * Clients register themselves (RFC 7591) and are stored as they registered.
@@ -123,6 +181,36 @@ const requestedScopes = (scopes: string[] | undefined): string[] => {
   return asked.length ? asked : [SCOPES.read]
 }
 
+/**
+ * If `codeHash` names a grant that was already redeemed, revokes exactly the
+ * tokens that redemption produced (finding 2,
+ * docs/plans/OAUTH_CONSENT_SECURITY.md).
+ *
+ * Called whenever an exchange fails, which covers far more than genuine
+ * replays — an unknown code, an expired one, and a wrong redirect URI all end
+ * up here too. Those are told apart by this query alone: `redeemedAt` only
+ * exists on a row that a *successful* exchange already consumed, so a code
+ * that is merely wrong or not-yet-usable finds nothing and nothing happens.
+ * A code presented a second time after it worked once is the one case that
+ * matches, and that is a leak regardless of which caller is holding it now.
+ */
+const revokeReplayedGrant = async (
+  codeHash: string,
+  clientId: string,
+): Promise<void> => {
+  const spent = await OAuthAuthorizationModel.findOne({
+    codeHash,
+    clientId,
+    redeemedAt: { $exists: true },
+  })
+  if (!spent) return
+  await Promise.all(
+    [spent.issuedAccessTokenHash, spent.issuedRefreshTokenHash]
+      .filter((hash): hash is string => Boolean(hash))
+      .map(tokenHash => OAuthTokenModel.deleteOne({ tokenHash })),
+  )
+}
+
 export const provider: OAuthServerProvider = {
   clientsStore,
 
@@ -140,6 +228,10 @@ export const provider: OAuthServerProvider = {
     params: AuthorizationParams,
     res: Response,
   ): Promise<void> => {
+    // finding 1a: a nonce this browser alone will hold, so approving or
+    // denying the request later can be checked against the browser that
+    // began it rather than only against a guessable-enough request id.
+    const nonce = generateToken()
     const request = await OAuthAuthorizationModel.create({
       clientId: client.client_id,
       // Already validated against the client's registration by the SDK's
@@ -149,9 +241,11 @@ export const provider: OAuthServerProvider = {
       scopes: requestedScopes(params.scopes),
       codeChallenge: params.codeChallenge,
       resource: params.resource?.href,
+      browserNonceHash: hashToken(nonce),
       expiresAt: new Date(Date.now() + CONSENT_REQUEST_TTL_SECONDS * 1000),
     })
 
+    setConsentCookie(res, request._id.toString(), nonce)
     res.redirect(`${CONSENT_PATH}?request=${request._id.toString()}`)
   },
 
@@ -176,6 +270,15 @@ export const provider: OAuthServerProvider = {
    * atomic operation that reads the row, and a row already carrying one does
    * not match. A replayed code is a stolen session, so this cannot be a
    * read-then-write with a gap in the middle.
+   *
+   * The redirect URI and resource checks are part of that same atomic filter
+   * rather than run afterward (finding 2, docs/plans/OAUTH_CONSENT_SECURITY.md):
+   * a version that stamped `redeemedAt` first and validated second let anyone
+   * holding a code burn it with a wrong redirect URI — a repeatable denial of
+   * connection for the legitimate client, since the row never gets a second
+   * chance. PKCE has no such gap: the SDK's token handler calls
+   * `challengeForAuthorizationCode` (below) first, which reads the row
+   * without writing to it.
    */
   exchangeAuthorizationCode: async (
     client: OAuthClientInformationFull,
@@ -184,28 +287,38 @@ export const provider: OAuthServerProvider = {
     redirectUri?: string,
     resource?: URL,
   ): Promise<OAuthTokens> => {
+    const codeHash = hashToken(authorizationCode)
     const grant = await OAuthAuthorizationModel.findOneAndUpdate(
       {
-        codeHash: hashToken(authorizationCode),
+        codeHash,
         clientId: client.client_id,
         redeemedAt: { $exists: false },
         expiresAt: { $gt: new Date() },
+        // OAuth 2.1 requires the redirect URI to match the one the flow began
+        // with, when the request carried one at all.
+        ...(redirectUri !== undefined ? { redirectUri } : {}),
+        // RFC 8707: a token minted for one resource must not be spendable at
+        // another. A grant with no resource on file is unrestricted, so only
+        // a genuine mismatch excludes the row.
+        ...(resource
+          ? {
+              $or: [
+                { resource: { $exists: false } },
+                { resource: resource.href },
+              ],
+            }
+          : {}),
       },
       { $set: { redeemedAt: new Date() } },
     )
     if (!grant?.userId) {
+      // Nothing was consumed above — either the code never matched at all, or
+      // it did and one of the bindings did not, and either way the row is
+      // untouched and can still be exchanged correctly later. What is left to
+      // rule out is the other case: a code that really was already spent,
+      // which is evidence of a leak regardless of who is asking now.
+      await revokeReplayedGrant(codeHash, client.client_id)
       throw new InvalidGrantError('Authorization code is not valid')
-    }
-
-    // OAuth 2.1 requires the redirect URI to match the one the flow began
-    // with, when the request carried one at all.
-    if (redirectUri !== undefined && redirectUri !== grant.redirectUri) {
-      throw new InvalidGrantError('Redirect URI does not match the request')
-    }
-    // RFC 8707: a token minted for one resource must not be spendable at
-    // another. Mismatches are refused rather than quietly re-scoped.
-    if (resource && grant.resource && resource.href !== grant.resource) {
-      throw new InvalidGrantError('Resource does not match the request')
     }
 
     const tokens = await issueTokens({
@@ -215,6 +328,18 @@ export const provider: OAuthServerProvider = {
       scopes: grant.scopes,
       resource: grant.resource,
     })
+
+    // finding 2: record what this exchange produced, so a replay of this same
+    // code can revoke exactly these tokens rather than only being refused.
+    await OAuthAuthorizationModel.updateOne(
+      { _id: grant._id },
+      {
+        $set: {
+          issuedAccessTokenHash: hashToken(tokens.accessToken),
+          issuedRefreshTokenHash: hashToken(tokens.refreshToken),
+        },
+      },
+    )
 
     return {
       access_token: tokens.accessToken,

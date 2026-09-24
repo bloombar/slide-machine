@@ -1202,3 +1202,70 @@ body, not its prose, so it needed no changes either.
 Chose the layout fix over shortening the label, since the label itself ("Connected AI assistants") was
 picked deliberately to match the guide's own terminology and the existing `profile.assistantsSection`
 heading, and prior art for exactly this situation already existed in the codebase.
+
+## OAuth consent security: binding cookie, replay revocation, rotation reuse detection (2026-09-24)
+
+Fixes docs/plans/OAUTH_CONSENT_SECURITY.md's three findings. Judgment calls the brief left open:
+
+**The binding cookie is scoped to `/api/oauth`, not `/oauth`, despite the brief saying `/oauth`.** The three
+person-facing consent endpoints (`GET`/`approve`/`deny`) answer under `/api/oauth/authorization/...` —
+`oauthConsentRouter` is mounted under `/api` in `app.ts`. `/oauth` is the machine-facing SDK router at the
+application root (`/oauth/authorize`, `/oauth/token`, ...) and never reads this cookie. A `Path=/oauth`
+cookie is not a prefix of `/api/oauth/...`, so it would never have been sent on the requests that need it.
+Scoping to `/api/oauth` keeps the brief's actual goal — narrower than `/`, and off everything that is not
+this flow — while working with the paths this codebase actually has.
+
+**Finding 2's token revocation is token-set-level, not `disconnect(userId, clientId)`.** The plan doc names
+`disconnect` as the simpler option and a token-set-level revocation as "tighter"; chose tighter, because
+`disconnect` would tear down every other live token that (user, client) pair holds — including a second,
+unrelated session from the same assistant that never touched the replayed code. The grant row now records
+the hash of the access and refresh token its one exchange minted (`issuedAccessTokenHash` /
+`issuedRefreshTokenHash` on `OAuthAuthorizationModel`), and a replay deletes exactly those two rows.
+
+**Finding 2's ordering question: confirmed the brief's suspicion was right.** Before the fix,
+`exchangeAuthorizationCode` stamped `redeemedAt` in the same atomic update that read the row, then checked
+`redirectUri` and `resource` *afterward* — so a wrong redirect URI (or resource) consumed the code before
+being refused, and a legitimate retry with the correct redirect URI then found the code already spent. PKCE
+was already safe: the SDK calls `challengeForAuthorizationCode` first, which only reads. Fix: the redirect
+URI and resource conditions are now part of the same `findOneAndUpdate` filter that claims the row, so a
+mismatch on either simply fails to match — nothing is consumed, and a later correct exchange still works.
+Verified by deleting the fix (reverting to filter-then-check) and confirming the new "does not burn a code on
+a wrong redirect URI" integration test goes red (400 on the correct retry, where 200 was expected); restored.
+
+**Finding 3's notification path is the existing best-effort account mailer** (`lib/mailer.ts`'s `sendMail` /
+`mailerAvailable`), following the exact shape of `auth/emails.ts`'s verification and password-reset mail:
+silent on failure, `MAIL_PROVIDER=log` in tests and dev. No dedicated in-app notification exists for this
+kind of event and the brief said not to build one if nothing fits, so mail is what shipped.
+
+**Finding 3's reuse detection keeps exactly one generation**, per the brief: a new refresh token's row
+carries `previousTokenHash` (the HMAC of the token it replaced). Presenting a token that is neither live nor
+named as someone's `previousTokenHash` is treated as ordinary unknown/expired — only a token one hop back
+in the chain is recognised as a theft signal, not the whole history.
+
+**Finding 1b implements two of the plan doc's three suggested additions (account, redirect host), not the
+third (client registration age).** The brief's own instructions for finding 1b named only the first two
+("Return the signed-in account ... and the redirect URI's host"); the plan doc's fuller list also suggested
+showing `client_id_issued_at`. Left out as outside the brief's explicit scope for this slice.
+
+**Test-suite registration budget.** The SDK's `clientRegistrationHandler` rate-limits `/oauth/register` to 20
+requests/hour/IP by default, and `oauth-mcp.test.ts`'s pre-existing tests were already at exactly that
+ceiling. New tests use a `registerClientDirect` helper that calls `provider.clientsStore.registerClient`
+in-process, bypassing the HTTP endpoint's limiter — appropriate here because none of the new tests are about
+registration itself, only about authorize/approve/exchange, so the in-process call is faithful to what is
+under test.
+
+**e2e: not added, and not run as a full-suite regression check.** No existing e2e spec touches the MCP OAuth
+consent flow (grepped for "oauth"/"consent" across `e2e/tests`; the one hit, `public-homepage.spec.ts`, is
+about Google sign-in review, unrelated). This slice's actual risk surface — cookie binding, atomic
+claim-and-check ordering, replay/reuse revocation — is exercised far more faithfully by the 34-case
+integration suite (a real Express server against a real test Mongo, with real `Set-Cookie` handling) than a
+browser driving the already-unit-tested `OAuthConsentPage`. Building a new Playwright spec for this would
+mean re-deriving PKCE/cookie plumbing Playwright has no special leverage over, for a slice already proven at
+the layer where the security properties actually live. Judged disproportionate and skipped, per the brief's
+own allowance to say so explicitly rather than skip silently.
+
+**Regression found and fixed outside the brief's named files:** `server/test/integration/agent-audit.test.ts`
+has its own inline OAuth `connect()` helper (separate from `oauth-mcp.test.ts`'s) that did not forward the
+new binding cookie, so all five of its tests failed with `TypeError: Invalid URL` once the binding check
+landed. Fixed by forwarding the `Set-Cookie` value the same way `oauth-mcp.test.ts` does. Not in the brief's
+file list, but necessary for `npm run test:integration` to pass — reported here rather than silently patched.
