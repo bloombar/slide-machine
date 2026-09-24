@@ -1,34 +1,60 @@
 # OAuth consent: three security findings
 
-Status: **all three fixed**, after two rework rounds. Written 2026-09-19;
-first pass fixed 2026-09-24 on `fix/oauth-consent-binding`; two independent
-reviews of that pass found that two of the three fixes did not hold up under
-real HTTP traffic (one made things worse for honest clients), and a second
-pass the same day fixed the underlying causes. A third review of the second
-pass — reading the code rather than running new traffic — found five further
-defects, all inside the family/grace machinery the second pass introduced:
-a required field with no migration path for tokens issued before it existed,
-a stamp gated behind the wrong condition, a retention window too short for
-the reuse detection it was meant to serve, a revocation loop that could stop
-having only partly finished, and a false theft notice on a no-op teardown. A
-third pass the same day fixed those. What follows describes the **current**
-state; `docs/DECISIONS.md` keeps the record of what each earlier pass got
-wrong and why, since that reasoning is worth keeping even though the code it
-describes no longer exists.
+Status: **all three addressed**; finding 1 fixed and verified, findings 2/3
+deliberately simplified after a fourth review. Written 2026-09-19; first pass
+fixed 2026-09-24 on `fix/oauth-consent-binding`; two independent reviews of
+that pass found that two of the three fixes did not hold up under real HTTP
+traffic (one made things worse for honest clients), and a second pass the
+same day fixed the underlying causes. A third review of the second pass —
+reading the code rather than running new traffic — found five further
+defects, all inside a **token-family and rotation-grace** design the second
+pass introduced for findings 2/3: a required field with no migration path for
+tokens issued before it existed, a stamp gated behind the wrong condition, a
+retention window too short for the reuse detection it was meant to serve, a
+revocation loop that could stop having only partly finished, and a false
+theft notice on a no-op teardown. A third pass the same day fixed those. A
+**fourth review**, in fresh context, found two more defects in the same
+machinery plus five further issues nearby (a regression in the
+connected-assistants list, an unhandled-rejection crash risk, an unbounded
+consent-cookie name space, a timing oracle, and an unauthenticated-account
+gap in `approve`/`deny`) — three consecutive reviews each finding a fresh
+defect in the same design being the signal that the design itself, not the
+latest patch, was the problem.
+
+**That review's resolution (2026-09-24, same branch): the token-family
+design was dropped.** Findings 2 and 3 now both end a connection with the
+plan doc's own original recommendation, `disconnect(userId, clientId)` (see
+"What to do" under each finding below, and `store.ts`'s `revokeConnection`),
+rather than the finer-grained per-grant "family" the second pass built. The
+rotation-grace mechanism itself (`usableUntil`/`supersededAt`, tolerating an
+honest client's retry without punishing it) is unrelated to the family
+question and is kept — it fixes a real, separately-demonstrated bug (round
+1's root cause B). What is gone is only the machinery that tried to scope a
+teardown to one compromised grant rather than the whole connection. The
+accepted cost, demonstrated concretely by a reviewer: a user holding two
+separate connections to the same assistant (the same `client_id`) loses both
+when either one's token is reused. Worse than the family design's blast
+radius; better than production before this branch, which had no automatic
+teardown for either finding at all. See `docs/DECISIONS.md`'s "Findings 2/3
+rescope" entry for the seven findings that prompted this and the reasoning
+in full.
 
 - **Finding 1.** Both parts. (a): `provider.authorize` sets a browser-binding
-  cookie, `__Host-` prefixed and named after the request id it belongs to
-  (`consentCookieName`), `Path=/`. The `__Host-` prefix is load-bearing, not
+  cookie, `__Host-` prefixed and bounded to a fixed number of slots rather
+  than truly unique per request (`consentCookieName`; the slotting was added
+  in the rescope above — see finding 5 there — an unauthenticated
+  `GET /oauth/authorize` hit repeatedly otherwise left an ever-growing set of
+  never-cleared cookies), `Path=/`. The `__Host-` prefix is load-bearing, not
   decoration: a merely `httpOnly`/`SameSite=Lax` cookie can still be
   *planted* — an attacker parks their own flow and hands the victim the
   resulting cookie's value to set for themselves, since cookies are not
   origin-isolated by default — and both reviewers demonstrated exactly that
   against the first pass. `__Host-` closes it: only a same-origin response
-  can ever set the cookie at all. Naming it per request (rather than one
-  fixed name) stops a second parked flow from silently overwriting the
-  first's cookie. `GET`/`approve`/`deny` in `routes/oauth.ts` fold the
-  binding check into the same query that already refused
-  missing/expired/already-answered requests, so all refusals stay identical.
+  can ever set the cookie at all. `GET`/`approve`/`deny` in `routes/oauth.ts`
+  fold the binding check into the same query that already refused
+  missing/expired/already-answered requests, so all refusals stay identical;
+  `approve`/`deny` also now refuse outright for a session naming a deleted
+  account (finding 7 of the rescope, below), which the `GET` alone used to.
   (b): the `GET` returns the signed-in account and the redirect **origin**
   (falling back to the whole URI when an origin is not a meaningful answer —
   see finding-1b's D1 note in `docs/DECISIONS.md`), and refuses outright
@@ -38,35 +64,38 @@ describes no longer exists.
   a person reading the screen has to work with.
 - **Finding 2.** `exchangeAuthorizationCode` puts the redirect URI and
   resource checks inside the same atomic `findOneAndUpdate` that claims the
-  row, so nothing is consumed until every binding matches. A replay of an
-  already-redeemed code ends the whole **token family** it minted — every
-  access and refresh token descended from that one authorization grant,
-  however many times they have since rotated — rather than snapshotting two
-  token hashes onto the grant row, which the first pass did and which a
-  concurrent double exchange or an intervening rotation could make stale
-  before it was ever read. The teardown converges on "nothing left in this
-  family" rather than stopping at the first attempt that deleted something,
-  and fires no notice at all when nothing was actually revoked. See
-  `docs/DECISIONS.md` root cause A and the third pass's must-fix 4/5.
-- **Finding 3.** `rotateTokens` no longer deletes a superseded refresh token
-  immediately; it marks the row superseded and shortens a dedicated
+  row, so nothing is consumed until every binding matches — this part is
+  unchanged and still verified. A replay of an already-redeemed code ends the
+  whole **connection** it minted tokens for (`revokeConnection(userId,
+  clientId)`, store.ts) rather than the narrower per-grant "token family" an
+  earlier pass built (see the rescope above). The revocation is
+  fire-and-forget from the caller's point of view (finding 6 of the rescope):
+  awaiting it — including a bounded retry for the concurrent-double-exchange
+  race — put real, measurable latency on a refusal, but only for codes that
+  really had been redeemed before, which is exactly the timing oracle root
+  cause F2 already avoids for the notification email. Firing it and throwing
+  immediately closes that gap; the retry itself no longer needs to be
+  fast, since nothing is waiting on it. See `docs/DECISIONS.md`'s "Findings
+  2/3 rescope" entry.
+- **Finding 3.** `rotateTokens` still does not delete a superseded refresh
+  token immediately; it marks the row superseded and shortens a dedicated
   `usableUntil` field to a grace window, mirroring `auth/refresh-store.ts`'s
-  own session-rotation grace. A presentation inside the window is an
-  ordinary retry (the MCP SDK client has no single-flight around refresh); a
-  presentation after it ends the whole token family and mails the account a
-  best-effort notice, with an unconditional log line as a trace independent
-  of whether mail is configured at all. Retention (`expiresAt`, read by the
-  TTL index) is left at its original value rather than shortened alongside
-  spendability, so a superseded row survives long enough for a realistic
-  replay — days, not the roughly one minute the second pass's design gave
-  it. `familyId` and `usableUntil` are both optional on the model: a refresh
-  token issued before either field existed rotates without failing, upgrades
-  to a real family on that rotation, and falls back to the coarser
-  `disconnect` only for the one replay it cannot yet protect precisely. See
-  `docs/DECISIONS.md` root causes A and B, and the third pass's must-fix
-  1/2/3.
+  own session-rotation grace — this part is unchanged. A presentation inside
+  the window is an ordinary retry (the MCP SDK client has no single-flight
+  around refresh); a presentation after it ends the whole connection
+  (`revokeConnection`, not a token family — see the rescope above) and mails
+  the account a best-effort notice, with an unconditional log line as a trace
+  independent of whether mail is configured at all. Retention (`expiresAt`,
+  read by the TTL index) is left at its original value rather than shortened
+  alongside spendability, so a superseded row survives long enough for a
+  realistic replay — days, not the roughly one minute an earlier design gave
+  it. The connected-assistants list (`connectionsFor`) filters on
+  `usableUntil` as well as `expiresAt` for exactly this reason (finding 1 of
+  the rescope) — without it, a superseded row's long retention window made a
+  disconnected or individually-revoked assistant keep showing as connected
+  for up to 182 days, a regression the family/grace design introduced.
 
-See `docs/DECISIONS.md` for the full record of what changed across all three
+See `docs/DECISIONS.md` for the full record of what changed across all four
 passes, the judgment calls made along the way, and the residual limits that
 are now written down rather than left implicit.
 

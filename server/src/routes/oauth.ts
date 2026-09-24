@@ -208,6 +208,31 @@ const browserNonceHash = (req: Request, id: string): string => {
 }
 
 /**
+ * Refuses to act for a session naming an account that no longer exists
+ * (root cause D2, finding 7): the only way `requireAuth` can verify a JWT yet
+ * name an account that does not load is the account having been deleted
+ * after the token was signed.
+ *
+ * Originally only the `GET` below carried this check, added for D2's own
+ * reason — rendering the consent screen for a ghost account affirmed a
+ * connection that could never actually complete. `approve` and `deny` need
+ * it just as much and did not have it (finding 7,
+ * docs/plans/OAUTH_CONSENT_SECURITY.md): `approve` stamps `userId:
+ * req.userId` onto the grant with nothing checking that id still names
+ * anyone, minting a real, redeemable authorization code for a deleted
+ * account. `deny` does not stamp anything, but refusing it too keeps every
+ * action a dead session can still trigger uniformly refused, rather than
+ * "reads and denies are refused, approvals are not" being a fact only this
+ * file's plumbing explains.
+ */
+const requireLiveUser = async (req: Request): Promise<void> => {
+  const user = await UserModel.findById(req.userId)
+  if (!user) {
+    throw new HttpError(401, 'unauthorized', 'Sign in to continue')
+  }
+}
+
+/**
  * Loads a pending request, refusing anything that is not one.
  *
  * Already-approved, expired and missing requests are refused identically —
@@ -308,11 +333,14 @@ oauthConsentRouter.get(
     if (!user) {
       // The only way `requireAuth` can verify a token yet name an account
       // that does not load: a session whose account was deleted after the
-      // JWT was signed (root cause D2). The earlier version rendered a
-      // hardcoded English "your account" spliced into a translated
-      // sentence — wrong on its own — and, worse, *affirmed* that a
-      // connection was about to happen instead of refusing one. Treat it
-      // exactly like any other invalid session.
+      // JWT was signed (root cause D2, and see `requireLiveUser` above for
+      // why `approve`/`deny` need the same check). The earlier version
+      // rendered a hardcoded English "your account" spliced into a
+      // translated sentence — wrong on its own — and, worse, *affirmed*
+      // that a connection was about to happen instead of refusing one.
+      // Treat it exactly like any other invalid session. (Fetched inline
+      // here rather than via `requireLiveUser`, which only checks existence
+      // — this handler needs the loaded document's `email` regardless.)
       throw new HttpError(401, 'unauthorized', 'Sign in to continue')
     }
 
@@ -340,6 +368,9 @@ oauthConsentRouter.post(
   '/oauth/authorization/:id/approve',
   requireAuth,
   async (req, res) => {
+    // finding 7: without this, a session for a deleted account could still
+    // mint a real, redeemable authorization code stamped with that dead id.
+    await requireLiveUser(req)
     const request = await pendingRequest(req, String(req.params.id))
 
     const code = generateToken()
@@ -386,6 +417,9 @@ oauthConsentRouter.post(
   '/oauth/authorization/:id/deny',
   requireAuth,
   async (req, res) => {
+    // finding 7: kept uniform with `approve` — a dead session refuses here
+    // too, rather than only where it happens to stamp something.
+    await requireLiveUser(req)
     const request = await pendingRequest(req, String(req.params.id))
     await OAuthAuthorizationModel.deleteOne({ _id: request._id })
 

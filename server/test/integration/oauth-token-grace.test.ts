@@ -66,10 +66,11 @@ beforeEach(async () => {
 
 describe('a token rotated within its own last moments, under a real grace window', () => {
   it('is marked superseded even though there is nothing to shorten', async () => {
-    const tokens = await issueTokens(
-      { clientId: 'client-a', userId, scopes: [SCOPES.read] },
-      'family-a',
-    )
+    const tokens = await issueTokens({
+      clientId: 'client-a',
+      userId,
+      scopes: [SCOPES.read],
+    })
 
     // The token's own life is shorter than the (real, positive) grace
     // window — must-fix 2's exact condition: `usableUntil > graceEnd` is
@@ -98,8 +99,11 @@ describe('a token rotated within its own last moments, under a real grace window
     const replay = await rotateTokens(tokens.refreshToken, 'client-a')
     expect(replay).toBeNull()
 
+    // The whole connection is gone, not just this one exchange refused —
+    // `revokeConnection`'s reuse teardown (finding 3).
     const afterReplay = await OAuthTokenModel.countDocuments({
-      familyId: 'family-a',
+      userId,
+      clientId: 'client-a',
     })
     expect(afterReplay).toBe(0)
   })

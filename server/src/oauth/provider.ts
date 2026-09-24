@@ -54,12 +54,13 @@ import { OAuthClientModel } from '../models/oauth-client'
 import { OAuthAuthorizationModel } from '../models/oauth-authorization'
 import {
   CONSENT_REQUEST_TTL_SECONDS,
-  endFamily,
   generateToken,
   hashToken,
   issueTokens,
+  revokeConnection,
   revokeToken,
   rotateTokens,
+  trackSideEffect,
   verifyToken,
 } from './store'
 import { ALL_SCOPES, isScope, SCOPES } from './scopes'
@@ -84,9 +85,51 @@ export const CONSENT_PATH = '/oauth/consent'
  * attack case it cannot be told apart from, with no way to recover except
  * starting over. Naming the cookie after the request id it belongs to means
  * two concurrently parked flows simply hold two different cookies.
+ *
+ * **Bounded to a fixed number of slots** (finding 5,
+ * docs/plans/OAUTH_CONSENT_SECURITY.md), rather than one truly unique name
+ * per request: `GET /oauth/authorize` is unauthenticated, and only the one
+ * flow that gets *answered* ever clears its own cookie (`clearConsentCookie`)
+ * — an abandoned or repeatedly retried flow just leaves its cookie sitting
+ * there for the full 15-minute window. Unbounded, that is a cookie per hit,
+ * which at the browser's per-domain cap starts evicting cookies this origin
+ * actually needs (`sm_refresh`, notably), and a large enough `Cookie` header
+ * can exceed Node's default 16KB `maxHeaderSize`. This handler has no `req`
+ * to inspect what a given browser already holds — the SDK's `authorize` only
+ * passes `res` — so the fix is to bound the *name space* instead of tracking
+ * occupancy: every request id hashes onto one of `CONSENT_COOKIE_SLOTS`
+ * cookie names, so however many `GET /oauth/authorize` hits a browser
+ * accumulates, it never holds more than that many of these cookies.
+ *
+ * The accepted cost is collision: two flows parked close together whose
+ * request ids happen to land on the same slot share one cookie, and the
+ * later one silently overwrites the earlier's. That reproduces root cause
+ * C4's original symptom (the earlier flow now looks "not mine" to its own
+ * browser and gets the ordinary uniform refusal) for whichever unlucky pair
+ * collides, rather than eliminating it outright — a real trade, not a free
+ * fix. With enough slots relative to how many flows one browser realistically
+ * parks at once (rarely more than one or two — a second tab, a double-clicked
+ * Connect button), a collision is uncommon, and unlike the unbounded scheme
+ * this replaces, the cookie *count* now has a hard ceiling regardless of how
+ * many requests are made.
  */
+const CONSENT_COOKIE_SLOTS = 64
+
+/** A slot number for `requestId`, stable across calls and not required to be
+ * cryptographically strong — the slot itself carries no secret, only the
+ * count of distinct cookie names needs bounding. Works for any string,
+ * including a malformed or attacker-supplied `:id` route param, so a bad
+ * input degrades to "some slot" rather than throwing. */
+const consentCookieSlot = (requestId: string): number => {
+  let hash = 0
+  for (let i = 0; i < requestId.length; i++) {
+    hash = (hash * 31 + requestId.charCodeAt(i)) >>> 0
+  }
+  return hash % CONSENT_COOKIE_SLOTS
+}
+
 export const consentCookieName = (requestId: string): string =>
-  `__Host-sm_oauth_consent_${requestId}`
+  `__Host-sm_oauth_consent_${consentCookieSlot(requestId)}`
 
 /**
  * Cookie attributes for the binding cookie (finding 1a / root cause C1,
@@ -206,8 +249,9 @@ const requestedScopes = (scopes: string[] | undefined): string[] => {
 
 /**
  * If `codeHash` names a grant that was already redeemed, ends the whole
- * token family that redemption produced (finding 2 / root cause A, rework
- * round 1 of docs/plans/OAUTH_CONSENT_SECURITY.md).
+ * connection that redemption produced (finding 2, rather than only the one
+ * grant — see `revokeConnection`'s own docstring in store.ts for why the
+ * earlier, finer-grained "token family" design was dropped).
  *
  * Called whenever an exchange fails, which covers far more than genuine
  * replays — an unknown code, an expired one, and a wrong redirect URI all end
@@ -217,16 +261,18 @@ const requestedScopes = (scopes: string[] | undefined): string[] => {
  * A code presented a second time after it worked once is the one case that
  * matches, and that is a leak regardless of which caller is holding it now.
  *
- * `familyId` is `codeHash` itself (see `exchangeAuthorizationCode` and the
- * schema note on `OAuthAuthorizationDb`), so it is always known here even
- * when nothing was ever issued — closing the round-1 gap where a genuinely
+ * **Not awaited by its caller** (finding 6) — see the call site below.
+ * `codeHash` is enough to find the spent grant's `userId` even when nothing
+ * was ever issued to it yet, closing the round-1 gap where a genuinely
  * concurrent double exchange's loser found nothing to revoke because the
  * winner had not finished writing a hash snapshot yet. The bounded retry
  * below covers the residual case: the loser can still reach this function
  * before the winner's `issueTokens` call (a second, later operation) has
- * finished writing the tokens that need revoking.
+ * finished writing the tokens that need revoking. Being fire-and-forget now,
+ * rather than awaited with a sleep-bearing retry on the hot path, is what
+ * makes that retry affordable at all — see the call site.
  */
-const revokeFamilyIfRedeemed = async (
+const revokeConnectionIfRedeemed = async (
   codeHash: string,
   clientId: string,
 ): Promise<void> => {
@@ -236,7 +282,7 @@ const revokeFamilyIfRedeemed = async (
     redeemedAt: { $exists: true },
   })
   if (!spent?.userId) return
-  await endFamily(codeHash, spent.userId.toString(), clientId, {
+  await revokeConnection(spent.userId.toString(), clientId, {
     attempts: 5,
     delayMs: 20,
   })
@@ -348,25 +394,26 @@ export const provider: OAuthServerProvider = {
       // untouched and can still be exchanged correctly later. What is left to
       // rule out is the other case: a code that really was already spent,
       // which is evidence of a leak regardless of who is asking now.
-      await revokeFamilyIfRedeemed(codeHash, client.client_id)
+      //
+      // Not awaited (finding 6): awaiting the revocation here — a delete,
+      // plus a bounded retry with a sleep between attempts to cover the
+      // concurrent-double-exchange race — put 40-100ms on this refusal, but
+      // only for a code that really was redeemed before. That gap is
+      // measurable, and it re-creates exactly the timing oracle root cause F2
+      // already avoids for the notification email a few lines further in.
+      // Firing it and throwing immediately closes the gap; `trackSideEffect`
+      // (store.ts) is what lets a test still wait for it deterministically.
+      trackSideEffect(revokeConnectionIfRedeemed(codeHash, client.client_id))
       throw new InvalidGrantError('Authorization code is not valid')
     }
 
-    const tokens = await issueTokens(
-      {
-        clientId: client.client_id,
-        userId: grant.userId.toString(),
-        // The scopes the user approved, not the ones asked for now.
-        scopes: grant.scopes,
-        resource: grant.resource,
-      },
-      // The token family this grant's code founds. No second write needed
-      // to record it anywhere — `codeHash` already is the family id, known
-      // before this call and never changing, which is what makes a replay's
-      // revocation reachable even in the race `revokeFamilyIfRedeemed`
-      // documents above.
-      codeHash,
-    )
+    const tokens = await issueTokens({
+      clientId: client.client_id,
+      userId: grant.userId.toString(),
+      // The scopes the user approved, not the ones asked for now.
+      scopes: grant.scopes,
+      resource: grant.resource,
+    })
 
     return {
       access_token: tokens.accessToken,

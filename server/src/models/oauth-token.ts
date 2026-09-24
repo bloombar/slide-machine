@@ -29,31 +29,6 @@ export interface OAuthTokenDb {
   /** RFC 8707 resource this token is valid for, when the client named one. */
   resource?: string
   /**
-   * Groups every access and refresh token descended from one authorization
-   * grant (rework round 1's root cause A, docs/plans/OAUTH_CONSENT_SECURITY.md).
-   * For a grant's first token pair this is the authorization code's own
-   * `codeHash`; rotation (`rotateTokens`) carries the presented token's
-   * `familyId` forward onto its replacement, so the value is identical across
-   * any number of rotations. Revoking a compromised chain is then
-   * `deleteMany({ familyId })` — it survives rotation (unlike a hash
-   * snapshot taken once and never updated) and never reaches an unrelated
-   * connection through the same (user, client) pair (unlike `disconnect`,
-   * which is keyed on exactly that pair and was shown to take out a
-   * bystander's live connection in rework round 1's review).
-   *
-   * **Optional, not required** (rework round 2's must-fix 1): every row this
-   * server writes from here on carries one, but a row written before this
-   * field existed carries none, and refresh tokens live 182 days — long
-   * enough that "no migration, fails closed" (the right call for the much
-   * shorter-lived `browserNonceHash`) would instead mean an unpredictable mix
-   * of forced re-auths and, on one specific timing, an uncaught 500 for every
-   * pre-existing connection for months after a deploy. `rotateTokens` upgrades
-   * a legacy row to a real family on its next rotation; `endFamily` falls back
-   * to `disconnect` for the rarer case where one needs revoking before that
-   * happens.
-   */
-  familyId?: string
-  /**
    * Set on a `kind: 'refresh'` row the moment it is rotated away from,
    * instead of being deleted immediately (finding 3 / root cause B). Read
    * together with `usableUntil`: presenting the token again before that
@@ -79,8 +54,8 @@ export interface OAuthTokenDb {
    * refresh token) and only `usableUntil` moves, so a superseded row survives
    * long enough for a realistic replay to still find it.
    *
-   * Optional for the same reason `familyId` is: a row written before this
-   * field existed has none, and the spendability check falls back to
+   * Optional: a row written before this field existed has none, and the
+   * spendability check (`rotateTokens`, `connectionsFor`) falls back to
    * `expiresAt` for those. Only meaningful on `kind: 'refresh'` rows.
    */
   usableUntil?: Date
@@ -100,7 +75,6 @@ const oauthTokenSchema = new Schema<OAuthTokenDb>({
   },
   scopes: { type: [String], required: true },
   resource: { type: String },
-  familyId: { type: String, index: true },
   supersededAt: { type: Date },
   usableUntil: { type: Date },
   createdAt: { type: Date, default: Date.now },

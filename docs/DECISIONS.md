@@ -1599,3 +1599,114 @@ unfixed this round: it is in `provider.ts`, not the `store.ts` machinery this ro
 real fix (a cap, a sweep of stale cookies, or reusing a slot per browser) is more design than a final round
 should absorb, and there is no evidence it has been exercised in practice. Flagging it here rather than
 silently deferring it — a cap or sweep is the natural next step if it ever is.
+
+## Findings 2/3 rescope: the token-family design is gone, replaced by `disconnect(userId, clientId)` (2026-09-24)
+
+A fourth review, in fresh context — reading the code rather than driving new HTTP traffic, same as round 2's
+review — of the family/grace machinery rework round 2 had just finished patching. Three consecutive reviews
+each finding a fresh defect in the same design is the signal this round treats as decisive: the design
+itself, not the latest patch, was expensive to keep correct. Findings 2 and 3 are both MEDIUM, and the
+brief's own framing (docs/plans/OAUTH_CONSENT_SECURITY.md) recommended `disconnect(userId, clientId)` for
+both from the start — the token-family/grace redesign that rounds 1-3 built and rebuilt was already more
+machinery than either finding asked for.
+
+**Decision: reduce, not patch a fourth time.** `familyId` and the whole per-grant revocation path
+(`endFamily`, its retry/convergence loop, the "legacy row without a family" fallback) are deleted. Both
+findings' automatic teardown now calls a single new function, `revokeConnection(userId, clientId, retry?)` in
+`store.ts` — the same operation the user's own "Disconnect" button already performed via `disconnect`, reused
+here. The rotation-grace mechanism (`usableUntil`/`supersededAt`, tolerating the MCP SDK client's lack of
+single-flight around refresh — round 1's root cause B, a real and separately-demonstrated bug) is **kept**:
+it is orthogonal to the family question and was never where a defect was found.
+
+**The accepted trade.** A user holding two separate connections to the same assistant (the same `client_id`
+— two devices, say, each having gone through consent independently) loses both when either one's token is
+reused, because `disconnect` is keyed on `(userId, clientId)` alone and cannot tell them apart. Round 1's own
+review demonstrated this concretely against `disconnect`-based designs, which is exactly why the family
+design was built in the first place. Judged acceptable here: worse than the family design's blast radius,
+better than production before this branch (which had no automatic teardown for either finding at all), and
+MEDIUM severity does not justify a fourth round on a design with this defect rate. `oauth-mcp.test.ts`'s "also
+disconnects a second connection the same user holds through the same client — the accepted blast radius" test
+is the record of the trade: if it ever needs to change, that should be a deliberate design decision, not a
+silent regression.
+
+Seven findings drove this, three read from the code independently and confirmed by this round, one already
+independently verified before this round started:
+
+**1 — `connectionsFor` listed a disconnected assistant as connected for months.** `store.ts`'s
+`connectionsFor` filtered only on `expiresAt`, but rotation (round 1's fix for root cause B/must-fix 3, rework
+round 2) deliberately retains a superseded refresh row at its **full original `expiresAt`** — up to 182 days
+— as evidence for reuse detection. A row an individual revoke or the "Disconnect" button had already removed
+the *live* copy of still passed that filter via its superseded copy, so the Connected AI Assistants panel
+(promoted to its own settings tab the same day, #392) kept showing an assistant as connected long after it
+was not. Fixed by filtering on `usableUntil` (falling back to `expiresAt` for a row written before that field
+existed) *in addition to* `expiresAt`, not instead of it — retention lapsing is itself reason enough to drop a
+row, for the same reason `verifyToken` checks `expiresAt` explicitly rather than trusting the TTL sweep to
+have run already. Verified by reverting to the `expiresAt`-only filter and confirming a new regression test
+(rotate a token, then delete the live replacement, leaving only the superseded row) goes red — the list showed
+the assistant as connected with only a dead row left to justify it; restored, green.
+
+**2 — `trackSideEffect` could crash the process on a rejecting side effect.** `void promise.finally(...)`:
+`.finally()` returns a *new* promise that rejects whenever the original does, and `void` attached no handler
+to that new promise — an unhandled rejection, which Node terminates the process on by default. Latent only
+because every current caller (`notifyConnectionRevoked`, and `revokeConnection`'s own internals) happens to
+catch its own errors and never reject; not a property worth betting the process on for whichever future
+caller does not share it. Fixed with `promise.catch(() => {}).finally(...)`. Verified with a unit test that
+tracks a promise built to reject and asserts no `unhandledRejection` event fires; reverting to the bare
+`.finally()` version reproduces the crash-shaped event reliably.
+
+**3 — the retry loop's early-exit was backwards.** `endFamily`'s bounded retry broke on
+`remaining === 0 && deletedCount === 0` — exactly the state "the concurrent winner has not written its rows
+yet" produces on an early attempt, which is the case the retry existed to wait out. Dropped along with the
+rest of `endFamily`: `revokeConnection`'s replacement retry runs every attempt unconditionally, with no
+early-exit condition to get backwards, which is the general fix — a clever "stop once nothing changes"
+shortcut on a retry meant to wait out a not-yet-visible write is the wrong shape of check regardless of the
+exact condition. Affordable because finding 6 (below) also made this retry's caller stop awaiting it: the
+full multi-attempt pause no longer costs the HTTP response anything.
+
+**4 — a legacy row (no `familyId`) was never actually upgraded.** `rotateTokens` never wrote a `familyId`
+onto a legacy row when superseding it, so the claim that such a connection "upgrades to a real family on its
+next rotation" did not hold for the row itself — replaying it always fell back to `disconnect`, which,
+ironically, is now just what every replay does. Moot after the rescope: there is no `familyId` to migrate,
+optional or otherwise, and no upgrade path to get wrong.
+
+**5 — an unbounded consent-cookie name space.** `provider.ts`'s `consentCookieName`, added in round 1 to stop
+a second parked flow from clobbering the first's cookie (root cause C4), named every cookie uniquely per
+request — flagged and deliberately deferred at the end of rework round 2 (the note just above this entry) as
+more design than that round should absorb. In scope now: `GET /oauth/authorize` is unauthenticated, and only
+the one flow that gets *answered* ever clears its own cookie, so an abandoned or repeatedly retried flow
+leaves its cookie sitting for the full 15-minute window — unbounded, that evicts other cookies this origin
+needs (`sm_refresh`, notably) at the browser's per-domain cap, and a large enough `Cookie` header can exceed
+Node's default 16KB `maxHeaderSize`. Fixed with slot reuse: every request id now hashes onto one of a fixed
+number of cookie names (`CONSENT_COOKIE_SLOTS = 64`) rather than getting a unique one, bounding the name
+space at the cost of an accepted, low-probability collision between two flows parked close together (the
+earlier one's cookie is silently overwritten by the later, reproducing root cause C4's original symptom for
+that unlucky pair rather than eliminating it). `authorize` only receives `res`, not `req` (the SDK's own
+signature), so bounding the name space was the available fix — tracking actual occupancy was not. Verified by
+reverting to the unbounded name function and confirming a unit test (500 synthetic request ids, asserting the
+set of cookie names produced stays under 500) goes red at exactly 500; restored, green.
+
+**6 — a timing oracle on the code-replay refusal path.** `exchangeAuthorizationCode`'s failure branch awaited
+`revokeFamilyIfRedeemed` — a delete plus finding 3's own bounded, sleep-bearing retry (5 attempts × 20ms) —
+before throwing, putting 40-100ms of real latency on a refusal, but *only* for a code that really had been
+redeemed before. That is measurable, and it re-creates exactly the oracle root cause F2 already avoids for
+the notification email a few lines further down the same function. Fixed by making the whole revocation
+fire-and-forget from the caller's point of view (`trackSideEffect`, the same mechanism already used for the
+notify email), rather than only the notify step inside it — the retry no longer needs to be fast, since
+nothing downstream is waiting on it. Verified by reverting to an awaited call and confirming a new test (mock
+`OAuthTokenModel.deleteMany` to take 300ms, assert the refusal returns in under 200ms) measures ~1.6 seconds
+instead — the retry's full five-attempt budget, not just one delay — and goes red; restored, green.
+
+**7 — `approve`/`deny` stamped a dead session's `userId` unchecked.** The D2 guard (root cause D2, rework
+round 1) was added only to `GET /oauth/authorization/:id`; `approve` still stamped `userId: req.userId` onto
+the grant with nothing checking that id still named anyone, so a session surviving its own account's deletion
+could mint a real, redeemable authorization code for it. Flagged as a known gap in a code comment by the
+round-1 pass, left for later. Fixed with a shared `requireLiveUser(req)` check, called from `approve` and
+`deny` (the latter for uniformity — it does not stamp anything, but a dead session should refuse everywhere,
+not only where it happens to write something). Verified by deleting each call in turn and confirming a
+dedicated test for each goes red (200 instead of the expected 401); restored, green.
+
+**What was not touched.** Finding 1 (the consent binding, `__Host-` cookie, and screen disclosure) and the
+atomic redirect-URI/resource filter in `exchangeAuthorizationCode` were out of scope for this round and are
+unchanged — both were independently verified in earlier rounds and none of the seven findings above touch
+them. `server/src/mcp/`, the action layer, and the client-side Connected AI Assistants UI were likewise out of
+scope.

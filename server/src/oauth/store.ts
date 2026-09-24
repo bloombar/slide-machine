@@ -107,7 +107,6 @@ const store = async (
     resource?: string
   },
   ttlSeconds: number,
-  familyId: string,
 ): Promise<void> => {
   const expiresAt = new Date(Date.now() + ttlSeconds * 1000)
   await OAuthTokenModel.create({
@@ -122,34 +121,32 @@ const store = async (
     // life until something supersedes it. Only ever read on `kind: 'refresh'`
     // rows; harmless and unused on `kind: 'access'` ones.
     usableUntil: expiresAt,
-    familyId,
   })
 }
 
 /**
  * Issues a fresh access/refresh pair for one assistant acting for one user.
  *
- * `familyId` groups this pair with everything descended from the same
- * authorization grant (rework round 1's root cause A) — the authorization
- * code's own `codeHash` for a grant's first pair, or the presented refresh
- * token's own `familyId` when this is a rotation. Required, not optional:
- * every token this server issues must be revocable as a family, or the
- * revocation added for finding 2/3 quietly stops covering it.
+ * Used to also take a `familyId`, grouping this pair with everything
+ * descended from the same authorization grant so a leak could be revoked as
+ * a chain rather than by `(userId, clientId)` alone. Dropped along with the
+ * rest of the token-family machinery — see `revokeConnection` below and
+ * docs/DECISIONS.md's "Findings 2/3 rescope" entry for why: three
+ * consecutive reviews of that machinery each found a fresh defect in it, and
+ * the plan doc's own recommendation for both findings was the blunter
+ * `disconnect(userId, clientId)` this file already had.
  */
-export const issueTokens = async (
-  grant: {
-    clientId: string
-    userId: string
-    scopes: string[]
-    resource?: string
-  },
-  familyId: string,
-): Promise<IssuedTokens> => {
+export const issueTokens = async (grant: {
+  clientId: string
+  userId: string
+  scopes: string[]
+  resource?: string
+}): Promise<IssuedTokens> => {
   const accessToken = generateToken()
   const refreshToken = generateToken()
   await Promise.all([
-    store('access', accessToken, grant, ACCESS_TOKEN_TTL_SECONDS, familyId),
-    store('refresh', refreshToken, grant, REFRESH_TOKEN_TTL_SECONDS, familyId),
+    store('access', accessToken, grant, ACCESS_TOKEN_TTL_SECONDS),
+    store('refresh', refreshToken, grant, REFRESH_TOKEN_TTL_SECONDS),
   ])
   return {
     accessToken,
@@ -244,9 +241,14 @@ export const rotateTokens = async (
       // replayed once the honest side already moved on, or an honest client
       // retrying so late that the distinction stopped mattering. Either way
       // a live refresh token has no legitimate reason to be presented again
-      // this late, so the whole family ends.
+      // this late, so the whole connection ends — every token this
+      // (user, client) pair holds, not only the ones descended from this one
+      // grant (see `revokeConnection`'s own docstring for why that narrower
+      // scoping was dropped). No retry here: this row was already read above,
+      // so what needs deleting is known to exist and is not mid-write, unlike
+      // the authorization-code replay path below.
       try {
-        await endFamily(doc.familyId, doc.userId.toString(), clientId)
+        await revokeConnection(doc.userId.toString(), clientId)
       } catch (error) {
         console.warn('Could not end a compromised OAuth connection:', error)
       }
@@ -286,117 +288,134 @@ export const rotateTokens = async (
     ? narrowedScopes.filter(scope => doc.scopes.includes(scope))
     : doc.scopes
 
-  return issueTokens(
-    {
-      clientId: doc.clientId,
-      userId: doc.userId.toString(),
-      scopes,
-      resource: doc.resource,
-    },
-    // A legacy row (must-fix 1) carries no family to extend, so this
-    // rotation founds a fresh one — from here on the connection is fully
-    // protected, same as any other.
-    doc.familyId ?? generateToken(),
-  )
+  return issueTokens({
+    clientId: doc.clientId,
+    userId: doc.userId.toString(),
+    scopes,
+    resource: doc.resource,
+  })
 }
 
 /** A short, bounded pause — used only to close the narrow window where a
- * genuinely concurrent double-exchange's loser checks for a family to
- * revoke before the winner has finished writing it (see `endFamily`). */
+ * genuinely concurrent double-exchange's loser checks a connection for
+ * tokens to revoke before the winner has finished writing them (see
+ * `revokeConnection`). */
 const sleep = (ms: number): Promise<void> =>
   new Promise(resolve => setTimeout(resolve, ms))
 
 /**
- * Outstanding fire-and-forget work from `endFamily`, so a test can wait for
- * it deterministically instead of a fixed pause (rework round 2: the
- * previous fix for the flake this caused was a sleep in `beforeEach`, which
- * is exactly the kind of timing-dependent guess this project's own testing
- * guidance says to avoid — it happened to be long enough here, and would not
- * reliably stay that way on a slower or more loaded machine).
+ * Outstanding fire-and-forget work from `revokeConnection` and the
+ * authorization-code replay path, so a test can wait for it deterministically
+ * instead of a fixed pause (rework round 2: the previous fix for the flake
+ * this caused was a sleep in `beforeEach`, which is exactly the kind of
+ * timing-dependent guess this project's own testing guidance says to avoid —
+ * it happened to be long enough here, and would not reliably stay that way on
+ * a slower or more loaded machine).
  *
  * Production code never reads this set or awaits `drainPendingSideEffects`
- * — the notify/log calls stay genuinely fire-and-forget for callers, which
- * is what root cause F2 requires. Tracking them costs one `Set` insert and a
- * `.finally` per call, paid only by the revocation path, and is otherwise
- * inert.
+ * — the calls tracked here stay genuinely fire-and-forget for their callers,
+ * which is what finding 6 (the timing-oracle review) requires. Tracking them
+ * costs one `Set` insert and a `.catch`/`.finally` per call, paid only by the
+ * revocation path, and is otherwise inert.
  */
 const pendingSideEffects = new Set<Promise<unknown>>()
 
-const trackSideEffect = (promise: Promise<unknown>): void => {
+/**
+ * Fires `promise` without making the caller wait for it, while still letting
+ * a test await it deterministically via `drainPendingSideEffects`.
+ *
+ * The `.catch` is load-bearing, not decoration (finding 2): `.finally`
+ * returns a *new* promise that rejects whenever the original does, and the
+ * old `void promise.finally(...)` attached no handler to that new promise —
+ * an unhandled rejection, which Node terminates the process on by default.
+ * Every side effect tracked here already catches its own errors internally
+ * (`notifyConnectionRevoked`, `revokeConnection`), so this is a backstop
+ * against a future caller that does not, not evidence one currently needs it.
+ */
+export const trackSideEffect = (promise: Promise<unknown>): void => {
   pendingSideEffects.add(promise)
-  void promise.finally(() => pendingSideEffects.delete(promise))
-}
-
-/** Test-only: resolves once every fire-and-forget call tracked above and
- * still in flight at the time it is called has settled. */
-export const drainPendingSideEffects = async (): Promise<void> => {
-  await Promise.allSettled([...pendingSideEffects])
+  void promise.catch(() => {}).finally(() => pendingSideEffects.delete(promise))
 }
 
 /**
- * Ends a whole token family: every access and refresh token descended from
- * one authorization grant, however many times it has rotated since (root
- * cause A, rework round 1). Tighter than `disconnect(userId, clientId)` —
- * which is kept for the user's own explicit "Disconnect" button, and as the
- * fallback here for a family-less legacy row — because a family only ever
- * covers the one compromised chain, never a second live connection the same
- * assistant happens to hold for the same account.
+ * Test-only: resolves once every fire-and-forget call tracked above and
+ * still in flight at the time it is called has settled.
  *
- * `familyId` is `undefined` for a row written before that field existed
- * (must-fix 1, rework round 2): there is nothing to converge on, so this
- * falls back to `disconnect`, bounded to connections that predate the
- * deploy that added it — the window closes as each one rotates (picking up
- * a real family, see `rotateTokens`) or naturally expires.
- *
- * `retry`, when given, re-attempts the delete a bounded number of times with
- * a short pause between attempts, rechecking after each pause whether
- * anything is still left rather than stopping at the first attempt that
- * deleted something (must-fix 4, rework round 2): `issueTokens` writes the
- * access and refresh rows through a concurrent `Promise.all`, so a delete
- * that lands between the two inserts can remove only one of them and, under
- * the old "stop on first success" rule, call itself done while the other
- * survives inside a family that is supposed to be dead. Used only by the
- * authorization-code replay path (`revokeFamilyIfRedeemed` in provider.ts),
- * where a genuinely concurrent double exchange can have its loser reach here
- * before the winner's `issueTokens` has finished writing anything at all —
- * the gap the reviewers measured as "4/4 concurrent double-exchanges
- * revoked nothing" before this existed. The refresh-reuse path
- * (`rotateTokens` above) never needs it: it always reads the row it is
- * revoking before calling this, so the tokens it is asking to delete are
- * already known to exist and are not mid-write.
+ * Loops rather than awaiting one snapshot, because the authorization-code
+ * replay path (finding 6) now nests two levels of fire-and-forget: the
+ * outer call (`revokeConnectionIfRedeemed` in provider.ts) is tracked but
+ * not awaited by its caller, and it in turn awaits `revokeConnection`, which
+ * fires the notify email through this same mechanism without waiting for
+ * it. A single `Promise.allSettled` over the outer promise resolves before
+ * the inner one it spawns has necessarily settled — draining until the set
+ * is empty catches whatever a settling promise adds on its way out, at any
+ * nesting depth.
  */
-export const endFamily = async (
-  familyId: string | undefined,
+export const drainPendingSideEffects = async (): Promise<void> => {
+  while (pendingSideEffects.size > 0) {
+    await Promise.allSettled([...pendingSideEffects])
+  }
+}
+
+/**
+ * Ends a connection outright: every access and refresh token one assistant
+ * holds for one user — the same operation the connected-assistants list's own
+ * "Disconnect" button performs (`disconnect`, below), reused here as the
+ * automatic response to detected token reuse (findings 2/3,
+ * docs/plans/OAUTH_CONSENT_SECURITY.md).
+ *
+ * This replaces an earlier, tighter design — a per-grant "token family" that
+ * could be revoked as the one compromised chain without ever touching a
+ * second, unrelated connection the same assistant held for the same account.
+ * Three consecutive reviews of that machinery each found a fresh defect in
+ * it (a required field with no migration path, a stamp gated on the wrong
+ * condition, a retry loop that could stop half-finished, a timing oracle, a
+ * legacy row that was never actually upgraded — see docs/DECISIONS.md's
+ * "Findings 2/3 rescope" entry). The plan doc's own original recommendation
+ * for both findings was this blunter operation; that is what this is.
+ *
+ * **The accepted trade:** a user who holds two separate connections to the
+ * same assistant (the same `client_id`, e.g. two devices each having gone
+ * through consent independently) loses both when either one's token is
+ * reused — a reviewer demonstrated this concretely against the family
+ * design's replacement. That is worse than the family design's blast radius,
+ * and better than production today, which has no automatic teardown for
+ * either finding at all. Judged acceptable at MEDIUM severity given the
+ * defect rate the tighter alternative was producing.
+ *
+ * `retry`, when given, repeats the delete a bounded number of times with a
+ * short pause between attempts — used only by the authorization-code replay
+ * path (`revokeConnectionIfRedeemed` in provider.ts), where a genuinely
+ * concurrent double exchange can have its loser reach here before the
+ * winner's `issueTokens` (a second, later operation) has finished writing
+ * anything to delete. Deliberately does **not** try to stop early once a
+ * pass deletes nothing: that was the previous design's own defect (a pass
+ * that finds nothing is exactly what "the winner has not written yet" looks
+ * like on its first attempt too), so every attempt runs regardless of what
+ * the one before it found. Safe to call this way because the caller no
+ * longer awaits this function at all on that path (see `trackSideEffect`
+ * there) — the retry's total pause no longer costs the HTTP response
+ * anything. The refresh-reuse path (`rotateTokens` above) never needs a
+ * retry: it always reads the row it is revoking before calling this, so the
+ * tokens it is asking to delete are already known to exist and are not
+ * mid-write.
+ */
+export const revokeConnection = async (
   userId: string,
   clientId: string,
   retry?: { attempts: number; delayMs: number },
 ): Promise<void> => {
-  let deletedCount: number
-  if (familyId) {
-    const attempts = retry?.attempts ?? 1
-    deletedCount = 0
-    for (let attempt = 0; attempt < attempts; attempt++) {
-      const result = await OAuthTokenModel.deleteMany({ familyId })
-      deletedCount += result.deletedCount ?? 0
-      if (attempt < attempts - 1) {
-        if (retry) await sleep(retry.delayMs)
-        // Converges on "nothing left", not "something happened once": only
-        // stops early once a pass that deleted nothing is *confirmed* by a
-        // recheck to have found nothing, so a delete landing between the
-        // two halves of a concurrent `issueTokens` write gets another pass
-        // rather than being mistaken for "already clean".
-        const remaining = await OAuthTokenModel.countDocuments({ familyId })
-        if (remaining === 0 && (result.deletedCount ?? 0) === 0) break
-      }
-    }
-  } else {
-    deletedCount = await disconnect(userId, clientId)
+  const attempts = retry?.attempts ?? 1
+  let deletedCount = 0
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    deletedCount += await disconnect(userId, clientId)
+    if (attempt < attempts - 1 && retry) await sleep(retry.delayMs)
   }
 
   if (deletedCount === 0) {
     // Nothing was actually revoked (must-fix 5, rework round 2) — most often
     // a redeemed authorization-code row (5-minute life) presented a second
-    // time after its family was already gone for an unrelated reason.
+    // time after the connection was already gone for an unrelated reason.
     // Notifying here would be a false "your assistant may have leaked"
     // email about a connection nothing touched.
     return
@@ -407,16 +426,11 @@ export const endFamily = async (
   // configured SMTP relay is a real network round trip (lib/mailer.ts's own
   // timeouts run to twenty seconds) that would otherwise make a genuine
   // replay's refusal measurably slower than an unknown token's — a timing
-  // oracle for "this token was once real" (root cause F2). Tracked rather
-  // than fully detached so tests can await it deterministically
+  // oracle for "this token was once real" (root cause F2, and finding 6).
+  // Tracked rather than fully detached so tests can await it deterministically
   // (`drainPendingSideEffects`) instead of guessing at a sleep duration.
   trackSideEffect(notifyConnectionRevoked(userId, clientId))
-  logConnectionRevoked(
-    userId,
-    clientId,
-    familyId ?? '(legacy, no family)',
-    deletedCount,
-  )
+  logConnectionRevoked(userId, clientId, deletedCount)
 }
 
 /**
@@ -474,12 +488,11 @@ const notifyConnectionRevoked = async (
 const logConnectionRevoked = (
   userId: string,
   clientId: string,
-  familyId: string,
   tokensRevoked: number,
 ): void => {
   console.error(
     `[oauth] connection revoked: userId=${userId} clientId=${clientId} ` +
-      `familyId=${familyId} tokensRevoked=${tokensRevoked}`,
+      `tokensRevoked=${tokensRevoked}`,
   )
 }
 
@@ -508,13 +521,42 @@ export const disconnect = async (
   return deletedCount ?? 0
 }
 
-/** The assistants currently holding a live token for this account. */
+/**
+ * The assistants currently holding a live token for this account.
+ *
+ * Filtered on `usableUntil` as well as `expiresAt` (finding 1,
+ * docs/plans/OAUTH_CONSENT_SECURITY.md, and a regression this branch
+ * introduced): rotation now keeps a superseded refresh row around at its
+ * full original `expiresAt` — up to 182 days — as evidence for reuse
+ * detection (see the model's own note on `usableUntil`), so filtering on
+ * `expiresAt` alone listed an assistant as connected for months after it was
+ * disconnected or individually revoked. `usableUntil` is the field that
+ * actually answers "can this row still be spent right now", and — per the
+ * `store` helper above — every row this server writes carries one, set equal
+ * to `expiresAt` at creation and only ever shortened by rotation. Requiring
+ * *both* rather than switching to `usableUntil` alone matters for the same
+ * reason `verifyToken` checks `expiresAt` explicitly instead of trusting the
+ * TTL sweep to have run: retention lapsing is itself reason enough to drop a
+ * row, independent of whatever `usableUntil` says. A row with no
+ * `usableUntil` at all (written before that field existed) falls back to
+ * `expiresAt` alone for spendability too.
+ */
 export const connectionsFor = async (
   userId: string,
 ): Promise<{ clientId: string; scopes: string[]; connectedAt: Date }[]> => {
+  const now = new Date()
   const docs = await OAuthTokenModel.find({
     userId: new Types.ObjectId(userId),
-    expiresAt: { $gt: new Date() },
+    // Retention must not have lapsed (`expiresAt`, checked in the query
+    // rather than left to the TTL sweep for the same reason `verifyToken`
+    // does — the reaper runs on a delay, and an expired row can still be
+    // found in between), *and*, when the row tracks spendability
+    // separately, that must not have lapsed either — `usableUntil` is what
+    // catches a superseded refresh row still sitting inside its long
+    // retention window. A row with no `usableUntil` at all (written before
+    // that field existed) has only `expiresAt` to go on.
+    expiresAt: { $gt: now },
+    $or: [{ usableUntil: { $gt: now } }, { usableUntil: { $exists: false } }],
   }).sort({ createdAt: 1 })
 
   // One row per assistant, not per token: a client that has refreshed twenty

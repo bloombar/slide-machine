@@ -19,14 +19,18 @@
  * URI that was not checked, which is why `redirectUri` is stored here and
  * compared on exchange rather than taken from the token request.
  *
- * A replayed code also revokes what it minted (finding 2, rework round 1's
- * root cause A). `codeHash` itself is used as the **token family id**
- * (`OAuthTokenDb.familyId`) rather than snapshotting the minted tokens'
- * hashes onto this row after the fact — a snapshot written in a second,
- * non-atomic update left a window where a genuinely concurrent double
- * exchange's loser found nothing to revoke, because the winner had not
- * finished writing yet. `codeHash` is known before any database round trip
- * and never changes, so it needs no snapshot and the race closes on its own.
+ * A replay also ends the connection it minted tokens for (finding 2,
+ * docs/plans/OAUTH_CONSENT_SECURITY.md). `codeHash` is what a replay is
+ * looked up by (`revokeConnectionIfRedeemed`, oauth/provider.ts) to find this
+ * row's `userId` — an earlier design instead snapshotted the minted tokens'
+ * hashes onto this row after the fact, which a second, non-atomic write left
+ * a window where a genuinely concurrent double exchange's loser found
+ * nothing to revoke, because the winner had not finished writing yet.
+ * Looking the grant back up by `codeHash` (known before any database round
+ * trip, and never changing) needs no snapshot and closes that race on its
+ * own; see docs/DECISIONS.md for why the *finer-grained* per-grant
+ * revocation this comment used to describe (a "token family") was dropped in
+ * favour of ending the whole (user, client) connection.
  */
 import { Schema, model, Types } from 'mongoose'
 
