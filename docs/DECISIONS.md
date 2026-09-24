@@ -1145,3 +1145,24 @@ a single thing with two entry points, not two independent lists. A titleless lec
 to match a search query is exactly as unopenable and unidentifiable from a search result row as it is from a
 feed row, so carving out an exception for search would reintroduce the defect through the door the feed fix
 just closed it in.
+
+## Connected AI assistants tab: placement, copy source, and description value (2026-09-24)
+
+**Placement.** The new `assistants` tab sits between `privacy` and `plan` (general, design, privacy,
+assistants, plan) — the brief specified this order explicitly, matching where the panel used to live inside
+Privacy.
+
+**Per-client copy.** Adapted from `bloombot/apps/web/src/pages/Mcp.tsx` (a sibling project) rather than
+imported: the menu-name-drift caveat is said once, up front; Claude's instructions are "add a custom
+connector by URL, sign in, approve"; ChatGPT's are rendered as a `<dl>` of Name/Description/Connection/
+Authentication. The bloombot icon-URL field was deliberately dropped — this repo has no equivalent
+publicly-declared-origin env var, and introducing one was explicitly out of scope.
+
+**ChatGPT description value.** The brief left the exact wording to the implementer ("something short and
+true"). Chose `Create and edit lecture slides` — describes what the MCP server's tool surface actually does
+(docs/CONNECTING_AN_ASSISTANT.md), in the same register as the Name field's `Slide Machine`.
+
+**Admin guard.** `assistants` is dropped from the admin's tab list the same way `design` already is
+(`tabs = adminUserId ? TABS.filter(...) : TABS`). Verified by deleting the filter clause and confirming
+`AccountSettingsPage.test.tsx`'s new admin test goes red (a stray tab whose panel is guarded away and never
+renders), then restoring it.

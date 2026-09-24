@@ -364,6 +364,50 @@ describe('AccountSettingsPage', () => {
     await vi.waitFor(() => expect(toggle).not.toBeChecked())
   })
 
+  it('offers a Connected AI assistants tab that renders the panel', async () => {
+    renderSettings({
+      '/api/actions/mcp.connections': () => ({ status: 200, body: [] }),
+    })
+
+    fireEvent.click(
+      await screen.findByRole('tab', { name: 'Connected AI assistants' }),
+    )
+
+    expect(
+      await screen.findByText(/No AI assistants are connected/),
+    ).toBeVisible()
+  })
+
+  it('no longer renders the assistants panel on the Privacy tab', async () => {
+    renderSettings({
+      '/api/actions/mcp.connections': () => ({ status: 200, body: [] }),
+    })
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Privacy' }))
+    await screen.findByRole('checkbox', { name: 'Public profile' })
+
+    // The tab strip itself always says "Connected AI assistants" — it is the
+    // panel's own heading, rendered only inside the assistants tab, that
+    // must be gone from Privacy.
+    expect(
+      screen.queryByRole('heading', { name: 'Connected AI assistants' }),
+    ).toBeNull()
+  })
+
+  it('links the assistants tab’s "Learn more" to the assistants guide', async () => {
+    renderSettings({
+      '/api/actions/mcp.connections': () => ({ status: 200, body: [] }),
+    })
+
+    fireEvent.click(
+      await screen.findByRole('tab', { name: 'Connected AI assistants' }),
+    )
+
+    expect(
+      await screen.findByRole('link', { name: 'Learn more' }),
+    ).toHaveAttribute('href', '/assistants')
+  })
+
   it('saves an explicit lecture language and clears back to default', async () => {
     let sent: unknown
     renderSettings({
@@ -624,6 +668,16 @@ describe('AccountSettingsPage as an admin (ADMIN-5)', () => {
     await renderAsAdmin()
     expect(await screen.findByText('grace@example.com')).toBeVisible()
     expect(screen.queryByRole('tab', { name: 'Design' })).toBeNull()
+  })
+
+  it('keeps Connected AI assistants off an admin’s view of someone else’s account', async () => {
+    // mcp.connections is self-scoped too: an admin would only ever be shown
+    // their own connections behind a tab that names someone else's account.
+    await renderAsAdmin()
+    expect(await screen.findByText('grace@example.com')).toBeVisible()
+    expect(
+      screen.queryByRole('tab', { name: 'Connected AI assistants' }),
+    ).toBeNull()
   })
 
   it('lands an admin on General when the URL names the tab they lack', async () => {

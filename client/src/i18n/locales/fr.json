@@ -205,6 +205,7 @@
       "general": "Général",
       "design": "Apparence",
       "privacy": "Confidentialité",
+      "assistants": "Assistants IA connectés",
       "plan": "Forfait et utilisation"
     },
     "templateHeading": "Modèle par défaut",
@@ -219,7 +220,9 @@
       "message": "Votre compte et tous ses projets, cours et diapositives seront définitivement supprimés."
     },
     "assistantsSection": "Assistants IA connectés",
-    "assistantsSectionHint": "Les assistants que vous avez autorisés à consulter ou modifier vos cours depuis l'extérieur de l'application. La déconnexion prend effet immédiatement et ne vous déconnecte nulle part ailleurs."
+    "assistantsSectionHint": "Les assistants que vous avez autorisés à consulter ou modifier vos cours depuis l'extérieur de l'application. La déconnexion prend effet immédiatement et ne vous déconnecte nulle part ailleurs.",
+    "assistantsIntro": "Vous pouvez laisser un assistant IA que vous utilisez déjà — Claude ou ChatGPT — travailler sur vos diapositives avec vous.",
+    "assistantsLearnMore": "En savoir plus"
   },
   "language": {
     "label": "Langue",
@@ -1457,7 +1460,18 @@
     "disconnect": "Déconnecter",
     "failed": "Impossible de charger les assistants connectés.",
     "connectTitle": "Connecter un assistant",
-    "connectHint": "Collez cette adresse dans les paramètres de connecteur de votre assistant IA. Les assistants qui prennent en charge les connecteurs MCP distants — comme Claude — feront le reste.",
+    "connectHint": "Collez cette adresse dans les paramètres de connecteur de votre assistant IA.",
+    "clientMenuDrift": "Les noms exacts des menus ci-dessous peuvent différer de ce que vous voyez — cherchez ce que votre assistant appelle un « connecteur », un « plugin » ou un « serveur MCP » ; c'est la même chose.",
+    "claudeInstructions": "Claude : ajoutez un connecteur personnalisé par URL, en utilisant l'adresse ci-dessus, puis connectez-vous et approuvez sur l'écran qui s'ouvre.",
+    "chatgptIntro": "ChatGPT : ouvrez ses paramètres de connecteurs et ajoutez-en un nouveau, puis renseignez :",
+    "chatgptFieldName": "Nom",
+    "chatgptFieldNameValue": "Slide Machine",
+    "chatgptFieldDescription": "Description",
+    "chatgptFieldDescriptionValue": "Créer et modifier des diapositives de cours",
+    "chatgptFieldConnection": "Connexion",
+    "chatgptFieldConnectionValue": "l'adresse ci-dessus",
+    "chatgptFieldAuth": "Authentification",
+    "chatgptFieldAuthValue": "OAuth",
     "connectApproval": "L'assistant vous renverra ici pour approuver la connexion avant de pouvoir voir quoi que ce soit.",
     "copied": "Copié"
   }

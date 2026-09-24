@@ -205,6 +205,7 @@
       "general": "常规",
       "design": "外观",
       "privacy": "隐私",
+      "assistants": "已连接的 AI 助手",
       "plan": "套餐与用量"
     },
     "templateHeading": "默认模板",
@@ -219,7 +220,9 @@
       "message": "你的账户及其所有项目、课程和幻灯片将被永久删除。"
     },
     "assistantsSection": "已连接的 AI 助手",
-    "assistantsSectionHint": "您已允许其在应用之外读取或修改讲座的助手。断开连接会立即生效，且不会让您在任何地方退出登录。"
+    "assistantsSectionHint": "您已允许其在应用之外读取或修改讲座的助手。断开连接会立即生效，且不会让您在任何地方退出登录。",
+    "assistantsIntro": "您可以让您已经在用的 AI 助手——Claude 或 ChatGPT——和您一起制作幻灯片。",
+    "assistantsLearnMore": "了解更多"
   },
   "language": {
     "label": "语言",
@@ -1457,7 +1460,18 @@
     "disconnect": "断开连接",
     "failed": "无法加载已连接的助手。",
     "connectTitle": "连接助手",
-    "connectHint": "将此地址粘贴到您的 AI 助手的连接器设置中。支持远程 MCP 连接器的助手（例如 Claude）会完成其余步骤。",
+    "connectHint": "将此地址粘贴到您的 AI 助手的连接器设置中。",
+    "clientMenuDrift": "下方提到的菜单名称可能与您看到的不完全一致——请找您的客户端所说的“连接器”“插件”或“MCP 服务器”，它们指的是同一件事。",
+    "claudeInstructions": "Claude：使用上方地址通过 URL 添加自定义连接器，然后在打开的页面中登录并批准。",
+    "chatgptIntro": "ChatGPT：打开其连接器设置并添加一个新连接器，然后填写：",
+    "chatgptFieldName": "名称",
+    "chatgptFieldNameValue": "Slide Machine",
+    "chatgptFieldDescription": "描述",
+    "chatgptFieldDescriptionValue": "创建和编辑讲座幻灯片",
+    "chatgptFieldConnection": "连接",
+    "chatgptFieldConnectionValue": "上方地址",
+    "chatgptFieldAuth": "身份验证",
+    "chatgptFieldAuthValue": "OAuth",
     "connectApproval": "助手会把您送回这里进行批准，之后才能看到任何内容。",
     "copied": "已复制"
   }

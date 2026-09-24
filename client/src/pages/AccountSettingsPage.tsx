@@ -93,8 +93,9 @@ const textInputClass =
   'w-full rounded-md border border-slate-300 px-3 py-2 text-sm'
 
 /** General is what the account *is*, Design is what its new work looks
- * like, Privacy is who may see it, Plan is what it may spend. */
-const TABS = ['general', 'design', 'privacy', 'plan'] as const
+ * like, Privacy is who may see it, Connected AI assistants is what else may
+ * act on its behalf, Plan is what it may spend. */
+const TABS = ['general', 'design', 'privacy', 'assistants', 'plan'] as const
 type SettingsTab = (typeof TABS)[number]
 
 /** One titled group of controls, styled like the lecture and project settings
@@ -150,10 +151,12 @@ export default function AccountSettingsPage() {
   // on General would hide the very thing the user just paid for.
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab')
-  // An admin sees a shorter strip — Design is the caller's own library — so a
-  // deep link into the tab they do not have lands on General instead.
+  // An admin sees a shorter strip — Design is the caller's own library, and
+  // Connected AI assistants is the panel below that only ever shows the
+  // caller's own connections — so a deep link into a tab they do not have
+  // lands on General instead.
   const tabs: readonly SettingsTab[] = adminUserId
-    ? TABS.filter(name => name !== 'design')
+    ? TABS.filter(name => name !== 'design' && name !== 'assistants')
     : TABS
   const tab: SettingsTab = tabs.includes(requestedTab as SettingsTab)
     ? (requestedTab as SettingsTab)
@@ -653,6 +656,25 @@ export default function AccountSettingsPage() {
                   {t('profile.publicProfileHint', { own: !adminUserId })}
                 </label>
               </Section>
+            </section>
+          )}
+
+          {tab === 'assistants' && (
+            <section
+              role="tabpanel"
+              id="settings-panel-assistants"
+              aria-labelledby="settings-tab-assistants"
+              className="flex flex-col gap-8"
+            >
+              <p className="text-sm text-slate-600">
+                {t('profile.assistantsIntro')}{' '}
+                <Link
+                  to="/assistants"
+                  className="font-medium text-indigo-600 hover:text-indigo-500"
+                >
+                  {t('profile.assistantsLearnMore')}
+                </Link>
+              </p>
 
               {/* Only on your own settings. An assistant's token acts for one
                   person, and withdrawing it is that person's decision — the
