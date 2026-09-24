@@ -1,13 +1,20 @@
 # OAuth consent: three security findings
 
-Status: **all three fixed**, after a rework round. Written 2026-09-19; first
-pass fixed 2026-09-24 on `fix/oauth-consent-binding`; two independent reviews
-of that pass found that two of the three fixes did not hold up under real
-HTTP traffic (one made things worse for honest clients), and a second pass
-the same day fixed the underlying causes. What follows describes the
-**current** state; `docs/DECISIONS.md` keeps the record of what the first
-pass got wrong and why, since that reasoning is worth keeping even though the
-code it describes no longer exists.
+Status: **all three fixed**, after two rework rounds. Written 2026-09-19;
+first pass fixed 2026-09-24 on `fix/oauth-consent-binding`; two independent
+reviews of that pass found that two of the three fixes did not hold up under
+real HTTP traffic (one made things worse for honest clients), and a second
+pass the same day fixed the underlying causes. A third review of the second
+pass — reading the code rather than running new traffic — found five further
+defects, all inside the family/grace machinery the second pass introduced:
+a required field with no migration path for tokens issued before it existed,
+a stamp gated behind the wrong condition, a retention window too short for
+the reuse detection it was meant to serve, a revocation loop that could stop
+having only partly finished, and a false theft notice on a no-op teardown. A
+third pass the same day fixed those. What follows describes the **current**
+state; `docs/DECISIONS.md` keeps the record of what each earlier pass got
+wrong and why, since that reasoning is worth keeping even though the code it
+describes no longer exists.
 
 - **Finding 1.** Both parts. (a): `provider.authorize` sets a browser-binding
   cookie, `__Host-` prefixed and named after the request id it belongs to
@@ -37,18 +44,30 @@ code it describes no longer exists.
   however many times they have since rotated — rather than snapshotting two
   token hashes onto the grant row, which the first pass did and which a
   concurrent double exchange or an intervening rotation could make stale
-  before it was ever read. See `docs/DECISIONS.md` root cause A.
+  before it was ever read. The teardown converges on "nothing left in this
+  family" rather than stopping at the first attempt that deleted something,
+  and fires no notice at all when nothing was actually revoked. See
+  `docs/DECISIONS.md` root cause A and the third pass's must-fix 4/5.
 - **Finding 3.** `rotateTokens` no longer deletes a superseded refresh token
-  immediately; it shortens the row's expiry to a grace window and marks it
-  superseded, mirroring `auth/refresh-store.ts`'s own session-rotation
-  grace. A presentation inside the window is an ordinary retry (the MCP SDK
-  client has no single-flight around refresh); a presentation after it ends
-  the whole token family and mails the account a best-effort notice, with an
-  unconditional log line as a trace independent of whether mail is
-  configured at all. See `docs/DECISIONS.md` root causes A and B.
+  immediately; it marks the row superseded and shortens a dedicated
+  `usableUntil` field to a grace window, mirroring `auth/refresh-store.ts`'s
+  own session-rotation grace. A presentation inside the window is an
+  ordinary retry (the MCP SDK client has no single-flight around refresh); a
+  presentation after it ends the whole token family and mails the account a
+  best-effort notice, with an unconditional log line as a trace independent
+  of whether mail is configured at all. Retention (`expiresAt`, read by the
+  TTL index) is left at its original value rather than shortened alongside
+  spendability, so a superseded row survives long enough for a realistic
+  replay — days, not the roughly one minute the second pass's design gave
+  it. `familyId` and `usableUntil` are both optional on the model: a refresh
+  token issued before either field existed rotates without failing, upgrades
+  to a real family on that rotation, and falls back to the coarser
+  `disconnect` only for the one replay it cannot yet protect precisely. See
+  `docs/DECISIONS.md` root causes A and B, and the third pass's must-fix
+  1/2/3.
 
-See `docs/DECISIONS.md` for the full record of what changed between the two
-passes, the judgment calls made in the second, and the residual limits that
+See `docs/DECISIONS.md` for the full record of what changed across all three
+passes, the judgment calls made along the way, and the residual limits that
 are now written down rather than left implicit.
 
 The three are ordered by severity. Finding 1 is the one to act on.

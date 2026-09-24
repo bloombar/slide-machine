@@ -36,6 +36,7 @@ import { provider } from '../../src/oauth/provider'
 import {
   AUTHORIZATION_CODE_TTL_SECONDS,
   CONSENT_REQUEST_TTL_SECONDS,
+  drainPendingSideEffects,
   hashToken,
 } from '../../src/oauth/store'
 import * as mailer from '../../src/lib/mailer'
@@ -240,13 +241,16 @@ afterAll(async () => {
 beforeEach(async () => {
   // A revocation's notify/log side effects are deliberately fire-and-forget
   // (root cause F2, rework round 1) and so are still in flight past the
-  // point the test that triggered them already returned. Left undrained,
-  // one of those straggling calls (a `UserModel.findById`, most often) can
-  // land after this wipe and before the next test's own fixtures exist,
-  // producing a flake whose failure moves around depending on which test
-  // happened to trigger a revocation most recently. A short pause first is
-  // cheaper than instrumenting every call site that can revoke.
-  await new Promise(resolve => setTimeout(resolve, 20))
+  // point the test that triggered them already returned. Left undrained, one
+  // of those straggling calls (a `UserModel.findById`, most often) can land
+  // after this wipe and before the next test's own fixtures exist, producing
+  // a flake whose failure moves around depending on which test happened to
+  // trigger a revocation most recently. `drainPendingSideEffects` (store.ts)
+  // awaits exactly the outstanding work rather than a fixed pause — rework
+  // round 2 flagged a sleep here as timing-dependent and likely to
+  // eventually flake on a slower or more loaded machine even if it held on
+  // this one.
+  await drainPendingSideEffects()
   await Promise.all([
     UserModel.deleteMany({}),
     ProjectModel.deleteMany({}),
@@ -1332,9 +1336,11 @@ describe('an honest retry of a rotated token', () => {
     // comment on the session-level equivalent). Simulate a positive grace
     // window the same way that file does: extend the already-shortened
     // superseded row directly, rather than reconfiguring env per test.
+    // `usableUntil`, not `expiresAt` — root cause 3, rework round 2 split
+    // spendability from retention, and `expiresAt` is retention now.
     await OAuthTokenModel.updateOne(
       { tokenHash: hashToken(tokens.refresh_token) },
-      { $set: { expiresAt: new Date(Date.now() + 60_000) } },
+      { $set: { usableUntil: new Date(Date.now() + 60_000) } },
     )
 
     const withinGrace = await request(server)
@@ -1537,13 +1543,23 @@ describe('robustness of the revocation side effects', () => {
       client_id: client.client_id,
     })
 
-    let resolveMail: () => void = () => {}
-    const mailSpy = vi.spyOn(mailer, 'sendMail').mockImplementation(
-      () =>
-        new Promise(resolve => {
-          resolveMail = () => resolve()
-        }),
-    )
+    // Resolves on its own after a delay well past what an HTTP response
+    // should ever wait for, rather than needing to be triggered from the
+    // test: `notifyConnectionRevoked` reaches this call only after its own
+    // `await`s (looking up the user and client) settle, on a timeline the
+    // test does not control, so a manually-toggled promise risks resolving
+    // before that closure is ever assigned — a real race, not hypothetical
+    // (caught it happening while writing this). Letting the mock resolve
+    // itself sidesteps the race entirely: `drainPendingSideEffects` below
+    // waits for whatever `notifyConnectionRevoked` promise is already
+    // tracked (tracked synchronously by `endFamily`, before the HTTP
+    // response is sent, so that part is not racy), for however long that
+    // takes to settle.
+    const mailSpy = vi
+      .spyOn(mailer, 'sendMail')
+      .mockImplementation(
+        () => new Promise(resolve => setTimeout(resolve, 300)),
+      )
 
     const start = Date.now()
     const replay = await request(server)
@@ -1557,20 +1573,18 @@ describe('robustness of the revocation side effects', () => {
     const elapsed = Date.now() - start
 
     expect(replay.status).toBe(400)
-    // Well under lib/mailer.ts's own SMTP timeouts (10s connect, 10s
-    // greeting, 20s socket) — proves the response did not wait on the mail
-    // promise, which is still unresolved at this point.
-    expect(elapsed).toBeLessThan(1000)
+    // Comfortably under both the mock's own 300ms delay and lib/mailer.ts's
+    // real SMTP timeouts (10s connect, 10s greeting, 20s socket) — proves
+    // the response did not wait on the mail promise.
+    expect(elapsed).toBeLessThan(200)
 
     // The fire-and-forget notify call (root cause F2) is, by construction,
     // still pending past the point the HTTP response already returned —
-    // that is the property this test exists to prove. Left completely
-    // unresolved, it would straggle into the next test's `beforeEach`
-    // collection wipe and read/write against collections that test does not
-    // expect touched. Resolve it and give the continuation a turn before
-    // moving on, so the test's own untidiness does not leak sideways.
-    resolveMail()
-    await new Promise(resolve => setTimeout(resolve, 20))
+    // that is the property this test exists to prove. Drained deterministically
+    // (`drainPendingSideEffects`, not a guessed pause — rework round 2)
+    // before moving on, so it does not straggle into the next test's
+    // `beforeEach` collection wipe.
+    await drainPendingSideEffects()
     mailSpy.mockRestore()
   })
 
@@ -1630,6 +1644,356 @@ describe('robustness of the revocation side effects', () => {
       ),
     ).toBe(true)
 
+    errorSpy.mockRestore()
+  })
+})
+
+/**
+ * Rework round 2's must-fix 1: `familyId` used to be `required: true` with
+ * no migration, and every refresh token already in the database at deploy
+ * time was issued without one. `rotateTokens` reads whatever is actually
+ * stored — a legacy row simply has no `familyId` field at all — so these
+ * simulate that directly (`$unset`) rather than relying on there being an
+ * old row lying around, which there never is in a fresh test database.
+ */
+describe('a refresh token that predates familyId', () => {
+  it('rotates without a 500, even when it is already close to its own expiry', async () => {
+    // The exact branch traced by hand in the review: a legacy token whose
+    // own `expiresAt` already precedes what a fresh grace window would be
+    // means "shorten it" is a no-op, which used to also skip stamping
+    // `supersededAt` (must-fix 2) and, separately, fall through to
+    // `issueTokens(..., undefined)` with nothing to catch the resulting
+    // `ValidationError` (must-fix 1) — a 500 where every other refusal in
+    // this file is a plain 400.
+    const session = await registerUser('legacy-near-expiry@example.test')
+    const preset = await registerClientDirect()
+    const { client, tokens } = await connect(session, undefined, preset)
+
+    const soon = new Date(Date.now() + 500)
+    await OAuthTokenModel.updateOne(
+      { tokenHash: hashToken(tokens.refresh_token) },
+      { $set: { expiresAt: soon }, $unset: { familyId: '', usableUntil: '' } },
+    )
+
+    const res = await request(server).post('/oauth/token').type('form').send({
+      grant_type: 'refresh_token',
+      refresh_token: tokens.refresh_token,
+      client_id: client.client_id,
+    })
+    expect(res.status).toBe(200)
+  })
+
+  it('still detects reuse once rotated, founding a fresh family from that point on', async () => {
+    const session = await registerUser('legacy-reuse@example.test')
+    const preset = await registerClientDirect()
+    const { client, tokens } = await connect(session, undefined, preset)
+
+    // Strip the field the way a row written before it existed would arrive.
+    await OAuthTokenModel.updateOne(
+      { tokenHash: hashToken(tokens.refresh_token) },
+      { $unset: { familyId: '', usableUntil: '' } },
+    )
+
+    const rotated = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+        client_id: client.client_id,
+      })
+    expect(rotated.status).toBe(200)
+
+    // Replay the legacy token — no family to converge on, so this falls
+    // back to `disconnect`, ending the whole connection rather than a
+    // precisely-scoped family. Coarser than the ordinary case, and
+    // documented as such: the trade for a row this server never had the
+    // chance to protect properly in the first place.
+    const replay = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+        client_id: client.client_id,
+      })
+    expect(replay.status).toBe(400)
+
+    const afterReplay = await mcp(rotated.body.access_token, {
+      jsonrpc: '2.0',
+      id: 99,
+      method: 'initialize',
+    })
+    expect(afterReplay.status).toBe(401)
+  })
+
+  it('protects a bystander connection once the upgrade has happened', async () => {
+    // Distinct from the test above: this proves `rotateTokens` actually
+    // founds a *fresh* family for the legacy token's replacement
+    // (`doc.familyId ?? generateToken()`), not merely that revoking the
+    // legacy token itself still works via the coarser fallback. Replaying
+    // the *rotated* (already-upgraded) token should use family-scoped
+    // revocation — if the upgrade never happened, its family would still be
+    // absent and this replay would fall back to `disconnect`, taking the
+    // bystander connection out too.
+    const session = await registerUser('legacy-upgrade-scoped@example.test')
+    const preset = await registerClientDirect()
+    const { client, tokens } = await connect(session, undefined, preset)
+    const bystander = await connect(session, undefined, preset)
+
+    await OAuthTokenModel.updateOne(
+      { tokenHash: hashToken(tokens.refresh_token) },
+      { $unset: { familyId: '', usableUntil: '' } },
+    )
+
+    const upgraded = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+        client_id: client.client_id,
+      })
+    expect(upgraded.status).toBe(200)
+
+    // Rotate the upgraded token once more — an ordinary rotation, so it is
+    // superseded rather than replayed. `rotated` is now live; `upgraded`'s
+    // refresh token is the one being reused below.
+    const rotated = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: upgraded.body.refresh_token,
+        client_id: client.client_id,
+      })
+    expect(rotated.status).toBe(200)
+
+    // Genuine reuse: replay the already-once-rotated upgraded token.
+    const replay = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: upgraded.body.refresh_token,
+        client_id: client.client_id,
+      })
+    expect(replay.status).toBe(400)
+
+    const bystanderStillWorks = await mcp(bystander.tokens.access_token, {
+      jsonrpc: '2.0',
+      id: 102,
+      method: 'initialize',
+    })
+    expect(bystanderStillWorks.status).toBe(200)
+  })
+})
+
+/**
+ * Related to rework round 2's must-fix 2 (the isolated proof, with a real
+ * positive grace window, is `oauth-token-grace.test.ts` — this suite runs
+ * with `REFRESH_GRACE_SECONDS=0`, under which "the token's own expiry
+ * already precedes the grace window" and "the token has already expired"
+ * are the same condition, so the specific bug cannot be told apart from the
+ * ordinary case here). This covers the same shape of scenario end to end
+ * through the real HTTP flow instead: a live token near its own natural
+ * expiry still rotates, gets marked, and a later replay is still caught.
+ */
+describe('a token rotated within its own last moments', () => {
+  it('rotates, is marked superseded, and a later replay is still caught', async () => {
+    const session = await registerUser('near-expiry-supersede@example.test')
+    const preset = await registerClientDirect()
+    const { client, tokens } = await connect(session, undefined, preset)
+
+    const soon = new Date(Date.now() + 500)
+    await OAuthTokenModel.updateOne(
+      { tokenHash: hashToken(tokens.refresh_token) },
+      { $set: { expiresAt: soon, usableUntil: soon } },
+    )
+
+    const rotated = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+        client_id: client.client_id,
+      })
+    expect(rotated.status).toBe(200)
+
+    const row = await OAuthTokenModel.findOne({
+      tokenHash: hashToken(tokens.refresh_token),
+    })
+    expect(row!.supersededAt).toBeTruthy()
+
+    // Past its own (short, untouched) natural life, then replayed — reuse
+    // detection needs `supersededAt` to have been set above to catch this.
+    await new Promise(resolve => setTimeout(resolve, 600))
+    const replay = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token,
+        client_id: client.client_id,
+      })
+    expect(replay.status).toBe(400)
+
+    const afterReplay = await mcp(rotated.body.access_token, {
+      jsonrpc: '2.0',
+      id: 100,
+      method: 'initialize',
+    })
+    expect(afterReplay.status).toBe(401)
+  })
+})
+
+/**
+ * Rework round 2's must-fix 3: `expiresAt` used to do two jobs — spendability
+ * and retention — so superseding a token shortened `expiresAt` to the grace
+ * window, and the TTL reaper then removed the row roughly a minute later.
+ * Reuse detection protected a window a couple of minutes wide against a
+ * threat that plays out over days. `usableUntil` now carries spendability
+ * alone; `expiresAt` is untouched retention.
+ */
+describe('what supersession does and does not shorten', () => {
+  it('leaves retention (expiresAt) at its original value, only usableUntil moves', async () => {
+    const session = await registerUser('retention-untouched@example.test')
+    const preset = await registerClientDirect()
+    const { client, tokens } = await connect(session, undefined, preset)
+
+    const before = await OAuthTokenModel.findOne({
+      tokenHash: hashToken(tokens.refresh_token),
+    })
+    const originalExpiry = before!.expiresAt.getTime()
+    // A fresh refresh token's original TTL is 182 days — sanity-check the
+    // fixture before asserting it survives supersession unchanged.
+    expect(originalExpiry).toBeGreaterThan(
+      Date.now() + 170 * 24 * 60 * 60 * 1000,
+    )
+
+    await request(server).post('/oauth/token').type('form').send({
+      grant_type: 'refresh_token',
+      refresh_token: tokens.refresh_token,
+      client_id: client.client_id,
+    })
+
+    const after = await OAuthTokenModel.findOne({
+      tokenHash: hashToken(tokens.refresh_token),
+    })
+    expect(after!.expiresAt.getTime()).toBe(originalExpiry)
+    // Unspendable (REFRESH_GRACE_SECONDS=0 in tests), but still retained for
+    // up to its full original 182 days rather than the ~1 minute the old
+    // design gave a replay to be caught in.
+    expect(after!.usableUntil!.getTime()).toBeLessThanOrEqual(Date.now())
+  })
+})
+
+/**
+ * Rework round 2's must-fix 4: the retry loop used to `break` on the first
+ * attempt that deleted *something*, but `issueTokens` writes the access and
+ * refresh rows through a concurrent `Promise.all` — a delete landing between
+ * the two inserts could remove only one and call itself done.
+ */
+describe('a family teardown racing a concurrent issuance', () => {
+  it('converges on deleting both tokens, not just the first one found', async () => {
+    const session = await registerUser('convergence@example.test')
+    const client = await registerClientDirect()
+    const { verifier, challenge } = pkce()
+    const { requestId, cookie } = await beginAuthorize(
+      client.client_id,
+      challenge,
+    )
+    const approve = await request(server)
+      .post(`/api/oauth/authorization/${requestId}/approve`)
+      .set('Authorization', `Bearer ${session}`)
+      .set('Cookie', cookie)
+      .send({})
+    const code = new URL(approve.body.redirectTo).searchParams.get('code')!
+
+    const exchangeOnce = () =>
+      request(server).post('/oauth/token').type('form').send({
+        grant_type: 'authorization_code',
+        code,
+        code_verifier: verifier,
+        client_id: client.client_id,
+        redirect_uri: 'https://assistant.test/cb',
+      })
+
+    const [a, b] = await Promise.all([exchangeOnce(), exchangeOnce()])
+    const [winner, loser] = a.status === 200 ? [a, b] : [b, a]
+    expect(winner.status).toBe(200)
+    expect(loser.status).toBe(400)
+
+    // Both halves of the winner's pair must be gone — not just the one the
+    // original single-attempt-and-stop logic happened to catch first.
+    const accessDead = await mcp(winner.body.access_token, {
+      jsonrpc: '2.0',
+      id: 101,
+      method: 'initialize',
+    })
+    expect(accessDead.status).toBe(401)
+
+    const refreshDead = await request(server)
+      .post('/oauth/token')
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: winner.body.refresh_token,
+        client_id: client.client_id,
+      })
+    expect(refreshDead.status).toBe(400)
+  })
+})
+
+/**
+ * Rework round 2's must-fix 5: `notifyConnectionRevoked` and
+ * `logConnectionRevoked` used to fire even when nothing was deleted — an
+ * authorization-code row lives 5 minutes, so a second, third, fourth
+ * presentation of an already-fully-revoked code each sent another "your
+ * assistant may have leaked" email about a connection that, by then, has
+ * nothing left to leak.
+ */
+describe('replaying an already-revoked code again', () => {
+  it('does not send a second false theft notice', async () => {
+    const session = await registerUser('no-false-notice@example.test')
+    const preset = await registerClientDirect()
+    const { client, code, verifier } = await connect(session, undefined, preset)
+
+    // First replay genuinely revokes the family (covered elsewhere). Its own
+    // notify is fire-and-forget, so it must be drained before the spy goes
+    // up below — otherwise the spy can catch that first, legitimate call
+    // instead of proving the second one sends nothing.
+    await request(server).post('/oauth/token').type('form').send({
+      grant_type: 'authorization_code',
+      code,
+      code_verifier: verifier,
+      client_id: client.client_id,
+      redirect_uri: 'https://assistant.test/cb',
+    })
+    await drainPendingSideEffects()
+
+    const mailSpy = vi.spyOn(mailer, 'sendMail')
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    // A second replay of the same code finds nothing left to revoke.
+    await request(server).post('/oauth/token').type('form').send({
+      grant_type: 'authorization_code',
+      code,
+      code_verifier: verifier,
+      client_id: client.client_id,
+      redirect_uri: 'https://assistant.test/cb',
+    })
+    await drainPendingSideEffects()
+
+    expect(mailSpy).not.toHaveBeenCalled()
+    expect(
+      errorSpy.mock.calls.some(([line]) =>
+        String(line).includes('[oauth] connection revoked'),
+      ),
+    ).toBe(false)
+
+    mailSpy.mockRestore()
     errorSpy.mockRestore()
   })
 })

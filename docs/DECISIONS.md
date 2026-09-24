@@ -1456,7 +1456,146 @@ tests are *for*), added `OAUTH_TOKEN_RATE_LIMIT` (`config/env.ts`, defaulting to
 unconfigured deployment sees no change) following the exact precedent `DECK_VIEW_RATE_LIMIT` already set for
 this situation, and raised it in `vitest.config.ts` for tests only.
 
-**Migration note, unchanged from round 1 and still true:** `browserNonceHash` on `OAuthAuthorizationModel`
-and `familyId` on `OAuthTokenModel` are both `required: true` with no migration. Consents parked, or tokens
-issued, before this deploys become unanswerable/unrotatable after — both fail closed, which is correct, but
-worth knowing if this ever needs a rolling deploy story.
+**Migration note.** ~~`browserNonceHash` on `OAuthAuthorizationModel` and `familyId` on `OAuthTokenModel` are
+both `required: true` with no migration. Consents parked, or tokens issued, before this deploys become
+unanswerable/unrotatable after — both fail closed, which is correct, but worth knowing if this ever needs a
+rolling deploy story.~~ **`familyId`'s half of this was wrong, and rework round 2's must-fix 1 corrects it**:
+"fails closed" undersold what actually happened. Traced fully, the failure mode split on an incidental
+timing branch — a forced re-auth in the ordinary case, but an uncaught 500 when a pre-existing token happened
+to already be within `REFRESH_GRACE_SECONDS` of its own expiry — and refresh tokens live 182 days, not the 15
+minutes a parked consent does, so "no migration, fails closed" was the wrong call at that lifetime entirely.
+See "Rework round 2" below for the fix. `browserNonceHash` was correctly assessed and needed no change: a
+15-minute-lived row failing closed with no migration is genuinely fine.
+
+## Rework round 2: five defects in the family/grace machinery, final round (2026-09-24)
+
+Third review, reading the code rather than driving new HTTP traffic. Credited (per the brief) as already
+correct and left alone: the family-id redesign's shape, the grace window's mirror of
+`auth/refresh-store.ts` including its one-way ratchet, `__Host-` with per-request cookie names, and round
+1's honesty about A2 being unprovable on this machine. All five items below live inside `store.ts`
+(`endFamily`/`rotateTokens`/`issueTokens`/`store`) and the model it writes to; nothing rippled beyond them,
+so the slice did not need re-splitting.
+
+**Must-fix 1 — pre-existing refresh tokens broke on deploy.** `familyId` was `required: true` with no
+migration, and every token issued before this deploy has none. Traced by the reviewer to two different
+outcomes depending on an incidental timing branch: ordinarily `doc.save()`'s full-document validation threw
+on the missing field, caught by root cause F1's guard, and the client just re-authorized; but for a token
+already within `REFRESH_GRACE_SECONDS` of its own expiry, the shortening branch was skipped entirely,
+execution fell through to `issueTokens(..., undefined)`, `OAuthTokenModel.create` threw, and **nothing
+caught it** — a 500 where every other refusal in this file is a plain 400. Fixed by making `familyId` (and
+the new `usableUntil`, see must-fix 3) optional on the model, with `rotateTokens` reading `doc.familyId ??
+generateToken()` when issuing a legacy token's replacement — the connection is upgraded to a real family on
+its very next rotation. `endFamily` falls back to `disconnect(userId, clientId)` when `familyId` is
+`undefined`, since there is nothing to converge on for a row that predates the field; documented as
+narrower protection bounded to connections that predate the deploy, closing as each one rotates or expires.
+
+Verified with two tests structurally invisible to the existing suite (both simulate a legacy row via
+`$unset`, since a fresh test database never has one): a legacy token already close to its own expiry
+rotates without a 500 (the exact branch traced above), and — separately, since making the field merely
+optional is not the same as proving the *upgrade* happens — a second test rotates a legacy token twice and
+confirms a bystander connection through the same client survives a replay of the (now-upgraded) second
+token; deleting the `?? generateToken()` fallback took the bystander out too (200 → 401), confirming the
+fallback, not just the optional field, is what the second test needs.
+
+**Must-fix 2 — the grace ratchet also gated the `supersededAt` stamp.** `if (doc.expiresAt > graceEnd) {
+doc.expiresAt = graceEnd; doc.supersededAt = now }` meant a token rotated within its own last moments —
+nothing to shorten — was never marked superseded at all, so a later replay of it looked like a plain
+unknown token rather than reuse. Fixed by stamping `supersededAt` unconditionally on first rotation and
+letting the shortening (now of `usableUntil`, see must-fix 3) stay a separate, independently-gated line —
+they record two different facts ("has this been rotated" vs. "when did tolerance for a retry end").
+
+**Structurally blind under this project's own test env, and the reason a second test file exists.** With
+`REFRESH_GRACE_SECONDS=0` (pinned in `vitest.config.ts`, "rotated-out tokens must die immediately"), `now +
+grace` is just `now`, and "the token's own `usableUntil` already precedes the grace window" collapses into
+"the token has already expired" — the early-return branch above the one this bug lives in. The two
+conditions are mathematically the same at grace=0, so no test running under the shared env can ever tell
+them apart, in either direction. `oauth-token-grace.test.ts` mocks `config/env` with a positive
+`REFRESH_GRACE_SECONDS` instead (`vi.mock`, following the pattern `vitest.config.ts` itself names — "tests
+that need live mode mock the env module themselves"), imports `store.ts`'s functions directly against the
+same test Mongo rather than going through the full app, and is the only place must-fix 2 is actually
+proven: deleting the fix there red on `supersededAt` being unset; restoring it, green. The corresponding
+test in `oauth-mcp.test.ts` is kept too, renamed to be honest about what it actually covers (a live token
+near its own expiry still rotates and is later caught on replay) rather than claiming to isolate the bug it
+cannot, at grace=0, isolate.
+
+**Must-fix 3 — reuse detection expired after about a minute.** `expiresAt` did two jobs: spendability (is
+this token still usable) and retention (how long the TTL index keeps the row at all). Marking a token
+superseded shortened `expiresAt` to the grace window, so the TTL reaper removed the row roughly a minute
+after grace closed — meaning finding 3 protected a window a couple of minutes wide against a threat (a
+leaked or stolen token) that plays out over days, and every test in the suite replays immediately, so none
+of them could see the gap. Split the two: added `usableUntil` to `OAuthTokenDb`, read by `rotateTokens` for
+the live/superseded decision and written on supersession; `expiresAt` is now never touched after issuance,
+staying at its full original value (up to 182 days for a refresh token) and doing only retention, which is
+what the TTL index (`expireAfterSeconds: 0` on `expiresAt`) already assumed it meant. Chose a second field
+over, say, a `retentionUntil` naming that inverted which field the index reads, or repurposing
+`createdAt` + a duration — a second date field reads directly at each call site and needed no index change,
+since the TTL index was already correctly pointed at `expiresAt`.
+
+Verified by reverting the shortening to `doc.expiresAt = graceEnd` (the pre-fix line) and confirming a new
+test — which asserts retention (`expiresAt`) is unchanged after supersession while `usableUntil` alone moved
+— goes red (unmoved-value assertion fails, since the old code moved the wrong field); restored, green. A
+storage trade-off follows from this and is worth recording rather than leaving implicit: a connection
+rotated daily for the life of a refresh token can now carry on the order of dozens to low hundreds of
+superseded-but-still-retained rows at once (bounded by rotations within the last 182 days, not unbounded),
+where the previous design held at most one. Judged acceptable — the whole point of must-fix 3 is that
+detection needs the row to survive — and each row still expires and is reaped on its own original schedule.
+
+**Must-fix 4 — `endFamily` could stop half-way.** The retry loop `break`d on the first attempt that deleted
+*something*, but `issueTokens` writes the access and refresh rows through a concurrent `Promise.all`, so a
+delete landing between the two inserts could remove only one and call itself done, leaving the other alive
+inside a family that was supposed to be dead. Fixed by converging on "nothing left in this family" instead:
+after each delete, if more attempts remain, pause and recheck via `countDocuments`, only stopping early once
+a pass that deleted nothing is *confirmed* by that recheck to have found nothing — so a straggler from a
+still-in-flight concurrent write gets another pass rather than being mistaken for "already clean".
+
+The existing concurrent-double-exchange test only ever asserted on the access token
+(`oauth-mcp.test.ts`, originally around line 1296), which cannot see this bug — extended it to also assert
+the refresh token is dead. Verified by reverting to "stop on first successful delete" *and* — because the
+race between the two `Promise.all` writes is too narrow to hit reliably on this machine, the same honest
+limitation round 1 hit with must-fix A2 — temporarily inserting a 50ms delay before the concurrent
+`store('refresh', ...)` call to widen it: with the delay, the reverted logic left the refresh token alive
+(200 where 400 was expected) reliably; restoring the convergence loop fixed it reliably. Both temporary
+changes (the delay and the reversion) were removed afterward; only the convergence fix and the extended
+assertion remain.
+
+**Must-fix 5 — false "your assistant may have leaked" emails.** `notifyConnectionRevoked` and
+`logConnectionRevoked` fired even when `deletedCount === 0`. An authorization-code row lives 5 minutes, so a
+second, third, or later presentation of an already-fully-revoked code — nothing left to delete — each sent
+another theft notice about a connection that, by then, had nothing left to leak. Fixed with a guard: `if
+(deletedCount === 0) return` before either fires. Verified by removing the guard and confirming the new test
+(replay an already-revoked code a second time, assert `sendMail` was not called and no `[oauth] connection
+revoked` line was logged) goes red — the first, genuine revocation's notify had to be drained
+(`drainPendingSideEffects`) before the spies went up, or the test caught that legitimate first call instead
+of proving the second sends nothing; restored, green.
+
+**The flake fix from round 1 was itself timing-dependent, per this project's own guidance to fix the defect
+rather than the instrument.** The 20ms `beforeEach` sleep worked on this machine but would not reliably on a
+slower or more loaded one. Replaced with a deterministic drain: `pendingSideEffects`, a module-level
+`Set<Promise<unknown>>` in `store.ts` that `endFamily` adds its fire-and-forget `notifyConnectionRevoked`
+call to (removing itself via `.finally` once settled), and an exported `drainPendingSideEffects()` that
+awaits whatever is currently in the set. Production code never reads the set or calls the drain function —
+the notify call stays genuinely fire-and-forget for real callers, which root cause F2 requires; the tracking
+costs one `Set` insert and a `.finally` per revocation and is otherwise inert. `beforeEach` now awaits the
+drain instead of sleeping.
+
+While writing this, found and fixed a **second, genuine race in the F2 test itself**, not the flake being
+replaced: it resolved a manually-toggled mock promise (`resolveMail()`) immediately after the HTTP response
+returned, but `notifyConnectionRevoked` only reaches the mocked `sendMail` call after its own `await`s (the
+user/client lookups) settle, on a timeline the test does not control — calling `resolveMail()` too early hit
+a stale closure from before the real one was assigned, and the promise it should have unblocked hung
+forever. Fixed by having the mock resolve itself after a fixed delay (300ms, comfortably under
+`lib/mailer.ts`'s real SMTP timeouts and long enough to make the "response returned first" assertion
+meaningful) rather than needing external triggering — `drainPendingSideEffects` then correctly waits for
+whatever is already tracked, regardless of what internal awaits it still has to pass through. This is not
+hypothetical: it reproduced deterministically once must-fix 2's `beforeEach` change made the drain path run
+for real instead of masking the race behind a fixed sleep.
+
+**Note — cookie accumulation, judged not worth acting on this round.** `/oauth/authorize` is unauthenticated
+and sets a uniquely-named, `Path=/`, 15-minute cookie per hit (root cause C4, rework round 1); only the
+answered one is ever cleared. Roughly 100 hits — within the SDK's own default token-endpoint rate limit, and
+authorize itself carries none — could leave on the order of 8.5 KB of `Cookie` header on every request to
+the origin, risking crowding out the app's own refresh cookie or drawing a 431 from an intermediary. Left
+unfixed this round: it is in `provider.ts`, not the `store.ts` machinery this round's findings live in, a
+real fix (a cap, a sweep of stale cookies, or reusing a slot per browser) is more design than a final round
+should absorb, and there is no evidence it has been exercised in practice. Flagging it here rather than
+silently deferring it — a cap or sweep is the natural next step if it ever is.
