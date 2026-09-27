@@ -5,8 +5,10 @@
  *
  * The caller's own templates (TMPL-4) sit alongside the built-ins and carry
  * the actions that only make sense for something you authored — rename and
- * retheme, or delete. Any template can be duplicated: that is how a new one
- * is made, so a user always starts from something that already renders.
+ * retheme, or delete. A design someone else shared as editor (TMPL-26) gets
+ * the same edit action, since `template.update` accepts either; delete stays
+ * owner-only regardless. Any template can be duplicated: that is how a new
+ * one is made, so a user always starts from something that already renders.
  *
  * Keeps the radiogroup semantics of the picker it replaces, so choosing a
  * template is still one keyboard-reachable control.
@@ -24,10 +26,6 @@ import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
 import { templateName } from '../../i18n/templateName'
 import PreviewCard from './PreviewCard'
 
-/** A template the signed-in user authored, rather than one that shipped. */
-export const isOwnTemplate = (template: Template, userId?: string): boolean =>
-  Boolean(userId) && template.ownerId === userId
-
 /**
  * The layouts a card pages through. The whiteboard is left out for the reason
  * the editor's rail leaves it out (TMPL-7): every template has one, it cannot
@@ -44,7 +42,6 @@ export default function TemplateLibrary({
   templates,
   value,
   onChange,
-  userId,
   onDuplicate,
   onEdit,
   onDelete,
@@ -53,8 +50,6 @@ export default function TemplateLibrary({
   templates: Template[]
   value: string
   onChange: (id: string) => void
-  /** Signed-in user, so their own templates can offer edit and delete. */
-  userId?: string
   onDuplicate?: (template: Template) => void
   onEdit?: (template: Template) => void
   onDelete?: (template: Template) => void
@@ -74,7 +69,13 @@ export default function TemplateLibrary({
       className="grid grid-cols-2 gap-4 sm:grid-cols-3"
     >
       {templates.map(template => {
-        const own = isOwnTemplate(template, userId)
+        // Server-decided roles (TMPL-26), never an `ownerId` comparison the
+        // client would have to keep in step with sharing on its own.
+        const canEdit =
+          template.myRole === 'owner' || template.myRole === 'editor'
+        const canDelete = template.myRole === 'owner'
+        const shared =
+          template.myRole === 'editor' || template.myRole === 'viewer'
         const selected = value === template.id
         const name = templateName(t, template)
         const steppable = steppableLayouts(template)
@@ -108,9 +109,17 @@ export default function TemplateLibrary({
                 <span className="min-w-0 truncate text-sm font-medium">
                   {name}
                 </span>
-                {own && (
+                {template.myRole === 'owner' && (
                   <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[0.65rem] font-medium text-slate-600">
                     {t('template.custom')}
+                  </span>
+                )}
+                {/* Shared with the caller (TMPL-26), rather than authored by
+                    them — distinct from "Custom" so a card never claims
+                    both at once. */}
+                {shared && (
+                  <span className="shrink-0 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[0.65rem] font-medium text-indigo-700">
+                    {t('template.shared')}
                   </span>
                 )}
               </PreviewCard>
@@ -155,7 +164,9 @@ export default function TemplateLibrary({
               )}
             </div>
 
-            {(onDuplicate || (own && (onEdit || onDelete))) && (
+            {(onDuplicate ||
+              (canEdit && onEdit) ||
+              (canDelete && onDelete)) && (
               <div className="flex items-center gap-1 px-1">
                 {onDuplicate && (
                   <button
@@ -169,7 +180,7 @@ export default function TemplateLibrary({
                     <Copy className="h-3.5 w-3.5" aria-hidden />
                   </button>
                 )}
-                {own && onEdit && (
+                {canEdit && onEdit && (
                   <button
                     type="button"
                     onClick={() => onEdit(template)}
@@ -180,7 +191,7 @@ export default function TemplateLibrary({
                     <Pencil className="h-3.5 w-3.5" aria-hidden />
                   </button>
                 )}
-                {own && onDelete && (
+                {canDelete && onDelete && (
                   <button
                     type="button"
                     onClick={() => onDelete(template)}

@@ -135,3 +135,18 @@ export async function pickLayout(dialog: Locator, label: string) {
   await expect(card, `no layout offered called "${label}"`).toHaveCount(1)
   await card.click()
 }
+
+/**
+ * The template editor's box outline — "Boxes in this layout" — scoped to its
+ * own heading rather than "the last list on the page". A page position is
+ * fragile: the owner's `AccessSettings` sharing panel (TMPL-26) added its
+ * own "People with access" list further down the same page, and a page
+ * gaining another list later should not retroactively break a selector
+ * describing an earlier one.
+ */
+export function boxOutline(page: Page): Locator {
+  return page
+    .getByRole('heading', { name: 'Boxes in this layout' })
+    .locator('..')
+    .getByRole('list')
+}

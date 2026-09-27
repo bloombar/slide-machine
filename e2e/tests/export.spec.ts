@@ -7,7 +7,7 @@
  */
 import { test, expect } from './fixtures'
 import { readFile } from 'node:fs/promises'
-import { createProject, openProjectSettings } from './helpers'
+import { boxOutline, createProject, openProjectSettings } from './helpers'
 
 test('export a lecture to PDF download and Google Slides in Drive', async ({
   page,
@@ -131,7 +131,7 @@ test('a formula exports as notation, and a broken one is reported (EXP-7)', asyn
     .click()
   await expect(page).toHaveURL(/\/t\//)
   await page.getByRole('tab', { name: /Content/ }).click()
-  await page.getByRole('list').last().getByText('Slide body').click()
+  await boxOutline(page).getByText('Slide body').click()
   await page.getByLabel('What is it').selectOption('math')
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(page.getByTestId('template-saved')).toHaveText('Saved')

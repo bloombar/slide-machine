@@ -1885,3 +1885,83 @@ editor server-side, so before this the control simply errored when an editor tri
 Disabling it client-side (`myRole !== 'owner'`) is not a new rule, only surfacing the existing one before the
 click rather than after, and threading `myRole` down to `TemplateSettings` for it is also what let CHEAP-FIX D's
 `deck.get`/`GET /decks/:slug` tests exist to check against.
+
+## Template sharing, client UI (2026-09-27, slice 2)
+
+Judgment calls and one real bug found wiring `AccessSettings` (`client/src/components/AccessSettings.tsx`)
+into a design's own page, on top of slice 1's server work.
+
+**`TemplateEditor`'s outer `<form>` broke on a nested form (round 1), fixed by moving the panel out (round 2).**
+Embedding the owner's full sharing panel put a second, independent `<form>` (`AccessSettings`'s "Add people"
+form) inside `TemplateEditor`'s own wrapping `<form>`, which exists so the Save button (`type="submit"`) and
+Enter-to-save in a text field work. A form nested inside a form is invalid HTML; React's DOM APIs will still
+build it, but clicking the inner form's own submit button then submits *both*, and the outer one's native
+default action — since nothing on that path calls `preventDefault` on the browser's native event for it —
+fires a real full-page GET back to the same URL, silently dropping the click that was supposed to add a
+person. This surfaced as `template.share` never once reaching the network in
+`e2e/tests/template-sharing.spec.ts`, confirmed by instrumenting the actual browser requests (nothing sent)
+against a direct MongoDB read of the design (viewers/editors never touched) — not a sharing bug in
+`template.share` itself, which was untouched and correct. Round 1's fix (dropping `TemplateEditor`'s own
+`<form>` for a `<div>`) worked but cost Enter-to-save and native `required`/`min`/`max` validation, which the
+coordinator asked to keep — so round 2 restores `TemplateEditor`'s `<form>` unchanged and instead moves the
+owner's sharing panel **out of it entirely**: `TemplateEditorPage` now renders `<AccessSettings>` as a sibling
+beside `<TemplateEditor>`, not through `TemplateSettings` at all. `TemplateSettings` keeps only the read-out
+for non-owners (a disabled select, unchanged from slice 1); an owner sees nothing about general access inside
+the editor's own form — only in the panel beside it. The two forms are now genuinely independent DOM siblings,
+so a submission in one can never reach the other's handler regardless of how either is triggered (click or
+Enter) — proved in `TemplateEditorPage.test.tsx` by firing `submit` on each form directly (jsdom does not wire
+a text field's Enter key to implicit submission, a documented gap, so a direct `submit` event is the accepted
+proxy for it) and asserting each calls only its own action.
+
+**`e2e/tests/template-library.spec.ts`'s `boxes()` helper had to stop saying "the last list on the page,"**
+**and then stop repeating itself.** Five of its tests located the box outline via `page.getByRole('list').last()`
+— true until this slice, which added `AccessSettings`'s own "People with access" `<ul>` further down the same
+page for a design's owner (exactly the fixture these tests duplicate into). Re-scoped to the outline's own
+"Boxes in this layout" heading (`.locator('..').getByRole('list')`) rather than position on the page, which is
+what should have been named in the first place — a page gaining another list later should not retroactively
+break a selector describing an earlier one. Round 2 lifts that scoped lookup into `boxOutline(page)` in
+`e2e/tests/helpers.ts`, since five copies of the same locator is the kind of duplication that drifts the next
+time only one of them gets fixed. The same `getByRole('list').last()` pattern turned up a sixth, unrelated
+instance in `e2e/tests/export.spec.ts` (its own formula-box test) once the full suite ran — same regression,
+same fix, now through the shared helper rather than a sixth copy.
+
+**The library's shared badge and role gates read `myRole`, never `ownerId`.** `TemplateLibrary.tsx`'s
+`isOwnTemplate(template, userId)` compared `template.ownerId` to the signed-in user's id — a client-side
+computation duplicating what the server's `myRole` already states authoritatively (owner/editor/viewer/null),
+and one that could not distinguish "shared with me" from "not mine" at all. Replaced with three flags read
+straight off `myRole`: `canEdit` (owner or editor — the pencil), `canDelete` (owner only — the trash), and
+`shared` (editor or viewer — the new "Shared" badge, mutually exclusive with "Custom"). The `userId` prop this
+served is gone from `TemplateLibrary` and its one caller (`TemplateDesignPanel`), which had no other use for
+`useAuth`'s `user` either.
+
+**`AccessSettings`'s per-person "Transfer ownership" option is hidden by `entity`, not merely absent for lack
+of a handler.** A design has no `template.transferOwnership` action at all (per the brief and slice 1's
+`TemplateAuthorAccess` — owner-only actions are `setAccess`/`share`/`unshare`/`shares`, nothing that moves
+ownership), so the option is gated on `entity !== 'template'` alongside the existing `isOwner` check, rather
+than leaving it reachable and refused server-side the way an editor's general-access attempt already was
+before this slice. There is no case where showing it and letting it 404/400 was preferable to not offering it.
+
+**`AccessSettings` takes an optional per-entity `hints` override, rather than a design-specific branch inside
+it.** "Anyone on the internet with the link can view" (the lecture/project wording) is flatly wrong for a
+design: `template.get` requires sign-in, so a public design is reachable only by a signed-in account, never
+"anyone on the internet." Rather than teach the shared component about what "public" means for each entity —
+which would only grow with the next resource that reuses it — `AccessSettings` takes an optional
+`hints?: Partial<Record<Visibility, string>>` that overrides `access.general.<value>.hint` when given.
+`TemplateEditorPage` supplies design wording from the existing `template.visibilityHint.*` keys (rewritten:
+public — "Anyone signed in can find, use and copy this design"; restricted — "Only people you add can open
+this design"), translated in all five bundles. `template.errors.setAccess` was dead (the owner's general
+access errors now surface through `AccessSettings`'s own `access.errors.setAccess`, unchanged since round 1)
+and is deleted from all five bundles.
+
+**Sharing a design in the e2e spec needs both parties' addresses confirmed, not just the owner's.**
+`template.share` treats an unconfirmed recipient exactly as `deck.share` does (SHARE-3): the grant is held as a
+pending invitation, keyed by email with no display name, rather than a real member — which reads in
+`AccessSettings` as "Invited", not the person's name. The spec verifies the guest's email as well as the
+owner's before sharing, so the assertions are about a real grant (a name in the people list, a role that can be
+changed, a member who is truly gone once removed) rather than an invitation's narrower shape.
+
+**A `toHaveCount(0)` needs something positive waited on first, or it is checking nothing.** The e2e spec's
+assertion that the guest's Design tab does not yet list the shared design would pass identically whether the
+library had genuinely loaded without it, or simply had not finished loading at all — a count of zero rows
+proves nothing about which. Fixed by waiting on a built-in's own card (`Classic`) first, so the absence
+assertion that follows is checking a loaded library rather than an empty one.

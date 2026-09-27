@@ -11,7 +11,7 @@
  * slide actually changed.
  */
 import { test, expect } from './fixtures'
-import { createProject, openProjectSettings } from './helpers'
+import { boxOutline, createProject, openProjectSettings } from './helpers'
 
 const stamp = Date.now()
 const user = { email: `tmpl-${stamp}@example.com`, name: 'Templater' }
@@ -284,7 +284,7 @@ test('a layout of the author’s own survives leaving and returning', async ({
     page.getByRole('tab', { name: /Content \+ Image/ }),
   ).toBeVisible()
 
-  const boxes = () => page.getByRole('list').last()
+  const boxes = () => boxOutline(page)
   await boxes().getByText('Slide title').click()
   await page.getByLabel('Text size', { exact: true }).fill('9')
   await page.getByRole('button', { name: 'Save' }).click()
@@ -386,7 +386,7 @@ test('arranging boxes freely, with rulers and guides', async ({ page }) => {
   await page.getByRole('tab', { name: 'Content', exact: true }).click()
 
   const canvas = page.getByTestId('template-canvas')
-  const boxes = () => page.getByRole('list').last()
+  const boxes = () => boxOutline(page)
 
   await test.step('spreading a column keeps its contents inside the margins', async () => {
     // "At the start" used to put the first box hard against the top of the
@@ -537,7 +537,7 @@ test('a box carries the author’s instruction to the AI (TMPL-10)', async ({
     .click()
   await page.getByLabel('Template name').fill(own)
 
-  const boxes = () => page.getByRole('list').last()
+  const boxes = () => boxOutline(page)
   await boxes().getByText('Slide title').click()
 
   const instruction = 'Only the concept being introduced, in three words.'
@@ -590,7 +590,7 @@ test('a box can hold a formula, and it is edited as LaTeX (EDIT-7)', async ({
 
   // An author picks the kind from the menu the system provides (TMPL-9)
   await page.getByRole('tab', { name: /Content/ }).click()
-  const boxes = () => page.getByRole('list').last()
+  const boxes = () => boxOutline(page)
   await boxes().getByText('Slide body').click()
   await page.getByLabel('What is it').selectOption('math')
   await page.getByRole('button', { name: 'Save' }).click()
@@ -628,7 +628,7 @@ test('a code box keeps its indentation through an edit (EDIT-7)', async ({
   await page.getByLabel('Template name').fill(own)
 
   await page.getByRole('tab', { name: /Content/ }).click()
-  const boxes = () => page.getByRole('list').last()
+  const boxes = () => boxOutline(page)
   await boxes().getByText('Slide body').click()
   await page.getByLabel('What is it').selectOption('code')
   // The language is the template's, so every slide built from it agrees

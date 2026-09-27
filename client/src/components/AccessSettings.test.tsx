@@ -1,8 +1,8 @@
 /**
- * Unit tests for the shared access settings: one component drives both
- * deck.* and project.* action families; lectures surface inheritance
- * with a reset back to project settings; ownership transfer confirms
- * in a dialog.
+ * Unit tests for the shared access settings: one component drives
+ * deck.*, project.* and template.* action families; lectures surface
+ * inheritance with a reset back to project settings; ownership transfer
+ * confirms in a dialog (never offered for a design, which has none).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
@@ -245,6 +245,66 @@ describe('AccessSettings', () => {
     ).toBeInTheDocument()
     // And not the generic failure copy a bad address would get
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  // TMPL-26: a design drives template.* the same way a lecture drives
+  // deck.*, but has neither inheritance nor ownership transfer.
+  it('drives the template action family for designs, with no transfer or reset', async () => {
+    let sent: unknown
+    mockFetchRoutes({
+      '/api/actions/template.shares': () => ({ status: 200, body: [share] }),
+      '/api/actions/template.setAccess': init => {
+        sent = JSON.parse(String(init?.body))
+        return { status: 200, body: {} }
+      },
+    })
+    render(
+      <AccessSettings
+        entity="template"
+        subject={subject()}
+        isOwner
+        onChange={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByRole('radio', { name: /restricted/i }))
+    await vi.waitFor(() =>
+      expect(sent).toEqual({ templateId: 'x1', visibility: 'restricted' }),
+    )
+    // Never the inheritance banner a lecture shows
+    expect(screen.queryByText(/inherited from the project/i)).toBeNull()
+    // Nor ownership transfer, even for the owner
+    const menu = await screen.findByLabelText('Role for byron')
+    expect(menu).not.toHaveTextContent('Transfer ownership')
+    expect(menu).toHaveTextContent('Remove access')
+  })
+
+  // TMPL-26 round 2: "Anyone on the internet with the link can view" is
+  // wrong for a design — `template.get` requires sign-in — so a caller whose
+  // entity means something different by "public" supplies its own wording.
+  it('lets a caller override the general-access hint text', async () => {
+    mockFetchRoutes({
+      '/api/actions/template.shares': () => ({ status: 200, body: [] }),
+    })
+    render(
+      <AccessSettings
+        entity="template"
+        subject={subject()}
+        isOwner
+        onChange={vi.fn()}
+        hints={{
+          public: 'Anyone signed in can find, use and copy this design.',
+          restricted: 'Only people you add can open this design.',
+        }}
+      />,
+    )
+    expect(
+      screen.getByText('Anyone signed in can find, use and copy this design.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Only people you add can open this design.'),
+    ).toBeInTheDocument()
+    // Not the generic lecture/project wording it replaces
+    expect(screen.queryByText(/can view$/)).toBeNull()
   })
 
   it('hides Transfer ownership from non-owners', async () => {

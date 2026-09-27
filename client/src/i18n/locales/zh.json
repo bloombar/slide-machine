@@ -259,6 +259,7 @@
     "exportYaml": "将模板导出为 YAML",
     "exportYamlHint": "将该模板的样式和版式下载为可重新导入的 YAML 文件。",
     "custom": "自定义",
+    "shared": "已共享",
     "duplicate": "复制",
     "duplicateNamed": "复制{name}",
     "edit": "编辑",
@@ -300,8 +301,7 @@
       "duplicate": "无法复制该模板",
       "load": "无法加载该设计",
       "save": "无法保存模板",
-      "delete": "无法删除模板",
-      "setAccess": "无法更改谁可以访问此设计"
+      "delete": "无法删除模板"
     },
     "page": {
       "saved": "已保存",
@@ -317,8 +317,8 @@
       "public": "公开"
     },
     "visibilityHint": {
-      "restricted": "只有你和你分享给的人才能打开它。",
-      "public": "显示在公共模板库中，任何人都可以复制。"
+      "restricted": "只有你添加的人才能打开此设计。",
+      "public": "任何已登录的用户都可以找到、使用并复制此设计。"
     },
     "boxAt": "{slot}：距左 {x}%，距顶 {y}%，宽 {w}%，高 {h}%",
     "slotLabel": "名称",

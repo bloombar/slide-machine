@@ -259,6 +259,7 @@
     "exportYaml": "Exporter le modèle en YAML",
     "exportYamlHint": "Téléchargez le style et les mises en page de ce modèle dans un fichier YAML réimportable.",
     "custom": "Perso",
+    "shared": "Partagé",
     "duplicate": "Dupliquer",
     "duplicateNamed": "Dupliquer {name}",
     "edit": "Modifier",
@@ -300,8 +301,7 @@
       "duplicate": "Impossible de dupliquer ce modèle",
       "load": "Impossible de charger ce modèle",
       "save": "Impossible d’enregistrer le modèle",
-      "delete": "Impossible de supprimer le modèle",
-      "setAccess": "Impossible de changer qui peut accéder à ce modèle"
+      "delete": "Impossible de supprimer le modèle"
     },
     "page": {
       "saved": "Enregistré",
@@ -317,8 +317,8 @@
       "public": "Publique"
     },
     "visibilityHint": {
-      "restricted": "Seul vous et les personnes avec qui vous la partagez peuvent l’ouvrir.",
-      "public": "Visible dans la bibliothèque publique, copiable par tous."
+      "restricted": "Seules les personnes que vous ajoutez peuvent ouvrir ce modèle.",
+      "public": "Toute personne connectée peut trouver, utiliser et copier ce modèle."
     },
     "boxAt": "{slot} : {x}% depuis la gauche, {y}% depuis le haut, {w}% de large, {h}% de haut",
     "slotLabel": "Son nom",

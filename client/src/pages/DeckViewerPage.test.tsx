@@ -2978,6 +2978,9 @@ describe('DeckViewerPage settings modal', () => {
     id: 'mine1',
     permalinkSlug: 'my-style-ab12',
     ownerId: 'u1',
+    // TMPL-26: the library's edit/delete icons are gated on this now, not
+    // on comparing `ownerId` to the signed-in user.
+    myRole: 'owner' as const,
     name: 'My Style',
     layouts: [
       {
