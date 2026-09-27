@@ -15,14 +15,18 @@
  * `disabled` on a `<fieldset>` disables every form control it contains,
  * natively — inputs, selects, textareas and buttons alike — so "open up
  * this decoration", "bring forward", paint order, and so on all go inert
- * with no extra work. Only navigation stays live: which layout is on
- * screen and which box is selected, through `LayoutRail` and
- * `LayoutTreeOutline`, each told `readOnly` so their own add/delete/drag
+ * with no extra work. That takes `SlotInspector`'s own close button with it
+ * too, though, so a "Back to layout settings" control sits outside the
+ * fieldset, reusing its label, as the one way back to a layout's own
+ * settings once a box is selected. Only navigation stays live otherwise:
+ * which layout is on screen and which box is selected, through `LayoutRail`
+ * and `LayoutTreeOutline`, each told `readOnly` so their own add/delete/drag
  * controls disappear rather than sitting there disabled and confusing.
  * The canvas is not reused at all — a reader has nothing to drag — so the
  * layout is shown as `TemplatePreview` already draws it for a thumbnail.
  */
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { Template } from '@slide-machine/shared'
 import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
 import { findNode } from './LayoutCanvas'
@@ -47,6 +51,7 @@ export default function TemplateReaderView({
 }: {
   template: Template
 }) {
+  const { t } = useTranslation()
   const images = usePreviewImages()
   // The named text styles a box's own settings are measured against, so the
   // inspector's inherited-budget placeholder reads this design's own values
@@ -118,6 +123,22 @@ export default function TemplateReaderView({
               onDelete={noop}
               readOnly
             />
+          )}
+
+          {/* `SlotInspector`'s own way back to the layout's settings is its
+              close button, which sits inside the fieldset below and is
+              disabled along with everything else in it — a reader can pick
+              a box, but has no click left that would un-pick one. This
+              stands outside the fieldset so deselecting still works,
+              reusing the same label the editor's own close button carries. */}
+          {selected && selectedId && (
+            <button
+              type="button"
+              onClick={() => setSelectedId(null)}
+              className="self-start text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:underline"
+            >
+              {t('template.backToLayout')}
+            </button>
           )}
 
           {/* `contents` keeps the fieldset itself out of the flex layout —

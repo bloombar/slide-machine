@@ -228,32 +228,71 @@ describe('TemplateReaderView (TMPL-29)', () => {
     expect(budget).toHaveAttribute('placeholder', '250')
   })
 
-  it('has no editable control anywhere but the layout picker, and never writes', () => {
+  it('has no editable or actionable control anywhere but navigation, and never writes', () => {
     const { container } = render(
       <TemplateReaderView template={richTemplate()} />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Body' }))
 
     const controls = Array.from(
-      container.querySelectorAll('input, textarea, select'),
+      container.querySelectorAll(
+        'input, textarea, select, button, [role="button"]',
+      ),
     )
     // `:disabled` rather than the `.disabled` IDL property: jsdom does not
     // implement a `<fieldset disabled>`'s effect on its descendants for the
     // property getter, only for the CSS pseudo-class (a documented jsdom
     // gap — a real browser, and `@testing-library/jest-dom`'s `toBeDisabled`
     // matcher used elsewhere in this file, both read it correctly either
-    // way). The rail's own narrow-screen `<select>` is a way to pick a
-    // layout, the same gesture as clicking its tab, so it alone is
-    // exempted — everything an inspector shows is inert.
+    // way).
     const enabled = controls.filter(el => !el.matches(':disabled'))
-    expect(enabled).toHaveLength(1)
-    expect(enabled[0]).toHaveAccessibleName('Layouts')
+    expect(enabled.length).toBeGreaterThan(0)
+
+    // Every one of them only changes what is on screen, never the design: a
+    // layout tab or the rail's own narrow-screen picker, an outline row
+    // picking a box (a `<div role="button">`, since it is not a real
+    // `<button>` — that distinction is what tells it apart from every
+    // *inspector's* own button, which the fieldset above already disables),
+    // or the "Back to layout settings" control.
+    const isNavigational = (el: Element) =>
+      el.getAttribute('role') === 'tab' ||
+      el.matches('select') ||
+      (el.getAttribute('role') === 'button' && el.tagName === 'DIV') ||
+      el.textContent === 'Back to layout settings'
+    for (const el of enabled) {
+      expect(isNavigational(el)).toBe(true)
+    }
 
     // A read of the preview images and the descriptor budget is fine; a
     // write to the design itself is not.
     for (const call of vi.mocked(dispatchAction).mock.calls) {
       expect(call[0]).not.toBe('template.update')
     }
+  })
+
+  it('offers a way back to a layout’s own settings once a box is selected', () => {
+    render(<TemplateReaderView template={template()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Body' }))
+    expect(
+      screen.getByDisplayValue('A worked example, in plain language.'),
+    ).toBeInTheDocument()
+
+    // `SlotInspector`'s own close button carries the same label and is
+    // still in the DOM, disabled, inside the fieldset — so there are two
+    // matches for the name, and only the enabled one is this control.
+    const backButtons = screen.getAllByRole('button', {
+      name: 'Back to layout settings',
+    })
+    const enabledBack = backButtons.find(b => !b.matches(':disabled'))
+    expect(enabledBack).toBeDefined()
+    fireEvent.click(enabledBack!)
+
+    expect(
+      screen.getByDisplayValue('Use for a slide with a title and a body'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByDisplayValue('A worked example, in plain language.'),
+    ).toBeNull()
   })
 
   it('offers nothing to add, delete or reorder — deleting readOnly from the rail or the outline would fail this', () => {
@@ -275,7 +314,12 @@ describe('TemplateReaderView (TMPL-29)', () => {
   it('lets a box be selected by keyboard, not only by pointer', () => {
     render(<TemplateReaderView template={template()} />)
     const row = screen.getByRole('button', { name: 'Body' })
+    // The row has to be reachable by keyboard at all — `tabIndex` is what
+    // `readOnly` adds to it in place of `DraggableListRow`'s own — before
+    // proving that focusing and activating it does anything.
+    expect(row).toHaveAttribute('tabindex', '0')
     row.focus()
+    expect(row).toHaveFocus()
     fireEvent.keyDown(row, { key: 'Enter' })
 
     expect(

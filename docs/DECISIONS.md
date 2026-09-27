@@ -2231,3 +2231,30 @@ than a spread object, because `eslint-plugin-i18next`'s `no-literal-string` rule
 inside a plain object property even though `role` is not one of the attributes it is configured to check on a
 real JSX attribute — the object-literal form and the JSX-attribute form parse differently to the rule, and
 only the latter is exempt.
+
+**Round 3, from code review: `duplicatingSlug` scopes the in-flight flag to the slug it was set for, rather
+than a plain boolean.** React Router keeps `TemplateEditorPage` mounted across a `/t/:slug` change, so a plain
+`duplicating` boolean — set on click, and (correctly) left `true` through a successful duplicate's own
+navigation so the leaving page's button does not flicker back to life — would never clear itself afterwards:
+revisiting the *original* design later (a bookmark, a browser back button) would still read `duplicating` as
+`true` from a duplicate that finished long ago, and Duplicate would stay disabled forever. Cleared inside the
+same fetch effect's `.then` that already sets `loadedSlug` — any design's fetch resolving fully, this one
+included, means nothing is genuinely still in flight — compared against the current `slug` for the button's
+own `disabled`, so a fresh visit to any design starts with a clean flag regardless of what happened on it
+before.
+
+**`SlotInspector`'s own close button ("Back to layout settings") is disabled along with everything else inside
+the fieldset, so a second, always-enabled button carrying the same label sits outside it** — the only way a
+reader gets back to a layout's own settings once a box is selected, since nothing inside the fieldset can be
+clicked. Two elements answer to the same accessible name as a result (one live, one inert) — accepted rather
+than inventing a different label for what is, to the reader, the exact same action the editor's own control
+performs; tests that need the live one look it up by finding the one that is not `:disabled`.
+
+**The "no enabled control" sweep (`TemplateReaderView.test.tsx`) now also checks `button` and `[role="button"]`,
+not just form fields, since the brief's earlier version would not have caught a `readOnly` prop quietly
+dropped from `LayoutRail` or `LayoutTreeOutline` — their own buttons are real DOM buttons the fieldset never
+reaches.** What is left enabled is asserted to be *navigational only* (a layout tab, the rail's own
+narrow-screen picker, an outline row — a `<div role="button">`, which is what tells it apart from every
+button inside an inspector, all of which the fieldset already disables — or the new "Back to layout settings"
+control) rather than merely counted, so a stray new writable control would fail the same way a missing
+`readOnly` would.

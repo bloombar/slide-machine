@@ -58,7 +58,18 @@ export default function TemplateEditorPage() {
   const [saving, setSaving] = useState(false)
   const [savedNote, setSavedNote] = useState(false)
   const [dirty, setDirty] = useState(false)
-  const [duplicating, setDuplicating] = useState(false)
+  /** The slug a duplicate was started from, held only while it is in
+   * flight — compared against the current `slug` below rather than a plain
+   * boolean, so the flag cannot outlive the page it was set on. React
+   * Router keeps this same page component mounted across a `/t/:slug`
+   * change, so a plain `duplicating` boolean, once set, would never clear
+   * itself on its own: it would still read `true` — Duplicate stuck
+   * disabled — for a design visited again later, long after the duplicate
+   * it belonged to had finished. Cleared whenever a fetch resolves (below),
+   * which a fresh visit to any design always triggers. */
+  const [duplicatingSlug, setDuplicatingSlug] = useState<string | undefined>(
+    undefined,
+  )
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
   /** Where leaving would go, held while the author is asked about unsaved
    * work; null when nothing is pending. */
@@ -80,6 +91,11 @@ export default function TemplateEditorPage() {
         if (cancelled) return
         setTemplate(loaded)
         setLoadedSlug(slug)
+        // A fresh, complete load of any design — this one included — means
+        // nothing is still "duplicating" from this page's point of view; see
+        // `duplicatingSlug`'s own comment for why this can't be left to a
+        // plain boolean that only ever gets set, never cleared.
+        setDuplicatingSlug(undefined)
       })
       .catch((e: unknown) => {
         if (cancelled) return
@@ -203,8 +219,8 @@ export default function TemplateEditorPage() {
    * duplicated to be worked on, not to sit unopened in a library.
    */
   const duplicate = () => {
-    if (!template) return
-    setDuplicating(true)
+    if (!template || !slug) return
+    setDuplicatingSlug(slug)
     setDuplicateError(null)
     dispatchAction<Template>('template.duplicate', { templateId: template.id })
       .then(copy => {
@@ -214,9 +230,11 @@ export default function TemplateEditorPage() {
         // rather than `from`'s '/app' default, so "Back" on the copy has
         // somewhere to go even when this page was opened directly (a shared
         // link, a search result) rather than from a lecture's Design tab.
-        // Left `duplicating` true rather than reset: the page is on its way
-        // to the copy's URL, and the button for the design that is leaving
-        // should not spring back to life mid-navigation.
+        // `duplicatingSlug` is left set rather than cleared here: the page
+        // is on its way to the copy's URL, and the button for the design
+        // that is leaving should not spring back to life mid-navigation —
+        // the fetch effect above clears it once a design (any design) has
+        // fully loaded again.
         void navigate(`/t/${copy.permalinkSlug}`, {
           state: {
             from:
@@ -227,7 +245,7 @@ export default function TemplateEditorPage() {
       })
       .catch(() => {
         setDuplicateError(t('template.errors.duplicate'))
-        setDuplicating(false)
+        setDuplicatingSlug(undefined)
       })
   }
 
@@ -291,7 +309,7 @@ export default function TemplateEditorPage() {
               <button
                 type="button"
                 onClick={duplicate}
-                disabled={duplicating}
+                disabled={duplicatingSlug === slug}
                 className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
               >
                 {t('template.duplicate')}
