@@ -46,6 +46,7 @@ import {
   type ProfileVisibility,
   type SafeUser,
   type Template,
+  type VoteResult,
 } from '@slide-machine/shared'
 import { useAuth } from '../auth/AuthContext'
 import { dispatchAction } from '../api/actions'
@@ -64,6 +65,7 @@ import ConnectedAssistantsPanel from '../components/ConnectedAssistantsPanel'
 import { getAgentAccessEnabled, getDefaultTemplateId } from '../runtime-config'
 import TemplateDesignPanel from '../components/template/TemplateDesignPanel'
 import TemplateExportSection from '../components/template/TemplateExportSection'
+import { patchTemplateVote } from '../lib/templateVotes'
 
 /** One settings change, as the account itself holds it: an absent
  * `language`/`locale` means "unchanged", an explicit `undefined` one
@@ -216,6 +218,16 @@ export default function AccountSettingsPage() {
         // Quiet failure: the section simply stays empty
       })
   }, [])
+
+  // A vote cast from the Design tab's library (TMPL-27 round 3): patched
+  // into this page's own `templates` state, or it would revert to whatever
+  // `template.list` last returned the moment the Design tab unmounts and
+  // remounts — switching to General and back, say.
+  const onVote = useCallback(
+    (templateId: string, result: VoteResult) =>
+      setTemplates(list => patchTemplateVote(list, templateId, result)),
+    [],
+  )
 
   useEffect(() => {
     // Only the owner's own path has a Design tab, so only it needs the
@@ -656,6 +668,7 @@ export default function AccountSettingsPage() {
                 value={accountTemplateId}
                 onChange={setTemplate}
                 onLibraryChanged={loadTemplates}
+                onVote={onVote}
               />
               <TemplateExportSection templateId={accountTemplateId} />
             </section>

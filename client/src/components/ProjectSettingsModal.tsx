@@ -24,9 +24,10 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
-import type { Project, Template } from '@slide-machine/shared'
+import type { Project, Template, VoteResult } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import { projectTitle, untitledProject } from '../lib/project'
+import { patchTemplateVote } from '../lib/templateVotes'
 import SeedNotesEditor from './SeedNotesEditor'
 import SeedMaterial from './SeedMaterial'
 import AdminEditNotice from './AdminEditNotice'
@@ -84,6 +85,16 @@ export default function ProjectSettingsModal({
         // Quiet failure: the section simply stays empty
       })
   }, [])
+
+  // A vote cast from the Design tab's library (TMPL-27 round 3): patched
+  // into this modal's own `templates` state, or it would revert to whatever
+  // `template.list` last returned the moment the Design tab unmounts and
+  // remounts — switching tabs, or closing and reopening this modal.
+  const onVote = useCallback(
+    (templateId: string, result: VoteResult) =>
+      setTemplates(list => patchTemplateVote(list, templateId, result)),
+    [],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -228,6 +239,7 @@ export default function ProjectSettingsModal({
                   // Quiet failure: the picker stays on the saved value
                 })
             }}
+            onVote={onVote}
           />
           <TemplateExportSection templateId={project.templateId} />
         </section>

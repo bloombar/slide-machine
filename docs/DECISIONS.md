@@ -2359,3 +2359,36 @@ old bare word would either never find the button that exists (a false failure) o
 test's negative assertion, continue to report "absent" even if a vote control were mistakenly added there,
 since the button that *would* exist ("Upvote {title}") does not match "Upvote" exactly either — the check
 would keep passing for the wrong reason.
+
+### Round 3 (code review)
+
+**A vote cast from `TemplateLibrary` now reports up through `onVote(templateId, result)`, threaded through
+`TemplateDesignPanel` to every real caller that owns a `templates` list** — `AccountSettingsPage`,
+`DeckSettingsModal`, `ProjectSettingsModal` — each patching its own state with a new shared helper,
+`patchTemplateVote` (`client/src/lib/templateVotes.ts`). Round 2 gave `VoteControl` its own prop-adopting
+effect so a vote survives a stale *re-render*, but that is not the same as surviving an *unmount*: switching
+the Design tab away and back, or closing and reopening a settings modal, discards `TemplateLibrary` (and
+every `VoteControl` inside it) entirely, and the caller's own `templates` state — untouched until now — is
+exactly what a remount reads from. A small shared helper rather than three copies of the same `.map`, since
+all three callers do the identical patch.
+
+**`TemplateEditorPage`'s vote `onChange` now guards on the id captured at the render that created it
+(`votedId`), not on `prev` alone.** This page stays mounted across a `/t/:slug` navigation (a reader's
+Duplicate, a bookmark, a browser back button), so a `template.vote` response for design A can resolve after
+the page has already swapped to design B — the callback's own closure still correctly names A (`template.id`
+captured at that render), but `prev` inside `setTemplate` is whatever is *currently* mounted, which by then is
+B. Proving this needed more than one tick: a `template.vote` response resolving outside any `act()`-wrapped
+event takes several steps to settle (the response's `.then`, the `setState` it triggers, this page's
+re-render, and — were the guard absent — `VoteControl`'s own prop-adopting effect reacting to the
+now-contaminated props), and a test that checks after a single `setTimeout(0)` reads the *old, still-correct*
+DOM and passes without ever observing what the chain settles on. The regression test
+(`does not let a stale vote response write into the design now on screen`) checks after ten ticks, and was
+confirmed to fail without the guard and pass with it before being kept.
+
+**`layoutCount`/`description` are recomputed from the saved template with the shared `steppableLayouts`/
+`templateDescription` helpers, rather than carried forward from `prev` the way `votes`/`owner` are.** The
+distinction is what each field depends on: `votes` and `owner` are independent of the draft `template.update`
+writes, so carrying them forward is correct by construction. `layoutCount`/`description` are *derived from*
+that same draft (a layout added or removed; `aiInstructions` reworded), so carrying the *old* values forward
+after a save that changed either would go stale immediately — the save that most needs the description to
+reflect a rewritten `aiInstructions` is exactly the save the old code would have shown the previous one on.

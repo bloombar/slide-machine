@@ -31,8 +31,10 @@ import {
   type RefineJobSummary,
   type SlideRefineParts,
   type Template,
+  type VoteResult,
 } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
+import { patchTemplateVote } from '../lib/templateVotes'
 import TemplateDesignPanel from './template/TemplateDesignPanel'
 import TemplateExportSection from './template/TemplateExportSection'
 import TemplateUpdateNotice from './template/TemplateUpdateNotice'
@@ -343,6 +345,16 @@ export default function DeckSettingsModal({
         // Quiet failure: the section simply stays empty
       })
   }, [])
+
+  // A vote cast from the Design tab's library (TMPL-27 round 3): patched
+  // into this modal's own `templates` state, or it would revert to whatever
+  // `template.list` last returned the moment the Design tab unmounts and
+  // remounts — switching tabs, or closing and reopening this modal.
+  const onVote = useCallback(
+    (templateId: string, result: VoteResult) =>
+      setTemplates(list => patchTemplateVote(list, templateId, result)),
+    [],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -940,6 +952,7 @@ export default function DeckSettingsModal({
             value={deck.templateId}
             onChange={switchTemplate}
             onLibraryChanged={loadTemplates}
+            onVote={onVote}
           />
           <TemplateExportSection templateId={deck.templateId} />
         </section>

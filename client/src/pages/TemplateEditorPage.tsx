@@ -21,10 +21,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft } from 'lucide-react'
-import type {
-  Layout,
-  Template,
-  TemplateRenderMode,
+import {
+  steppableLayouts,
+  templateDescription,
+  type Layout,
+  type Template,
+  type TemplateRenderMode,
 } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import { ApiError } from '../api/http'
@@ -160,15 +162,26 @@ export default function TemplateEditorPage() {
             // the draft it holds is no longer unsaved work. `template.update`
             // returns a bare `toTemplateDto`, not the batch-loaded
             // `decorateTemplates` `template.get`/`.list` use — so it carries
-            // neither the author (`owner`), nor the vote tally (`votes`), nor
-            // `layoutCount`/`description` (TMPL-27 round 2). Saving must not
-            // drop any of those from what the page already knew.
+            // neither the author (`owner`) nor the vote tally (`votes`)
+            // (TMPL-27 round 2). Saving must not drop either from what the
+            // page already knew: `owner` never changes on a save, and a vote
+            // is independent of the draft `template.update` writes, so both
+            // simply carry forward from `prev`.
+            //
+            // `layoutCount`/`description` are different (round 3): both are
+            // *derived from* the draft just saved — a layout added or
+            // removed, or `aiInstructions` reworded — so carrying the old
+            // values forward would go stale the instant either changed.
+            // Recomputed here with the same shared helpers the server's own
+            // `decorateTemplates` uses, so the card these feed (TMPL-28)
+            // shows this save's own layouts and instructions immediately,
+            // rather than waiting on the next `template.get`/`.list`.
             setTemplate(prev => ({
               ...saved,
               owner: saved.owner ?? prev?.owner,
               votes: saved.votes ?? prev?.votes,
-              layoutCount: saved.layoutCount ?? prev?.layoutCount,
-              description: saved.description ?? prev?.description,
+              layoutCount: steppableLayouts(saved.layouts).length,
+              description: templateDescription(saved.aiInstructions),
             }))
             setSavedNote(true)
             return true
@@ -338,9 +351,18 @@ export default function TemplateEditorPage() {
                 up={template.votes?.up ?? 0}
                 down={template.votes?.down ?? 0}
                 myVote={template.votes?.myVote ?? 0}
-                onChange={res =>
+                onChange={res => {
+                  // The design this vote was cast on, captured from this
+                  // render rather than read back off state later (TMPL-27
+                  // round 3): a reader's Duplicate, or any other navigation
+                  // to a different `/t/:slug`, keeps this same page
+                  // component mounted and swaps `template` for a different
+                  // design entirely — a response arriving after that swap
+                  // must not write this vote's tally into whatever design
+                  // is now current.
+                  const votedId = template.id
                   setTemplate(prev =>
-                    prev
+                    prev && prev.id === votedId
                       ? {
                           ...prev,
                           votes: {
@@ -351,7 +373,7 @@ export default function TemplateEditorPage() {
                         }
                       : prev,
                   )
-                }
+                }}
               />
             )}
           </div>

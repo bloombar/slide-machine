@@ -3,12 +3,14 @@
  * looking at a preview of it, and the caller's own carry the actions that
  * only make sense for something you authored. The editor has its own file.
  */
+import { useState } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import type { Layout, Template } from '@slide-machine/shared'
 import TemplateLibrary from './TemplateLibrary'
 import { dispatchAction } from '../../api/actions'
+import { patchTemplateVote } from '../../lib/templateVotes'
 
 vi.mock('../../api/actions', () => ({ dispatchAction: vi.fn() }))
 
@@ -374,5 +376,81 @@ describe('TemplateLibrary voting (TMPL-27)', () => {
     expect(
       screen.getByRole('button', { name: 'Upvote Shipped' }),
     ).toHaveTextContent('5')
+  })
+
+  // TMPL-27 round 3: `TemplateLibrary` cannot itself keep a caller's own
+  // `templates` list in sync — it has to report the settled vote up.
+  it('reports a settled vote through onVote, with the template’s own id', async () => {
+    vi.mocked(dispatchAction).mockResolvedValue({
+      up: 1,
+      down: 0,
+      voteScore: 1,
+      myVote: 1,
+    })
+    const onVote = vi.fn()
+    renderLibrary({ onVote })
+    fireEvent.click(screen.getByRole('button', { name: 'Upvote Shipped' }))
+    await waitFor(() =>
+      expect(onVote).toHaveBeenCalledWith('built-1', {
+        up: 1,
+        down: 0,
+        voteScore: 1,
+        myVote: 1,
+      }),
+    )
+  })
+
+  // This fails without `onVote` wired through to `patchTemplateVote`: a
+  // real caller's own `templates` state is what a Design tab remounts
+  // against (a tab switch away and back, a settings modal reopened) — the
+  // library itself, and the `VoteControl` inside it, are gone in between
+  // and remember nothing.
+  it('keeps a vote past an unmount and remount, when the caller patches its own list via onVote', async () => {
+    vi.mocked(dispatchAction).mockResolvedValue({
+      up: 1,
+      down: 0,
+      voteScore: 1,
+      myVote: 1,
+    })
+
+    function Harness() {
+      const [templates, setTemplates] = useState([template()])
+      const [shown, setShown] = useState(true)
+      return (
+        <MemoryRouter>
+          <button onClick={() => setShown(s => !s)}>toggle</button>
+          {shown && (
+            <TemplateLibrary
+              templates={templates}
+              value="built-1"
+              onChange={vi.fn()}
+              onVote={(id, result) =>
+                setTemplates(list => patchTemplateVote(list, id, result))
+              }
+            />
+          )}
+        </MemoryRouter>
+      )
+    }
+
+    render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Upvote Shipped' }))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Upvote Shipped' }),
+      ).toHaveAttribute('aria-pressed', 'true'),
+    )
+
+    // Tab away, then back — the caller's own state, not this component,
+    // has to remember the vote across the gap.
+    fireEvent.click(screen.getByRole('button', { name: 'toggle' }))
+    fireEvent.click(screen.getByRole('button', { name: 'toggle' }))
+
+    expect(
+      screen.getByRole('button', { name: 'Upvote Shipped' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    expect(
+      screen.getByRole('button', { name: 'Upvote Shipped' }),
+    ).toHaveTextContent('1')
   })
 })

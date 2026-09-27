@@ -16,7 +16,7 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import type { Template } from '@slide-machine/shared'
+import type { Template, VoteResult } from '@slide-machine/shared'
 import { dispatchAction } from '../../api/actions'
 import { templateName } from '../../i18n/templateName'
 import ConfirmDialog from '../ConfirmDialog'
@@ -30,6 +30,7 @@ export default function TemplateDesignPanel({
   value,
   onChange,
   onLibraryChanged,
+  onVote,
 }: {
   templates: Template[]
   value: string
@@ -39,6 +40,10 @@ export default function TemplateDesignPanel({
   onChange: (templateId: string, template?: Template) => void
   /** Reloads the library after a template is added, changed or removed. */
   onLibraryChanged: () => void
+  /** Every settled vote from the library below (TMPL-27 round 3), passed
+   * straight through so the caller can patch its own `templates` state —
+   * see `TemplateLibrary`'s own `onVote` doc comment for why. */
+  onVote?: (templateId: string, result: VoteResult) => void
 }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -115,6 +120,7 @@ export default function TemplateDesignPanel({
         onDuplicate={duplicate}
         onEdit={edit}
         onDelete={setConfirming}
+        onVote={onVote}
       />
       {/* One way in, three sources. A design arriving from Slides, from a file
           this app wrote earlier, or from Drive is the same event to the

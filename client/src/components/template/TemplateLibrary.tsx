@@ -21,15 +21,19 @@
  * Every card also carries a vote (TMPL-27), right-most in the icon row: a
  * built-in or someone else's design gets the up/down buttons, and the
  * caller's own gets a read-only tally instead, the same trade a lecture's
- * viewer makes for its owner. The cast vote itself lives inside
- * `VoteControl`, which keeps it across a stale re-render on its own (it
- * only re-adopts `template.votes` once nothing is in flight) — this
- * component just passes the current `votes` straight through.
+ * viewer makes for its owner. `VoteControl` keeps the cast vote itself
+ * across a stale re-render on its own (it only re-adopts `template.votes`
+ * once nothing is in flight), but this component still reports every
+ * settled vote up through `onVote` (round 3) — this list is only ever a
+ * snapshot the caller fetched, and a caller that keeps its own `templates`
+ * state needs to hear about the vote too, or it reverts the moment the
+ * Design tab that drew this card unmounts and remounts (a tab switch, a
+ * settings modal reopened) and the caller re-renders this same stale prop.
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ChevronRight, Copy, Pencil, Trash2 } from 'lucide-react'
-import type { Layout, Template } from '@slide-machine/shared'
+import type { Layout, Template, VoteResult } from '@slide-machine/shared'
 import { steppableLayouts } from '@slide-machine/shared'
 import { templateName } from '../../i18n/templateName'
 import VoteControl from '../VoteControl'
@@ -47,6 +51,7 @@ export default function TemplateLibrary({
   onDuplicate,
   onEdit,
   onDelete,
+  onVote,
   busyId,
 }: {
   templates: Template[]
@@ -55,6 +60,10 @@ export default function TemplateLibrary({
   onDuplicate?: (template: Template) => void
   onEdit?: (template: Template) => void
   onDelete?: (template: Template) => void
+  /** Every settled vote (TMPL-27 round 3), so a caller holding its own copy
+   * of `templates` can patch it (`patchTemplateVote`, `lib/templateVotes`)
+   * and keep the vote past a remount of whatever drew this card. */
+  onVote?: (templateId: string, result: VoteResult) => void
   /** Template currently being duplicated or deleted; its actions are held. */
   busyId?: string
 }) {
@@ -239,6 +248,7 @@ export default function TemplateLibrary({
                   myVote={votes.myVote}
                   size="compact"
                   className="ml-auto"
+                  onChange={res => onVote?.(template.id, res)}
                 />
               )}
             </div>

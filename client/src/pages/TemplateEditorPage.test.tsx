@@ -544,6 +544,127 @@ describe('TemplateEditorPage (TMPL-4)', () => {
     await vi.waitFor(() => expect(up).toHaveAttribute('aria-pressed', 'true'))
   })
 
+  // TMPL-27 round 3: this page stays mounted across a `/t/:slug` change
+  // (moving from one design to another), so a vote's own response can
+  // arrive after the page has already swapped `template` for a different
+  // design entirely — that response must not land on whatever design is on
+  // screen when it finally settles.
+  it('does not let a stale vote response write into the design now on screen', async () => {
+    const designA = template({
+      id: 'design-a',
+      permalinkSlug: 'design-a',
+      ownerId: 'u2',
+      owner: { id: 'u2', displayName: 'Bram' },
+      myRole: null,
+      visibility: 'public',
+      name: 'Design A',
+      votes: { up: 0, down: 0, myVote: 0 },
+    })
+    const designB = template({
+      id: 'design-b',
+      permalinkSlug: 'design-b',
+      ownerId: 'u3',
+      owner: { id: 'u3', displayName: 'Chen' },
+      myRole: null,
+      visibility: 'public',
+      name: 'Design B',
+      votes: { up: 5, down: 2, myVote: 0 },
+    })
+    const voteResponse = deferred<{
+      up: number
+      down: number
+      voteScore: number
+      myVote: 1 | -1 | 0
+    }>()
+    vi.mocked(dispatchAction).mockImplementation(
+      (action: string, payload?: unknown) => {
+        if (action === 'template.get') {
+          const slug = (payload as { slug?: string } | undefined)?.slug
+          return Promise.resolve(slug === 'design-b' ? designB : designA)
+        }
+        if (action === 'template.list') return Promise.resolve([])
+        if (action === 'template.shares') return Promise.resolve([])
+        if (action === 'template.vote') return voteResponse.promise
+        return Promise.resolve({ urls: [] })
+      },
+    )
+    renderPageWithJumpTo('design-a', '/t/design-b')
+
+    await screen.findByRole('heading', { name: 'Design A', level: 1 })
+    fireEvent.click(screen.getByRole('button', { name: 'Upvote Design A' }))
+
+    // Design B, before A's vote settles.
+    fireEvent.click(screen.getByRole('link', { name: 'Jump' }))
+    await screen.findByRole('heading', { name: 'Design B', level: 1 })
+    const upB = screen.getByRole('button', { name: 'Upvote Design B' })
+    expect(upB).toHaveTextContent('5')
+
+    // A's response finally arrives, long after the page moved on. Settling
+    // it takes several steps — the response's own `.then`, the `setState`
+    // it triggers, this page's re-render, and (if the guard below were
+    // missing) `VoteControl`'s own prop-adopting effect reacting to the now
+    // -contaminated props — none of them run inside an `act()`-wrapped
+    // event, so a single tick is not enough to see the settled DOM: an
+    // assertion checked too early would read the *old*, still-correct
+    // text and pass without ever observing what the chain settles on.
+    voteResponse.resolve({ up: 1, down: 0, voteScore: 1, myVote: 1 })
+    for (let i = 0; i < 10; i++) {
+      await new Promise(resolve => setTimeout(resolve, 0))
+    }
+    // Still Design B's own count and vote state — not A's.
+    expect(
+      screen.getByRole('button', { name: 'Upvote Design B' }),
+    ).toHaveTextContent('5')
+    expect(
+      screen.getByRole('button', { name: 'Upvote Design B' }),
+    ).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  // TMPL-27 round 3: an editor's vote is their own act, independent of the
+  // draft they are editing — saving that draft must not lose it.
+  it('keeps an editor’s own cast vote across a save', async () => {
+    const loaded = template({
+      ownerId: 'u2',
+      owner: { id: 'u2', displayName: 'Bram' },
+      visibility: 'restricted',
+      myRole: 'editor',
+      votes: { up: 2, down: 0, myVote: 0 },
+    })
+    // `template.update`'s own response, a bare `toTemplateDto` with no
+    // `votes` field at all — the same shape the server really returns.
+    const saved = template({
+      name: 'Renamed',
+      myRole: 'editor',
+      votes: undefined,
+    })
+    vi.mocked(dispatchAction).mockImplementation((action: string) => {
+      if (action === 'template.get') return Promise.resolve(loaded)
+      if (action === 'template.list') return Promise.resolve([])
+      if (action === 'template.shares') return Promise.resolve([])
+      if (action === 'template.update') return Promise.resolve(saved)
+      if (action === 'template.vote') {
+        return Promise.resolve({ up: 3, down: 0, voteScore: 3, myVote: 1 })
+      }
+      return Promise.resolve({ urls: [] })
+    })
+    renderPage()
+
+    await screen.findByLabelText('Template name')
+    const up = screen.getByRole('button', { name: 'Upvote My Style' })
+    fireEvent.click(up)
+    await vi.waitFor(() => expect(up).toHaveAttribute('aria-pressed', 'true'))
+    expect(up).toHaveTextContent('3')
+
+    const name = screen.getByLabelText('Template name')
+    fireEvent.change(name, { target: { value: 'Renamed' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await screen.findByTestId('template-saved')
+    const upAfterSave = screen.getByRole('button', { name: 'Upvote Renamed' })
+    expect(upAfterSave).toHaveAttribute('aria-pressed', 'true')
+    expect(upAfterSave).toHaveTextContent('3')
+  })
+
   // `TemplateReaderView` is keyed on `template.id`, so moving from one
   // reader design straight to another's remounts it rather than carrying
   // over which layout was on screen — this same page component stays
