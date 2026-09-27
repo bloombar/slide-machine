@@ -799,6 +799,39 @@ Every generation request carries the template's layout menu — each layout, eac
 - **The notice is the one the product already uses** for a lecture whose pinned design is out of date ([TMPL-11](#tmpl-11-template-versions--opt-in-updates)) — same placement, same visual weight — so an author meets one kind of design-level advisory, not two.
 - **It clears itself.** Once the instructions are edited back under the budget the notice disappears, with no dismissal to remember and no stale state; raising the server budget clears it for every template at once.
 
+#### TMPL-26 Template visibility & sharing
+
+A template is **public** or **restricted**, with the same two values, the same people list and the same share flow as a lecture ([SHARE-3](#share-3-share-notifications--invitations)). Its owner shares a restricted template by email as a **viewer** or an **editor**. An unconfirmed address is invited rather than granted, as for a lecture.
+
+- **Viewers** may open the template, apply it to their lectures and duplicate it. **Editors** may also edit it. Only the owner may delete it or change who has access.
+- A new template starts **restricted**. Existing templates keep their reach: `public` stays public, and `private` and `unlisted` become restricted. Unlisted templates are narrowed rather than listed, because they were never published.
+- A template shared with someone appears in their Design-tab library alongside their own and the built-ins.
+- Built-ins are public and cannot be shared or restricted.
+
+#### TMPL-27 Template voting
+
+Templates are up- and down-voted as lectures are ([SOC-1](#soc-1-voting)), built-ins included. Each user has one changeable vote per template, and the net score drives the **Top** sort.
+
+- The vote control sits at the **right-hand end of each template's action row** (duplicate, edit, delete), at the same size, wherever templates are listed: the Design tab of lecture, project and account settings, and the Design Templates page ([TMPL-28](#tmpl-28-design-templates-page)). It also appears on the template's own page.
+- An owner sees their own template's tally, not the buttons, as with a lecture.
+- Account settings uses the same page width as other pages, so its Design tab has room for the row.
+
+#### TMPL-28 Design Templates page
+
+**Design Templates**, linked from the navigation menu just below Account settings, is a page for browsing and searching templates. It uses the same mechanics as the lecture Discover list ([SOC-2](#soc-2-browse-search--sort)): infinite scroll, search, and a choice of sort.
+
+- **Latest** (the default) and **Top** list every public template, built-ins included, and rank them as lectures are ranked. **Mine** lists templates the caller owns or has been shared. Search applies within the chosen sort and matches the name and the AI instructions.
+- Each template is drawn as in the Design tab: its name, a thumbnail whose layouts can be flipped through, and the action row ([TMPL-27](#tmpl-27-template-voting)). Anyone may duplicate a template. Edit and delete appear only on the caller's own templates.
+- Each card has room for more detail:
+  - the creator's name, linking to their profile ([SOC-4](#soc-4-user-profiles)); omitted for built-ins
+  - the number of layouts
+  - a short description: the opening of the template's AI instructions, cut at a word boundary
+- Opening a template goes to its own page ([TMPL-29](#tmpl-29-a-templates-page-for-readers)).
+
+#### TMPL-29 A template's page for readers
+
+A reader who cannot edit a template sees everything its editor shows, but **read-only**: the name, visibility, AI instructions, and every layout with its boxes and each box's settings. Someone deciding whether to adopt or duplicate a design should not need edit access to learn how it is meant to be used. The page also carries the vote control and a duplicate action. Owners and editors see the editor as before ([TMPL-4](#tmpl-4-custom-templates-create--edit--save)).
+
 ### 8. Live Lecture Capture
 
 #### CAP-1 Session lifecycle
