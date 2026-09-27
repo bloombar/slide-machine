@@ -1,11 +1,15 @@
 /**
- * Social actions (SPEC §11 / SOC-1, SOC-2, SOC-3). `deck.vote` casts, changes
- * or clears a user's vote on a lecture and keeps the denormalized
- * `deck.voteScore` in sync; `deck.feed` returns the global public-lecture feed
- * and `social.search` searches public content. Both lists share one shape: the
- * caller picks the sort ("latest" or "top") and pages through the results by
- * offset, so the same client component drives either. Templates are deferred
- * (built-in only), so today these cover decks.
+ * Social actions (SPEC §11 / SOC-1, SOC-2, SOC-3), for both lectures and
+ * style templates (TMPL-27, TMPL-28).
+ *
+ * `deck.vote`/`template.vote` cast, change or clear a user's vote on a
+ * lecture or design and keep the denormalized `voteScore` in sync (a
+ * built-in template has no document of its own to denormalize onto, so its
+ * score is tallied live instead — see `decorateTemplates`). `deck.feed` and
+ * `template.feed` return the global public feed for their own kind of
+ * content, and `social.search`/`template.search` search it. Every list shares
+ * one shape: the caller picks the sort and pages through by offset, so the
+ * same client component (`useDiscover`) can drive any of them.
  */
 import { z } from 'zod'
 import { Types, type HydratedDocument } from 'mongoose'
@@ -17,13 +21,28 @@ import {
   type FeedSort,
   type MyVote,
   type SearchResults,
+  type Template,
+  type TemplateFeedSort,
+  type TemplatePage,
   type VoteResult,
 } from '@slide-machine/shared'
 import { defineAction } from './define'
-import { custom, deckViewer, type DeckAccess, type Signed } from './access'
+import {
+  custom,
+  deckViewer,
+  signedIn,
+  templateReadable,
+  type DeckAccess,
+  type Signed,
+  type TemplateAccess,
+} from './access'
 
 /** Voting is a reader's act, so anyone who may see the lecture may vote. */
 const viewerOf = deckViewer((input: { deckId: string }) => input.deckId)
+/** Same rule for a design (TMPL-27): anyone who may read it may vote on it. */
+const templateReadableOf = templateReadable(
+  (input: { templateId: string }) => input.templateId,
+)
 import { registerAction, ActionForbiddenError } from './dispatch'
 import type { ActionContext } from './context'
 import { DeckModel, type DeckDb } from '../models/deck'
@@ -31,6 +50,9 @@ import { ProjectModel } from '../models/project'
 import { SlideModel } from '../models/slide'
 import { UserModel } from '../models/user'
 import { VoteModel, voteBreakdown, voteBreakdowns } from '../models/vote'
+import { TemplateModel, toTemplateDto } from '../models/template'
+import { decorateTemplates } from '../templates/resolve'
+import { listBuiltinTemplates } from '../templates/builtin'
 
 /** Shared paging input for every browsable list (SOC-2): which order, and which
  * slice of it. `limit` is capped so one request cannot ask for everything. */
@@ -82,6 +104,60 @@ export const deckVote = defineAction<
       { voteScore },
       { timestamps: false },
     )
+    return { up, down, voteScore, myVote: input.value }
+  },
+})
+
+/**
+ * Up/down-vote a template, or clear the vote with 0 (TMPL-27). One vote per
+ * user per design; the caller must be able to read it — owners may vote too,
+ * as on a lecture, and it is the client's job to show a tally instead of the
+ * buttons to one.
+ *
+ * Built-ins are voteable (TMPL-27) despite being files with no document of
+ * their own: the vote itself keys on the built-in's slug rather than a
+ * document id (`VoteDb.targetId` is widened to allow either — models/vote.ts),
+ * and there is no `voteScore` field to denormalize onto, so nothing is
+ * written back beyond the vote row itself. `decorateTemplates` is what tallies
+ * a built-in's score from `VoteModel` wherever one is listed.
+ */
+export const templateVote = defineAction<
+  { templateId: string; value: 1 | -1 | 0 },
+  VoteResult,
+  TemplateAccess
+>({
+  name: 'template.vote',
+  access: templateReadableOf,
+  input: z.object({
+    templateId: z.string().min(1),
+    value: z.union([z.literal(1), z.literal(-1), z.literal(0)]),
+  }),
+  execute: async (ctx, input, { userId, template, doc }) => {
+    // A stored template votes by document id, same as a deck; a built-in has
+    // none, so it votes by its slug instead (`template.id`).
+    const targetId: Types.ObjectId | string = doc ? doc._id : template.id
+    const key = {
+      userId: new Types.ObjectId(userId),
+      targetType: 'template' as const,
+      targetId,
+    }
+    if (input.value === 0) {
+      await VoteModel.deleteOne(key)
+    } else {
+      await VoteModel.updateOne(
+        key,
+        { $set: { value: input.value } },
+        { upsert: true },
+      )
+    }
+    const { up, down, voteScore } = await voteBreakdown('template', targetId)
+    if (doc) {
+      await TemplateModel.updateOne(
+        { _id: doc._id },
+        { voteScore },
+        { timestamps: false },
+      )
+    }
     return { up, down, voteScore, myVote: input.value }
   },
 })
@@ -399,6 +475,310 @@ export const socialSearch = defineAction<
   },
 })
 
+/**
+ * The Mongo filter for public templates anyone signed in may browse
+ * (TMPL-28): every one whose owner has listed it, **including the caller's
+ * own** — unlike a lecture's feed, which excludes the caller's own work, a
+ * template's browsable set is meant to include it (SPEC TMPL-28: "Latest ...
+ * lists every public template"). Soft-deleted rows are dropped by the
+ * model's query middleware. `visibility` is read directly rather than through
+ * `legacyVisibility` (models/template.ts): the migration job backfills every
+ * stored document to the two-value vocabulary, so a raw `'public'` match is
+ * exact once it has run, and a document still mid-migration is restricted by
+ * default anyway.
+ */
+const publicTemplateFilter = () => ({ visibility: 'public' as const })
+
+/**
+ * Templates the caller owns or has been shared (TMPL-28 "Mine"): any
+ * visibility, since a design not yet public is still theirs to find. No
+ * built-ins — nobody owns, edits or is a viewer of one (TMPL-26).
+ */
+const mineTemplateFilter = (userId: string) => ({
+  $or: [
+    { ownerId: new Types.ObjectId(userId) },
+    { viewers: userId },
+    { editors: userId },
+  ],
+})
+
+/**
+ * Combines a sort's scope filter (public, or "mine") with an optional search
+ * match, `$and`-ed rather than spread together. Both are `$or` documents, and
+ * `{ ...scope, ...match }` would have the *second* `$or` key silently
+ * overwrite the first — the bug that let a "mine" search return someone
+ * else's restricted template whenever its name happened to match, since the
+ * ownership `$or` never ran at all. Used for every sort, even where the two
+ * filters do not collide today, so the same mistake cannot resurface if one
+ * of them grows a second top-level key later.
+ */
+const scopedTemplateFilter = (
+  scope: Record<string, unknown>,
+  match: Record<string, unknown> | undefined,
+): Record<string, unknown> => (match ? { $and: [scope, match] } : scope)
+
+/**
+ * The Mongo sort for a page of stored templates (TMPL-27/TMPL-28), mirroring
+ * `sortSpecFor` for decks. "mine" orders by recency like "latest" — an
+ * owner's own library is browsed newest-first, not ranked.
+ */
+const templateSortSpecFor = (sort: TemplateFeedSort): Record<string, 1 | -1> =>
+  sort === 'top'
+    ? { voteScore: -1, updatedAt: -1, _id: -1 }
+    : { updatedAt: -1, _id: -1 }
+
+/**
+ * Which built-ins match a query (TMPL-28). There are only a handful, so this
+ * is a plain in-memory filter — no query, no vote lookup. "Top" is the only
+ * sort that ranks by score, so it is the only one that pays for tallying one
+ * (`rankedBuiltins` below); "latest" and "mine" (which never includes
+ * built-ins) have no use for a score here, and `decorateTemplates` computes
+ * the real one for whatever ends up on the page regardless of sort.
+ */
+const builtinTemplateCandidates = (rx: RegExp | undefined): Template[] =>
+  listBuiltinTemplates().filter(
+    t => !rx || rx.test(t.name) || rx.test(t.aiInstructions ?? ''),
+  )
+
+/** A template reduced to what ranking "top" needs: its score, its recency
+ * (meaningless for a built-in, see below), and whether it is one. */
+interface RankRow {
+  id: string
+  voteScore: number
+  updatedAt: string
+  builtin: boolean
+}
+
+/**
+ * Orders two ranked rows the way Mongo's own `{ voteScore: -1, updatedAt: -1,
+ * _id: -1 }` sort would for two stored templates — net score first, then
+ * recency, then id, all descending, matching `templateSortSpecFor('top')` so
+ * the in-memory merge below cannot silently disagree with the database sort
+ * it is layered on top of.
+ *
+ * A built-in complicates only the middle term. It has no meaningful
+ * `updatedAt` of its own (a fixed placeholder — see `templates/builtin.ts`),
+ * so on a score tie it ranks *after* every stored template rather than being
+ * compared against one by that placeholder date — comparing real dates only
+ * between two stored rows keeps a coincidental placeholder match from
+ * deciding an otherwise-tied order.
+ */
+const compareRanked = (a: RankRow, b: RankRow): number => {
+  if (b.voteScore !== a.voteScore) return b.voteScore - a.voteScore
+  if (a.builtin !== b.builtin) return a.builtin ? 1 : -1
+  if (!a.builtin) {
+    const byDate = Date.parse(b.updatedAt) - Date.parse(a.updatedAt)
+    if (byDate !== 0) return byDate
+  }
+  // Descending, mirroring Mongo's own `_id: -1` tie-break; a built-in's slug
+  // sorts by the same rule as a stored id once dates cannot decide it either.
+  return a.id < b.id ? 1 : a.id > b.id ? -1 : 0
+}
+
+/**
+ * One page of the template feed or search (TMPL-27/TMPL-28), across all
+ * three sorts. `rx`, when given, narrows to a query match; its absence is
+ * the plain feed.
+ *
+ * "Mine" pages a plain Mongo query — no built-ins to merge, so it works
+ * exactly like a lecture's own feed page. "Latest" and "top" differ because a
+ * built-in has no stored document to page through:
+ *
+ *   - **Latest** appends built-ins after every stored template (SPEC TMPL-28:
+ *     "Built-ins ... have no meaningful date") — a plain concatenation, so
+ *     paging stays stable by tracking how many stored rows exist and only
+ *     reaching into the built-in list once they run out.
+ *   - **Top** ranks built-ins by their tallied score alongside stored ones, so
+ *     a well-liked built-in can outrank a stored template — this needs an
+ *     actual merge (see `rankedTop` below).
+ */
+const pageOfTemplates = async (
+  sort: TemplateFeedSort,
+  rx: RegExp | undefined,
+  { offset, limit }: { offset: number; limit: number },
+  userId: string,
+): Promise<TemplatePage> => {
+  const queryMatch = rx
+    ? { $or: [{ name: rx }, { aiInstructions: rx }] }
+    : undefined
+
+  if (sort === 'mine') {
+    const filter = scopedTemplateFilter(mineTemplateFilter(userId), queryMatch)
+    const docs = await TemplateModel.find(filter)
+      .sort(templateSortSpecFor(sort))
+      .skip(offset)
+      .limit(limit + 1)
+    const hasMore = docs.length > limit
+    const items = docs.slice(0, limit).map(d => toTemplateDto(d, userId))
+    return { items: await decorateTemplates(items, userId), hasMore }
+  }
+
+  const filter = scopedTemplateFilter(publicTemplateFilter(), queryMatch)
+  const builtins = builtinTemplateCandidates(rx)
+
+  if (sort === 'latest') {
+    const storedCount = await TemplateModel.countDocuments(filter)
+    const total = storedCount + builtins.length
+    const hasMore = offset + limit < total
+    let items: Template[]
+    if (offset < storedCount) {
+      const docs = await TemplateModel.find(filter)
+        .sort(templateSortSpecFor(sort))
+        .skip(offset)
+        .limit(limit)
+      items = docs.map(d => toTemplateDto(d, userId))
+      const remaining = limit - items.length
+      items =
+        remaining > 0 ? [...items, ...builtins.slice(0, remaining)] : items
+    } else {
+      const builtinOffset = offset - storedCount
+      items = builtins.slice(builtinOffset, builtinOffset + limit)
+    }
+    return { items: await decorateTemplates(items, userId), hasMore }
+  }
+
+  return rankedTopPage(filter, builtins, { offset, limit }, userId)
+}
+
+/**
+ * "Top": ranks every matching stored template alongside every matching
+ * built-in by net score, then assembles the page from just the ids that
+ * belong on it (TMPL-27/TMPL-28).
+ *
+ * The rank itself reads only `_id voteScore updatedAt` — the three fields
+ * `compareRanked` needs — never a whole document, and **with no cap**: a lean
+ * three-field read of every matching template is cheap enough that ranking
+ * the full set beats the alternative, a capped prefetch that can leave
+ * `hasMore: true` pointing at a page that turns out empty once the cap is
+ * hit. (It is not a covered read: `updatedAt`, the soft-delete condition and
+ * any search regex all reach past the `{visibility, voteScore}` index.) Built-ins are
+ * already fully in memory (a handful of files), so tallying their score here
+ * is one batched vote lookup, not a query per built-in.
+ *
+ * Only the page's own rows are then hydrated to full documents, by a single
+ * `_id: $in` lookup — the rank decided which ids belong on the page; nothing
+ * else needs a full document.
+ */
+const rankedTopPage = async (
+  filter: Record<string, unknown>,
+  builtins: Template[],
+  { offset, limit }: { offset: number; limit: number },
+  userId: string,
+): Promise<TemplatePage> => {
+  const [storedRows, breakdowns] = await Promise.all([
+    TemplateModel.find(filter).select('_id voteScore updatedAt').lean(),
+    voteBreakdowns(
+      'template',
+      builtins.map(t => t.id),
+    ),
+  ])
+  const ranked: RankRow[] = [
+    ...storedRows.map(d => ({
+      id: d._id.toString(),
+      // A lean read skips schema defaults, so fall back as the deck feed does
+      voteScore: d.voteScore ?? 0,
+      updatedAt: (d.updatedAt ?? d.createdAt ?? new Date(0)).toISOString(),
+      builtin: false,
+    })),
+    ...builtins.map(t => {
+      const counts = breakdowns.get(t.id) ?? { up: 0, down: 0 }
+      return {
+        id: t.id,
+        voteScore: counts.up - counts.down,
+        updatedAt: t.updatedAt,
+        builtin: true,
+      }
+    }),
+  ].sort(compareRanked)
+
+  const hasMore = offset + limit < ranked.length
+  const page = ranked.slice(offset, offset + limit)
+
+  const storedIds = page
+    .filter(r => !r.builtin)
+    .map(r => new Types.ObjectId(r.id))
+  const storedDocs = storedIds.length
+    ? // The scope filter again: a design deleted or restricted between the
+      // rank and this read drops off the page rather than failing it or
+      // leaking once.
+      await TemplateModel.find({ $and: [filter, { _id: { $in: storedIds } }] })
+    : []
+  const storedById = new Map(storedDocs.map(d => [d._id.toString(), d]))
+  const builtinById = new Map(builtins.map(t => [t.id, t]))
+  // Rehydrated in the rank's own order, not `$in`'s return order (Mongo makes
+  // no promise about it) and not the built-in file list's order either.
+  const items = page.flatMap(row => {
+    if (row.builtin) return [builtinById.get(row.id)!]
+    const doc = storedById.get(row.id)
+    return doc ? [toTemplateDto(doc, userId)] : []
+  })
+  return { items: await decorateTemplates(items, userId), hasMore }
+}
+
+/** Paging input shared by `template.feed` and `template.search`
+ * (TMPL-27/TMPL-28) — the deck-list version plus "mine". */
+const templatePagingInput = {
+  sort: z.enum(['latest', 'top', 'mine']).default('latest'),
+  offset: z.number().int().min(0).default(0),
+  limit: z.number().int().min(1).max(50).default(DISCOVER_PAGE_SIZE),
+}
+
+/**
+ * The public template feed (TMPL-27/TMPL-28): every public design, sorted by
+ * recency, net score, or restricted to the caller's own library — one page
+ * at a time. Shaped to fit `useDiscover`'s `DiscoverSource` alongside
+ * `deck.feed`.
+ */
+export const templateFeed = defineAction<
+  { sort: TemplateFeedSort; offset: number; limit: number },
+  TemplatePage,
+  Signed
+>({
+  name: 'template.feed',
+  access: signedIn(),
+  input: z.object(templatePagingInput),
+  execute: async (ctx, input) => {
+    const userId = requireUser(ctx)
+    return pageOfTemplates(input.sort, undefined, input, userId)
+  },
+})
+
+/**
+ * Searches templates within the caller's chosen sort (TMPL-27/TMPL-28):
+ * case-insensitive, matching the name or the AI instructions. Restricted
+ * designs never surface here, in any sort, for anyone not on their people
+ * list — the same Mongo filter `template.feed` uses is what "top"/"latest"
+ * narrow with a query match, and "mine" is already scoped to the caller
+ * (`scopedTemplateFilter` `$and`s the two together rather than merging them,
+ * so the query can never widen "mine" past the caller's own templates).
+ *
+ * `q` rather than `query`, matching `social.search` (SPEC: "shaped to fit
+ * useDiscover"), and the same `TemplatePage` shape `template.feed` returns
+ * rather than lecture search's `SearchResults` — the client's `DiscoverSource`
+ * gets a normalizer over the difference rather than this action reshaping
+ * itself to fit a lecture-specific type.
+ */
+export const templateSearch = defineAction<
+  { q: string; sort: TemplateFeedSort; offset: number; limit: number },
+  TemplatePage,
+  Signed
+>({
+  name: 'template.search',
+  access: signedIn(),
+  input: z.object({
+    q: z.string().trim().min(1).max(100),
+    ...templatePagingInput,
+  }),
+  execute: async (ctx, input) => {
+    const userId = requireUser(ctx)
+    const rx = new RegExp(escapeRegex(input.q), 'i')
+    return pageOfTemplates(input.sort, rx, input, userId)
+  },
+})
+
 registerAction(deckVote)
+registerAction(templateVote)
 registerAction(deckFeed)
+registerAction(templateFeed)
 registerAction(socialSearch)
+registerAction(templateSearch)

@@ -112,14 +112,18 @@ describe('deck.vote (SOC-1)', () => {
     await act(bob, 'deck.vote', { deckId, value: 1 })
     const res = await act(bob, 'deck.vote', { deckId, value: -1 })
     expect(res.body).toEqual({ up: 0, down: 1, voteScore: -1, myVote: -1 })
-    expect(await VoteModel.countDocuments({ targetId: deckId })).toBe(1)
+    expect(
+      await VoteModel.countDocuments({ targetId: new Types.ObjectId(deckId) }),
+    ).toBe(1)
   })
 
   it('clears a vote with value 0', async () => {
     await act(bob, 'deck.vote', { deckId, value: 1 })
     const res = await act(bob, 'deck.vote', { deckId, value: 0 })
     expect(res.body).toEqual({ up: 0, down: 0, voteScore: 0, myVote: 0 })
-    expect(await VoteModel.countDocuments({ targetId: deckId })).toBe(0)
+    expect(
+      await VoteModel.countDocuments({ targetId: new Types.ObjectId(deckId) }),
+    ).toBe(0)
   })
 
   it('reports separate up and down counts across users', async () => {
@@ -131,7 +135,9 @@ describe('deck.vote (SOC-1)', () => {
   it('keeps one vote per user (idempotent re-vote)', async () => {
     await act(bob, 'deck.vote', { deckId, value: 1 })
     await act(bob, 'deck.vote', { deckId, value: 1 })
-    expect(await VoteModel.countDocuments({ targetId: deckId })).toBe(1)
+    expect(
+      await VoteModel.countDocuments({ targetId: new Types.ObjectId(deckId) }),
+    ).toBe(1)
     const deck = await DeckModel.findById(deckId)
     expect(deck!.voteScore).toBe(1)
   })

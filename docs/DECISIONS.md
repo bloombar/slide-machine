@@ -1965,3 +1965,143 @@ assertion that the guest's Design tab does not yet list the shared design would 
 library had genuinely loaded without it, or simply had not finished loading at all — a count of zero rows
 proves nothing about which. Fixed by waiting on a built-in's own card (`Classic`) first, so the absence
 assertion that follows is checking a loaded library rather than an empty one.
+
+### Template voting and browse feed, server (slice 3)
+
+Server-side [TMPL-27](SPEC.md#tmpl-27) voting and the [TMPL-28](SPEC.md#tmpl-28) browsable feed, stacked on
+slice 1's visibility/sharing work above.
+
+**`VoteDb.targetId` is widened to `Mixed`, not left as `ObjectId` with built-ins voting elsewhere.** A built-in
+template is a file with a slug id, not a Mongo document, so it has nothing an `ObjectId`-typed field could hold.
+Rather than give built-in votes a parallel collection or a synthetic id, the field itself is widened to
+`Types.ObjectId | string`; the unique `{userId, targetType, targetId}` index keeps working unmodified because
+Mongo compares by exact BSON value regardless of declared schema type, and a deck's votes never touch the
+string branch. The cost is that a raw Mongo query against a stored (`ObjectId`) vote now has to pass an actual
+`Types.ObjectId` rather than a hex string — `Mixed` fields are not auto-cast the way a real `ObjectId`-typed
+field is — which the new integration tests do, and is worth noting for anyone querying `VoteModel` directly
+elsewhere later.
+
+**Card metadata (`owner`/`votes`/`layoutCount`/`description`) is batch-loaded by one shared function,
+`decorateTemplates` (`templates/resolve.ts`), called from `template.list`, `template.get`, and the new feed and
+search actions.** The brief's item 3 sits between "votes on every DTO" and "the feed" without pinning which
+actions it covers; read the four together as one batch-loading concern rather than repeating owner/vote/layout
+lookups in each action by hand — `template.get`'s old standalone `UserModel.findById` for the byline is folded
+into the same function, which is also what tallies a built-in's score from `VoteModel` since it has no
+`voteScore` field of its own.
+
+**`Template.owner` changes shape from `{id, displayName} | undefined` to `{id, displayName} | null | undefined`,
+and `Template.updatedAt` becomes required.** The former lets `decorateTemplates` say "built-in, no owner"
+distinctly from "nobody asked for card metadata" (`undefined`); the latter is needed because "Latest" has to
+rank stored templates by save time, and a required field is more honest than an optional one every real
+response fills in. Both fixture-broke every test file that builds a bare `Template` object by hand (server and
+client); since the brief allowed fixing client type fallout as far as typecheck requires, `updatedAt` was added
+to each rather than making the field optional and threading `?? something` through the new sort code.
+
+**"Latest" and "top" merge built-ins in by two different strategies, not one.** A built-in has no `updatedAt`
+worth comparing, so "latest" just appends the (query-filtered) built-in list after every stored template has
+been paged through — a plain concatenation, tracked by comparing the offset against the stored count. "Top"
+genuinely needs a merge, because a well-liked built-in can outrank a stored template by score.
+
+*(Round 2, see below, replaced the first pass's capped prefetch with an uncapped projection-only rank — the
+first pass's `hasMore` could point at a page that came back empty once the cap was hit.)*
+
+**`template.search`'s input field is `q`, matching lecture search (round 2, correcting round 1).** Round 1 read
+the brief's item 4 (`"{query, sort, offset, limit}"`) as the literal field name and used `query`. The brief's own
+framing for this action is "shaped to fit `useDiscover`'s `DiscoverSource`", and lecture search's action already
+takes `q` — a second, differently-named field for the same concept is the kind of gratuitous inconsistency that
+makes a shared hook harder to write, not easier, so this now takes `q` too. The response shape is unchanged:
+`TemplatePage {items, hasMore}`, not lecture search's `SearchResults {lectures, hasMore, projects, users}` — the
+client slice adds a small normalizer to `DiscoverSource` over that difference rather than this action reshaping
+itself into a lecture-specific type it does not otherwise fit (no projects, no people, one content kind).
+
+**`steppableLayouts` moved to `shared/src/lib/steppable-layouts.ts`, changing its signature from
+`(template: Template) => Layout[]` to `(layouts: Layout[]) => Layout[]`.** The client's `TemplateLibrary.tsx`
+took a whole template only to immediately read `.layouts` off it; the server's `layoutCount` only ever has the
+layouts array in hand (a `Template` DTO mid-construction, before `decorateTemplates` finishes it), not a
+finished `Template`. Taking `layouts` directly is the shape both callers actually have.
+
+### Round 2 fixes (same slice, after review)
+
+**"Mine" search could return someone else's restricted template.** `{ ...mineTemplateFilter(userId), ...queryMatch }`
+spread two documents that each own a top-level `$or` — the second's `$or` (the name/instructions match)
+silently replaced the first's (the ownership check) instead of adding to it, so a search under "mine" actually
+ran with no ownership filter at all once a query was given. Fixed with `scopedTemplateFilter`, which `$and`s a
+sort's scope filter with an optional query match rather than spreading them together, applied uniformly to
+"mine", "latest" and "top" alike — including the two sorts where the two documents happen not to collide today,
+so the same mistake cannot resurface silently if either grows a second top-level key later. Negative tests
+(search must not surface someone else's restricted template) were added for all three sorts, not just "mine".
+
+**"Top" reworked from a capped prefetch-then-merge to an uncapped projection-only rank.** The first pass
+prefetched `min(offset + limit + builtinCount, CANDIDATE_CAP)` full stored documents and merged them with
+built-ins in memory — bounded, but a request past the cap could set `hasMore: true` and then return an empty
+page, because the prefetch window did not actually reach that far. Reworked to rank on a `_id voteScore
+updatedAt` projection only (a covered, indexed read against `{visibility, voteScore}` — cheap enough to run
+uncapped over every matching stored template), then hydrate full documents for only the ids that land on the
+requested page via one `_id: $in` lookup. `hasMore` is now exact by construction rather than an approximation
+against a real count. The in-memory tie-break was also corrected to sort descending (`a.id < b.id ? 1 : -1`),
+matching Mongo's own `_id: -1` — round 1 had this backwards — and built-ins now rank *after* a score-and-date
+tie rather than being compared against a stored row's real `updatedAt` by their own fixed placeholder date,
+which could put a built-in on either side of a tie depending on how the placeholder happened to compare to
+whatever real dates were in play that day.
+
+**`votes.myVote` is now covered by tests on `template.list`, `template.get` and `template.feed`, for a stored
+template and a built-in.** Nothing in the implementation changed for this — `decorateTemplates` already read
+the caller's own vote — but round 1's tests only ever asserted the *tally* (`up`/`down`), never that `myVote`
+itself came back non-zero for the voter, which is exactly the field a vote button reads to decide whether to
+show itself.
+
+**`purgeDeckContents`/`purgeDeckCascade` (`lib/cascade.ts`) now normalize every deck id to a real `Types.ObjectId`
+before touching `VoteModel`.** A latent bug from the `targetId` widening: `VoteModel.deleteMany({targetId:
+{$in: deckIds}})` was passed whatever the caller had — a string in at least one call path — and a `Mixed`
+field does not auto-cast a string the way `deckId`'s own real `ObjectId`-typed field does elsewhere in the same
+function, so a purge could silently leave a deleted deck's votes behind. Cast once, up front, rather than
+narrowing the exported signature — callers elsewhere still legitimately pass either shape, and the fix belongs
+where the risk is (this function's own use of the `Mixed` field), not pushed onto every caller.
+
+**`templateDescription`'s budget is now `TEMPLATE_DESCRIPTION_CHARS - 1`, not the full limit.** Round 1 sliced
+up to 160 characters and then appended "…", which could total 161 — over its own stated ceiling. Also added:
+a cut is now hard (mid-word) rather than at a word boundary when that boundary falls before half the budget,
+so a name like "Hi <300 characters with no other space>" does not collapse to "Hi…".
+
+### Round 3: the nyu-elegant e2e failure, investigated and only partly addressed
+
+The coordinator identified that `template-load-limits.spec.ts`'s "nyu-elegant holds every layout with its
+optional boxes empty" failed on this branch and passed on slice 1's own commit. Investigated by instrumenting
+`slide.refitLayout` with a temporary trace (removed before this was written) logging, for every layout switch
+in the walk, which boxes were holes and which content was orphaned.
+
+**Finding: the server-side content sequence is identical, deterministic, and correct on both a failing and a
+passing run of the SAME unmodified code.** The trace for "the switch onto `big-number`" — the layout the
+failure names — is byte-identical whether that run passes or fails: `caption` is never a hole there (it
+already holds text carried over, unchanged, from an earlier switch onto `image-heavy`, whose own caption box
+is larger). The 17 characters the fault reports are the same 17 characters in every run. This means the
+defect is not in what content ends up in the box — it is in whether the walk measures the box before or after
+`useFitText`'s shrink has settled onto it, which is a client-side rendering-timing question this trace cannot
+see and this slice does not own.
+
+**The test is flaky under load, not deterministic, even with no code changed at all.** Re-running the exact
+same build three times gave two failures and one pass. This matters for how to read the coordinator's own
+controlled A/B (base commit passes once, this branch fails once): with a per-run failure rate this high, a
+single run on each side is not enough to attribute the difference to the diff with confidence — it is
+consistent with the diff making a marginal, pre-existing race MORE likely, or with plain noise on a loaded
+machine, and the evidence in hand does not distinguish the two cleanly.
+
+**What was fixed regardless, because it is real and correct on its own merits: `decorateTemplates` now spends
+one `VoteModel.find` instead of an aggregate (`voteBreakdowns`) plus a second, separate `find` for the caller's
+own vote.** Both read the same rows; tallying up/down and spotting the caller's row are three counts over one
+result set rather than two round trips computing overlapping information. This is a genuine latency
+reduction on the path every `template.list`/`.get`/`.feed`/`.search` call takes, kept independent of whether it
+moves the e2e flake rate, because it is correct regardless.
+
+**What was NOT done: chasing the flake further by removing or delaying the vote/owner/description work
+`template.list` now does.** Reverting `decorateTemplates` from `template.list` entirely passed once in this
+investigation; the optimized (single-query) version above still failed once. Both results are single data
+points against a demonstrated ~66% failure rate on completely unchanged code, so neither is strong enough
+evidence to justify removing a feature the brief (and an earlier review round) already required on this exact
+action. The actual defect this points at — the e2e walk's only completion signal for a layout switch's async
+refit is a toast becoming hidden, which is trivially true when the toast never appears in time, letting the
+walk measure a box before its content or its fit-shrink has settled — lives in the app's own layout-switch flow
+(`DeckViewerPage.tsx`'s `refitSlideLayout`, fired without being awaited by the switch itself) and/or the e2e
+helper's reliance on that toast as a proxy for "done". Fixing that is a client-side synchronization change
+older and larger than this slice, flagged here rather than made unilaterally under a "server and shared only"
+brief.

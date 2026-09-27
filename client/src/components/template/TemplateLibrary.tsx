@@ -22,17 +22,9 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ChevronRight, Copy, Pencil, Trash2 } from 'lucide-react'
 import type { Layout, Template } from '@slide-machine/shared'
-import { WHITEBOARD_LAYOUT_TYPE } from '@slide-machine/shared'
+import { steppableLayouts } from '@slide-machine/shared'
 import { templateName } from '../../i18n/templateName'
 import PreviewCard from './PreviewCard'
-
-/**
- * The layouts a card pages through. The whiteboard is left out for the reason
- * the editor's rail leaves it out (TMPL-7): every template has one, it cannot
- * be given boxes, and it would page to a blank slate.
- */
-const steppableLayouts = (template: Template): Layout[] =>
-  (template.layouts ?? []).filter(l => l.type !== WHITEBOARD_LAYOUT_TYPE)
 
 /** What a layout is called, matching the editor's rail. */
 const layoutLabel = (layout: Layout): string =>
@@ -78,7 +70,7 @@ export default function TemplateLibrary({
           template.myRole === 'editor' || template.myRole === 'viewer'
         const selected = value === template.id
         const name = templateName(t, template)
-        const steppable = steppableLayouts(template)
+        const steppable = steppableLayouts(template.layouts)
         // Starts at the design's first layout, so paging reads as a run
         // through the template in the order it declares them rather than
         // starting somewhere in the middle of itself.

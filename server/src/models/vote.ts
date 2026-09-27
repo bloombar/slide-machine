@@ -1,15 +1,31 @@
 /**
- * Vote model (SPEC §15 / SOC-1). One up (+1) or down (-1) vote by a user on a
- * deck or template. The unique index makes it one vote per user per item, and
- * changeable (upsert to switch, delete to clear). The denormalized net score
- * lives on the target itself (`deck.voteScore`) so feeds can sort on it.
+ * Vote model (SPEC §15 / SOC-1, TMPL-27). One up (+1) or down (-1) vote by a
+ * user on a deck or template. The unique index makes it one vote per user per
+ * item, and changeable (upsert to switch, delete to clear). The denormalized
+ * net score lives on the target itself (`deck.voteScore`/`template.voteScore`)
+ * so feeds can sort on it — except a built-in template, which is a file and
+ * has no document of its own to denormalize onto; its score is tallied from
+ * this collection instead wherever it is listed (`decorateTemplates`).
  */
 import { Schema, model, Types } from 'mongoose'
 
 export interface VoteDb {
   userId: Types.ObjectId
   targetType: 'deck' | 'template'
-  targetId: Types.ObjectId
+  /** A deck's id is always a document id. A template's is too, *unless* the
+   * template is a built-in (TMPL-27): built-ins are files, addressed by their
+   * slug rather than a Mongo document, so the field has to hold either shape.
+   * `Mixed` compares by exact value regardless of type, so the unique index
+   * below still enforces one vote per user per target for both kinds.
+   *
+   * **Warning:** a `Mixed` field is not auto-cast the way a real
+   * `ObjectId`-typed field is — passing a plain hex *string* in a query
+   * filter (`{ targetId: someDeckId }`, `{ targetId: { $in: [...] } }`) will
+   * silently match nothing against a deck vote's stored `ObjectId` value.
+   * Always pass an actual `Types.ObjectId` instance when querying a deck's
+   * or a stored template's votes (see `cascade.ts`'s `purgeDeckContents`,
+   * which learned this the hard way). */
+  targetId: Types.ObjectId | string
   value: 1 | -1
 }
 
@@ -17,7 +33,7 @@ const voteSchema = new Schema<VoteDb>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     targetType: { type: String, enum: ['deck', 'template'], required: true },
-    targetId: { type: Schema.Types.ObjectId, required: true },
+    targetId: { type: Schema.Types.Mixed, required: true },
     value: { type: Number, enum: [1, -1], required: true },
   },
   { timestamps: true },
@@ -33,7 +49,7 @@ export const VoteModel = model<VoteDb>('Vote', voteSchema)
 /** Recomputes an item's net score from its votes. */
 export const tallyVotes = async (
   targetType: 'deck' | 'template',
-  targetId: Types.ObjectId,
+  targetId: Types.ObjectId | string,
 ): Promise<number> => {
   const [row] = await VoteModel.aggregate<{ score: number }>([
     { $match: { targetType, targetId } },
@@ -45,7 +61,7 @@ export const tallyVotes = async (
 /** Up- and down-vote counts (and net score) for one item, shown side by side. */
 export const voteBreakdown = async (
   targetType: 'deck' | 'template',
-  targetId: Types.ObjectId,
+  targetId: Types.ObjectId | string,
 ): Promise<{ up: number; down: number; voteScore: number }> => {
   const [row] = await VoteModel.aggregate<{ up: number; down: number }>([
     { $match: { targetType, targetId } },
@@ -65,11 +81,11 @@ export const voteBreakdown = async (
 /** Up/down counts for many items at once (feed rows), keyed by target id. */
 export const voteBreakdowns = async (
   targetType: 'deck' | 'template',
-  targetIds: Types.ObjectId[],
+  targetIds: (Types.ObjectId | string)[],
 ): Promise<Map<string, { up: number; down: number }>> => {
   if (targetIds.length === 0) return new Map()
   const rows = await VoteModel.aggregate<{
-    _id: Types.ObjectId
+    _id: Types.ObjectId | string
     up: number
     down: number
   }>([

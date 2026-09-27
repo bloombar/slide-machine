@@ -1,8 +1,10 @@
 /**
  * Social-layer data models (SPEC §11, §15): voting (SOC-1), browse/search/sort
- * (SOC-2) and public feeds (SOC-3). Templates are deferred (built-in only), so
- * today these cover decks.
+ * (SOC-2) and public feeds (SOC-3), for both lectures and style templates
+ * (TMPL-27/TMPL-28).
  */
+import type { Template } from './template'
+
 export interface Vote {
   id: string
   userId: string
@@ -88,4 +90,24 @@ export interface SearchResults {
   hasMore: boolean
   projects: SearchProject[]
   users: SearchUser[]
+}
+
+/** Which template list is being browsed (TMPL-27/TMPL-28): the two SOC-2
+ * sorts, plus "mine" — the caller's own library (owned or shared with them),
+ * of any visibility, built-ins excluded. A lecture's feed has no "mine": its
+ * equivalent is a project's own lecture list, not this vocabulary. */
+export type TemplateFeedSort = FeedSort | 'mine'
+
+/**
+ * One page of a browsable template list (TMPL-27/TMPL-28) — the same shape
+ * `DeckPage` has for lectures, `items` rather than a content-specific name
+ * since a template's own DTO already carries everything a card needs (no
+ * separate slug/title/owner/project quartet the way `FeedDeck` does).
+ * `template.feed` and `template.search` both return this shape, so one
+ * paging component can drive either the way `useDiscover` already does for
+ * lectures.
+ */
+export interface TemplatePage {
+  items: Template[]
+  hasMore: boolean
 }
