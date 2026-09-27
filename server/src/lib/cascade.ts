@@ -125,6 +125,12 @@ export const deleteUserCascade = async (userId: string): Promise<void> => {
         },
       },
     ),
+    // A design's people list is its own, exactly like a project's (TMPL-26)
+    // — no override to reach into.
+    TemplateModel.updateMany(
+      {},
+      { $pull: { viewers: userId, editors: userId } },
+    ),
     RefreshTokenModel.deleteMany({ userId }),
   ])
   await UserModel.updateOne({ _id: userId }, { deletedAt: at })
@@ -331,6 +337,12 @@ export const purgeUserCascade = async (userId: string): Promise<void> => {
           'accessOverride.editors': userId,
         },
       },
+    ),
+    // A design's people list is its own, exactly like a project's (TMPL-26)
+    // — no override to reach into.
+    TemplateModel.updateMany(
+      {},
+      { $pull: { viewers: userId, editors: userId } },
     ),
     RefreshTokenModel.deleteMany({ userId }),
   ])

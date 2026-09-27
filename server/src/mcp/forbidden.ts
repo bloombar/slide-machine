@@ -62,6 +62,11 @@ export const FORBIDDEN_ACTIONS: readonly string[] = [
   'project.share',
   'project.unshare',
   'project.transferOwnership',
+  // A design's own access and people list (TMPL-26) — the same ground as
+  // deck.setAccess/deck.share above.
+  'template.setAccess',
+  'template.share',
+  'template.unshare',
   'user.setProfileVisibility',
   // Reaches students directly: writes a real Google Form and hands it out.
   'quiz.publish',

@@ -36,7 +36,16 @@ const shareMailLimiter = createRateLimiter({
 export const resetShareMailLimit = (): void => shareMailLimiter.reset()
 
 /** What was shared, in the words the message uses for it. */
-export type SharedResourceKind = 'lecture' | 'project'
+export type SharedResourceKind = 'lecture' | 'project' | 'template'
+
+/** The noun each kind reads as in a sentence (TMPL-26): a design template is
+ * never called just "a template" in the message, since that word alone does
+ * not say what kind of thing is being shared. */
+const KIND_NOUN: Record<SharedResourceKind, string> = {
+  lecture: 'lecture',
+  project: 'project',
+  template: 'design template',
+}
 
 export interface ShareNotification {
   /** The recipient's address. */
@@ -61,16 +70,17 @@ export interface ShareNotification {
 /** What the role lets them do, said plainly rather than named. */
 const roleLine = (role: ShareRole, kind: SharedResourceKind): string =>
   role === 'editor'
-    ? `You can view and edit this ${kind}.`
-    : `You can view this ${kind}.`
+    ? `You can view and edit this ${KIND_NOUN[kind]}.`
+    : `You can view this ${KIND_NOUN[kind]}.`
 
 /** The message body, built separately from the sending so it can be read
  * back in tests without a relay. */
-export const shareEmailText = (notice: ShareNotification): string =>
-  [
+export const shareEmailText = (notice: ShareNotification): string => {
+  const noun = KIND_NOUN[notice.kind]
+  return [
     notice.recipientName ? `Hi ${notice.recipientName},` : 'Hi,',
     '',
-    `${notice.sharerName} shared a ${notice.kind} with you on Slide Machine:`,
+    `${notice.sharerName} shared a ${noun} with you on Slide Machine:`,
     '',
     notice.title,
     notice.link,
@@ -81,7 +91,7 @@ export const shareEmailText = (notice: ShareNotification): string =>
           '',
           'This address has not been confirmed yet. Confirm it from the email',
           `we sent when the account was created — that is what opens the`,
-          `${notice.kind} to you. You can ask for another confirmation link`,
+          `${noun} to you. You can ask for another confirmation link`,
           'from your account settings.',
         ]
       : []),
@@ -91,13 +101,14 @@ export const shareEmailText = (notice: ShareNotification): string =>
           '',
           'You do not have a Slide Machine account yet. Create one with this',
           `email address (${notice.to}), then confirm the address from the`,
-          `email we send you — that is what opens the ${notice.kind} to you.`,
+          `email we send you — that is what opens the ${noun} to you.`,
         ]),
   ].join('\n')
+}
 
 /** The subject line: who shared what, so an inbox list is enough to tell. */
 export const shareEmailSubject = (notice: ShareNotification): string =>
-  `${notice.sharerName} shared a ${notice.kind} with you: ${notice.title}`
+  `${notice.sharerName} shared a ${KIND_NOUN[notice.kind]} with you: ${notice.title}`
 
 /**
  * Mails the notification. Returns whether a message actually went out, so a

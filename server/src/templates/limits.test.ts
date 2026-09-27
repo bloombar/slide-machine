@@ -16,7 +16,8 @@ const template = (over: Partial<Template> = {}): Template =>
     ownerId: 'u',
     name: 'T',
     theme: {},
-    visibility: 'private',
+    visibility: 'restricted',
+    myRole: 'owner',
     voteScore: 0,
     createdAt: '2026-01-01T00:00:00.000Z',
     layouts: [

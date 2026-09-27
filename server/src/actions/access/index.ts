@@ -39,7 +39,9 @@ export { seedAssetEditor, seedAssetLevel } from './seed-asset'
 export {
   templateReadable,
   templateReadableBySlug,
-  templateAuthor,
+  templateEditor,
+  templateOwner,
+  isTemplateReadable,
 } from './template'
 export { self, signedIn, open, custom } from './self'
 export {

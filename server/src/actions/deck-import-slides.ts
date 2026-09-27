@@ -181,9 +181,9 @@ export const deckImportFromSlides = defineAction<
         ...layout,
         slots: layout.slots.map(normalizeSlot),
       })) as Layout[],
-      visibility: 'private',
+      visibility: 'restricted',
     })
-    const template = toTemplateDto(templateDoc)
+    const template = toTemplateDto(templateDoc, userId)
 
     const title = imported.template.name
     const deck = await DeckModel.create({

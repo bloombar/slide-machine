@@ -148,12 +148,12 @@ describe('template.import (EXP-3)', () => {
     )
   })
 
-  it('arrives private, whatever the file said', async () => {
+  it('arrives restricted, whatever the file said', async () => {
     // The fixture is public; publishing someone else's design on their behalf
     // is not a thing to do silently
     const content = await exportedDesign()
     const { body } = await act(grace, 'template.import', { content })
-    expect(body.visibility).toBe('private')
+    expect(body.visibility).toBe('restricted')
   })
 
   it('shows up in the importer’s library and nobody else’s', async () => {

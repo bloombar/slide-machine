@@ -13,6 +13,7 @@ import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
 import { SeedAssetModel } from '../../src/models/seed-asset'
 import { VoteModel } from '../../src/models/vote'
+import { TemplateModel } from '../../src/models/template'
 import { TemplateVersionModel } from '../../src/models/template-version'
 import {
   deleteProjectCascade,
@@ -74,6 +75,7 @@ beforeEach(async () => {
     VoteModel.deleteMany({}),
     UsageRecordModel.deleteMany({}),
     TemplateVersionModel.deleteMany({}),
+    TemplateModel.deleteMany({}),
   ])
   const owner = await UserModel.create({
     email: 'ada@x.com',
@@ -165,6 +167,38 @@ describe('soft delete (P-10)', () => {
     ).toBe(0)
     // The purged deck's votes (SOC-1) are hard-deleted with it.
     expect(await VoteModel.countDocuments({})).toBe(0)
+  })
+
+  // TMPL-26: a design's people list is scrubbed the same way a project's is
+  // (`purgeUserCascade`) — a purged user must not linger on someone else's
+  // viewer/editor list once their own account is permanently gone.
+  it('scrubs a purged user from another owner’s design (TMPL-26)', async () => {
+    const victim = await UserModel.create({
+      email: 'victim@x.com',
+      displayName: 'Victim',
+      deletedAt: new Date(0),
+    })
+    const template = await TemplateModel.create({
+      ownerId,
+      name: 'Friend Style',
+      theme: {},
+      layouts: [],
+      viewers: [victim._id.toString()],
+      editors: [victim._id.toString()],
+    })
+
+    const purged = await purgeExpiredSoftDeletes(90, Date.now() + 100 * DAY_MS)
+    expect(purged).toBeGreaterThan(0)
+    expect(
+      await UserModel.findById(victim._id).setOptions({
+        withDeleted: true,
+      }),
+    ).toBeNull()
+
+    const survivor = await TemplateModel.findById(template._id)
+    expect(survivor).not.toBeNull()
+    expect(survivor!.viewers).toEqual([])
+    expect(survivor!.editors).toEqual([])
   })
 
   it('tombstones a single deck and its slides without touching siblings', async () => {

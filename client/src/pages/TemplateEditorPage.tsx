@@ -104,7 +104,6 @@ export default function TemplateEditorPage() {
       renderMode: TemplateRenderMode
       theme: Record<string, unknown>
       layouts: Layout[]
-      visibility: Template['visibility']
       aiInstructions?: string
     }): Promise<boolean> => {
       if (!template) return Promise.resolve(false)
@@ -141,6 +140,24 @@ export default function TemplateEditorPage() {
     },
     [template, t],
   )
+
+  /**
+   * General access changed underneath the editor (TMPL-26):
+   * `TemplateSettings` already saved it through `template.setAccess`, so this
+   * only adopts `visibility` and `myRole` — never `name`/`theme`/`layouts`,
+   * which stay the exact references `template` already held. An unsaved
+   * rename or edit sitting in the editor's own draft is compared against
+   * those references (`TemplateEditor`'s adopt effect), so replacing them
+   * here — even with values that happen to be unchanged — would read as a
+   * new template to adopt and silently discard the draft.
+   */
+  const onTemplateChanged = useCallback((updated: Template) => {
+    setTemplate(prev =>
+      prev
+        ? { ...prev, visibility: updated.visibility, myRole: updated.myRole }
+        : updated,
+    )
+  }, [])
 
   /** The "Saved" note is about the last write, so any further editing
    * retires it. */
@@ -216,6 +233,7 @@ export default function TemplateEditorPage() {
             template={template}
             layoutSources={library}
             onSave={save}
+            onTemplateChanged={onTemplateChanged}
             onDirtyChange={onDirtyChange}
             saveRef={saveRef}
             onCancel={() => leave(from)}

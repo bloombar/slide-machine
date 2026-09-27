@@ -15,6 +15,7 @@ import { errorHandler } from '../../src/middleware/error'
 import { UserModel } from '../../src/models/user'
 import { ProjectModel } from '../../src/models/project'
 import { DeckModel } from '../../src/models/deck'
+import { TemplateModel } from '../../src/models/template'
 import { SlideModel } from '../../src/models/slide'
 import { SeedAssetModel } from '../../src/models/seed-asset'
 import { TranscriptSegmentModel } from '../../src/models/transcript-segment'
@@ -49,6 +50,7 @@ beforeEach(async () => {
     UserModel.deleteMany({}),
     ProjectModel.deleteMany({}),
     DeckModel.deleteMany({}),
+    TemplateModel.deleteMany({}),
     SlideModel.deleteMany({}),
     SeedAssetModel.deleteMany({}),
     TranscriptSegmentModel.deleteMany({}),
@@ -178,6 +180,16 @@ describe('DELETE /api/admin/users/:id', () => {
       'Transferred',
       `transferred-${user._id}`,
     )
+    // The victim is also on a design's people list (TMPL-26), the same shape
+    // a project's is.
+    const friendTemplate = await TemplateModel.create({
+      ownerId: friend._id,
+      name: 'Friend Style',
+      theme: {},
+      layouts: [],
+      viewers: [user._id.toString()],
+      editors: [user._id.toString()],
+    })
 
     const res = await request(server)
       .delete(`/api/admin/users/${user._id}`)
@@ -204,6 +216,12 @@ describe('DELETE /api/admin/users/:id', () => {
     expect(survivor).not.toBeNull()
     expect(survivor!.viewers).toEqual([])
     expect(survivor!.editors).toEqual([])
+
+    // Likewise the friend's design (TMPL-26): it survives, scrubbed
+    const survivingTemplate = await TemplateModel.findById(friendTemplate._id)
+    expect(survivingTemplate).not.toBeNull()
+    expect(survivingTemplate!.viewers).toEqual([])
+    expect(survivingTemplate!.editors).toEqual([])
 
     const log = await AdminActionLogModel.findOne({ action: 'user.delete' })
     expect(log).toMatchObject({

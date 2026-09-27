@@ -300,7 +300,8 @@
       "duplicate": "无法复制该模板",
       "load": "无法加载该设计",
       "save": "无法保存模板",
-      "delete": "无法删除模板"
+      "delete": "无法删除模板",
+      "setAccess": "无法更改谁可以访问此设计"
     },
     "page": {
       "saved": "已保存",
@@ -312,13 +313,11 @@
     "addLayoutChoose": "选择类型…",
     "removeLayout": "移除{name}版式",
     "visibility": {
-      "private": "仅自己",
-      "unlisted": "知道链接的人",
+      "restricted": "受限",
       "public": "公开"
     },
     "visibilityHint": {
-      "private": "仅你可用，他人无法找到或复制。",
-      "unlisted": "收到链接的人都可以复制。",
+      "restricted": "只有你和你分享给的人才能打开它。",
       "public": "显示在公共模板库中，任何人都可以复制。"
     },
     "boxAt": "{slot}：距左 {x}%，距顶 {y}%，宽 {w}%，高 {h}%",
@@ -540,7 +539,8 @@
         "invalid": "无法导入此模板：{details}",
         "failed": "无法导入此模板"
       }
-    }
+    },
+    "visibilityOwnerOnly": "只有设计的所有者才能更改谁可以使用它。"
   },
   "layout": {
     "change": "更改幻灯片版式",

@@ -13,6 +13,7 @@
 import type { ShareRole } from '@slide-machine/shared'
 import { DeckModel } from '../models/deck'
 import { ProjectModel } from '../models/project'
+import { TemplateModel } from '../models/template'
 import { UserModel } from '../models/user'
 import { isEmailBanned } from '../models/banned-email'
 import type { ShareInviteDb } from '../models/share-invite'
@@ -118,6 +119,18 @@ export const claimShareInvites = async (
     grantOn(project.viewers, project.editors, userId, invite.role)
     project.invites = removeInvite(project.invites, address)
     await project.save()
+    claimed += 1
+  }
+
+  // TMPL-26: a design's people list is its own, exactly like a project's —
+  // no inheritance to fall through, so it is claimed the same way.
+  const templates = await TemplateModel.find({ 'invites.email': address })
+  for (const template of templates) {
+    const invite = (template.invites ?? []).find(i => i.email === address)
+    if (!invite) continue
+    grantOn(template.viewers, template.editors, userId, invite.role)
+    template.invites = removeInvite(template.invites, address)
+    await template.save()
     claimed += 1
   }
 

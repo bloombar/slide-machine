@@ -60,6 +60,7 @@ import {
   deckSettingsAdmin,
   deckSettingsView,
   deckViewer,
+  isTemplateReadable,
   projectOwner,
   type DeckAccess,
   type DeckMoveAccess,
@@ -135,7 +136,6 @@ import { withDeckSettingsAudit } from '../lib/admin-edit'
 import { recordSettingsChange } from '../audit/settings-log'
 import { deckSettingsSnapshot } from '../lib/settings-snapshot'
 import { defaultTemplateId, layoutDescriptors } from '../templates/builtin'
-import { templateExists } from '../templates/resolve'
 import {
   resolveDeckTemplate,
   resolveDeckTemplateForRead,
@@ -327,10 +327,17 @@ export const deckCreate = defineAction<DeckCreateInput, Deck, ProjectAccess>({
   // The lecture does not exist yet, so what is authorized is the project it
   // is being created in — owner only, as it has always been.
   access: projectOwner((input: { projectId: string }) => input.projectId),
-  execute: async (ctx, input, { project }) => {
+  execute: async (ctx, input, { userId, project }) => {
     // The project's template is the creation-time default; the lecture
-    // stores its own copy and can switch independently afterwards
-    const templateId = (await templateExists(project?.templateId ?? ''))
+    // stores its own copy and can switch independently afterwards. Readable,
+    // not merely existing (TMPL-26): a project's own templateId can go stale
+    // the same way an account's default can, if the owner is unshared from
+    // it after switching the project to it — dropped in favor of the
+    // deployment default, exactly as a deleted template already was.
+    const templateId = (await isTemplateReadable(
+      userId,
+      project?.templateId ?? '',
+    ))
       ? project!.templateId
       : defaultTemplateId()
     const deck = await DeckModel.create({
@@ -464,7 +471,7 @@ export const deckGet = defineAction<DeckGetInput, DeckViewResponse, DeckAccess>(
     access: viewerOf,
     input: z.object({ deckId: z.string().min(1) }),
     execute: async (ctx, input, { userId, deck, acl }) => {
-      const template = await resolveDeckTemplateForRead(deck)
+      const template = await resolveDeckTemplateForRead(deck, userId)
       if (!template)
         throw new ActionValidationError('deck.get', [
           'template no longer exists',
@@ -706,7 +713,11 @@ export const deckSwitchTemplate = defineAction<
   }),
   execute: (ctx, input, access) =>
     withDeckSettingsAudit(access, async (deck, acl) => {
-      if (!(await templateExists(input.templateId))) {
+      // Readable, not merely existing (TMPL-26): a lecture the caller may
+      // edit is not licence to draw it with someone else's restricted
+      // design just because the id is known. Refused identically to an
+      // unknown id either way.
+      if (!(await isTemplateReadable(access.userId, input.templateId))) {
         throw new ActionValidationError('deck.switchTemplate', [
           'templateId: unknown template',
         ])

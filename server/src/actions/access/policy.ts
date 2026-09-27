@@ -42,8 +42,13 @@ export type AccessResource =
 
 /**
  * How much access the caller needs to it. The first five resolve through the
- * one access-control core (lib/access.ts); `author`/`readable` belong to the
- * template visibility model, which is separate by design.
+ * one access-control core (lib/access.ts), and so does `editor` — a
+ * template's ACL is real too (TMPL-26), just resolved through its own policy
+ * rather than `deckEditor`'s, because a template has readers and editors a
+ * lecture or project does not (a built-in, and anyone editing a lecture drawn
+ * with it). `author` and `readable` name what is left that is genuinely
+ * template-specific: built-ins are read-only for a reason other than access,
+ * and a design's own read rule folds in that lecture-drawing case.
  */
 export type AccessLevel =
   /** canViewAcl — public counts, so this admits anyone for a public entity. */
@@ -61,9 +66,14 @@ export type AccessLevel =
   | 'settingsAdmin'
   /** ownerId alone — deliberately stricter than `edit`. */
   | 'own'
-  /** A template's author. */
+  /** A template's owner alone — deleting it, or changing who else may reach
+   * it (setAccess/share/unshare/shares). */
   | 'author'
-  /** A template anyone may read: built-in, shared, or the caller's own. */
+  /** A template's owner or editor — its content: renaming, retheming,
+   * retuning layouts. */
+  | 'editor'
+  /** A template anyone may read: built-in, a member (viewer/editor), public,
+   * or one that draws a lecture the caller may edit. */
   | 'readable'
   /** The signed-in account itself; the input names no resource. */
   | 'self'

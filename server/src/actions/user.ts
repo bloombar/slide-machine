@@ -20,9 +20,8 @@ import type {
 } from '@slide-machine/shared'
 import { ACCOUNT_TYPES, LOCALES } from '@slide-machine/shared'
 import { defineAction } from './define'
-import { self, type SelfAccess } from './access'
+import { self, isTemplateReadable, type SelfAccess } from './access'
 import { registerAction, ActionValidationError } from './dispatch'
-import { templateExists } from '../templates/resolve'
 import { toUserDto, type UserDb } from '../models/user'
 import { accountUsage } from '../billing/usage-view'
 import { effectivePlanTier } from '../billing/plan-grant'
@@ -177,9 +176,11 @@ registerAction(userSetLocale)
  *
  * Mirrors userSetLanguage in every way that matters — nothing is stored until
  * a design is explicitly chosen, and null clears the choice so new projects
- * follow the deployment's default again. The id is checked against the
- * template store, because an account pointing at a template that does not
- * exist would silently hand every new project a broken reference.
+ * follow the deployment's default again. The id is checked for readability,
+ * not merely existence (TMPL-26): an account pointing at a template that
+ * does not exist would silently hand every new project a broken reference,
+ * and one it may not even read would hand every new project a design its
+ * owner cannot see the source of.
  */
 export const userSetTemplate = defineAction<
   UserSetTemplateInput,
@@ -189,8 +190,11 @@ export const userSetTemplate = defineAction<
   name: 'user.setTemplate',
   access: self(),
   input: z.object({ templateId: z.string().min(1).nullable() }),
-  execute: async (ctx, input, { user }) => {
-    if (input.templateId && !(await templateExists(input.templateId))) {
+  execute: async (ctx, input, { user, userId }) => {
+    if (
+      input.templateId &&
+      !(await isTemplateReadable(userId, input.templateId))
+    ) {
       throw new ActionValidationError('user.setTemplate', [
         'templateId: unknown template',
       ])

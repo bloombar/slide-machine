@@ -45,7 +45,8 @@ const template = (layouts: Layout[]): Template => ({
   name: 'A design',
   theme: { background: '#ffffff', text: '#000000', accent: '#ff0000' },
   layouts,
-  visibility: 'private',
+  visibility: 'restricted',
+  myRole: 'owner',
   voteScore: 0,
   createdAt: '2026-01-01T00:00:00.000Z',
 })

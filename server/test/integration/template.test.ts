@@ -6,8 +6,17 @@
  * stored in the database is interchangeable with one shipped as a file
  * everywhere a template is resolved.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  afterAll,
+  beforeEach,
+} from 'vitest'
 import request from 'supertest'
+import YAML from 'yaml'
 import { env } from '../../src/config/env'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
 import { createApp } from '../../src/app'
@@ -15,9 +24,13 @@ import { UserModel } from '../../src/models/user'
 import { ProjectModel } from '../../src/models/project'
 import { DeckModel } from '../../src/models/deck'
 import { SlideModel } from '../../src/models/slide'
-import { TemplateModel } from '../../src/models/template'
+import { TemplateModel, type TemplateDb } from '../../src/models/template'
 import { RefreshTokenModel } from '../../src/models/refresh-token'
+import { BannedEmailModel } from '../../src/models/banned-email'
+import * as mailer from '../../src/lib/mailer'
+import { resetShareMailLimit } from '../../src/lib/share-emails'
 import {
+  defaultTemplateId,
   layoutDescriptors,
   listBuiltinTemplates,
 } from '../../src/templates/builtin'
@@ -26,15 +39,46 @@ import { deleteUserCascade } from '../../src/lib/cascade'
 const server = createApp().listen(0)
 afterAll(() => server.close())
 
+/** Every message the server tried to send during a test (SHARE-3), mirroring
+ * `share-notify.test.ts`'s stub. */
+let sent: { to: string; subject: string; text: string }[] = []
+
+/** The verification token out of the message registration mailed. */
+const verificationTokenFor = async (email: string): Promise<string> => {
+  await vi.waitFor(() =>
+    expect(
+      sent.some(m => m.to === email && m.text.includes('verify-email')),
+    ).toBe(true),
+  )
+  // The verification message specifically: a share notification to the same
+  // address may well have arrived after it.
+  const mail = sent
+    .filter(m => m.to === email && m.text.includes('verify-email'))
+    .at(-1)!
+  return decodeURIComponent(mail.text.match(/verify-email\?token=(\S+)/)![1]!)
+}
+
+/**
+ * Registers and confirms the address through the mailed verification link —
+ * the same flow a real signup takes, and the only thing that actually claims
+ * a pending share invitation (SHARE-3): confirming a user's row directly in
+ * the database would prove nothing about that path.
+ */
 const registerUser = async (email: string): Promise<string> => {
   const res = await request(server)
     .post('/api/auth/register')
     .send({ email, password: 'longenough1', displayName: email.split('@')[0] })
-  // Confirmed, like any ordinary user of a running app: a share to an
-  // address that has never been confirmed waits as an invitation rather
-  // than granting access (SHARE-3), and these tests are about what a
-  // collaborator can do once they have it.
-  await UserModel.updateOne({ email }, { emailVerified: true })
+  await request(server)
+    .post('/api/auth/verify-email')
+    .send({ token: await verificationTokenFor(email) })
+  return res.body.accessToken as string
+}
+
+/** Registers without confirming the address — no invitation is claimed. */
+const registerUnverified = async (email: string): Promise<string> => {
+  const res = await request(server)
+    .post('/api/auth/register')
+    .send({ email, password: 'longenough1', displayName: email.split('@')[0] })
   return res.body.accessToken as string
 }
 
@@ -50,12 +94,14 @@ const builtinId = (): string => listBuiltinTemplates()[0]!.id
 
 let ada: string
 let bob: string
+let carol: string
 
 beforeAll(async () => {
   await connectMongo(env.MONGODB_URI)
   await UserModel.init()
 })
 afterAll(async () => {
+  vi.restoreAllMocks()
   await disconnectMongo()
 })
 
@@ -68,8 +114,16 @@ beforeEach(async () => {
     TemplateModel.deleteMany({}),
     RefreshTokenModel.deleteMany({}),
   ])
+  await BannedEmailModel.deleteMany({})
+  sent = []
+  resetShareMailLimit()
+  vi.spyOn(mailer, 'mailerAvailable').mockReturnValue(true)
+  vi.spyOn(mailer, 'sendMail').mockImplementation(async mail => {
+    sent.push({ to: mail.to, subject: mail.subject, text: mail.text })
+  })
   ada = await registerUser('ada@example.com')
   bob = await registerUser('bob@example.com')
+  carol = await registerUser('carol@example.com')
 })
 
 describe('template.list (TMPL-1)', () => {
@@ -122,8 +176,9 @@ describe('template.duplicate (TMPL-4)', () => {
     expect(res.body.name).toBe('My Style')
     expect(res.body.theme).toEqual(source.theme)
     expect(res.body.layouts).toHaveLength(source.layouts.length)
-    // Its own template, private until shared
-    expect(res.body.visibility).toBe('private')
+    // Its own template, restricted until shared (TMPL-26)
+    expect(res.body.visibility).toBe('restricted')
+    expect(res.body.myRole).toBe('owner')
   })
 
   it('numbers a copy from the one it came from', async () => {
@@ -377,18 +432,28 @@ describe('template.get and permalinks (TMPL-4)', () => {
     expect(missing.status).toBe(403)
   })
 
-  it('lets anyone read a design its author shared', async () => {
+  it('lets anyone read a design its owner made public (TMPL-26)', async () => {
     const made = await own()
-    await act(ada, 'template.update', {
+    await act(ada, 'template.setAccess', {
       templateId: made.id,
-      name: made.name,
-      theme: made.theme,
-      layouts: made.layouts,
-      visibility: 'unlisted',
+      visibility: 'public',
     })
     const res = await act(bob, 'template.get', { slug: made.permalinkSlug })
     expect(res.status).toBe(200)
     expect(res.body.name).toBe('Mine')
+  })
+
+  it('lets a viewer the owner shared with read a restricted design (TMPL-26)', async () => {
+    const made = await own()
+    await act(ada, 'template.share', {
+      templateId: made.id,
+      email: 'bob@example.com',
+      role: 'viewer',
+    })
+    const res = await act(bob, 'template.get', { slug: made.permalinkSlug })
+    expect(res.status).toBe(200)
+    expect(res.body.name).toBe('Mine')
+    expect(res.body.myRole).toBe('viewer')
   })
 })
 
@@ -1116,5 +1181,716 @@ describe('a stored template behaves like a built-in', () => {
     ).toEqual((template.layouts as { type: string }[]).map(l => l.type))
     const stored = await DeckModel.findById(deck.body.id)
     expect(stored!.templateId).toBe(template.id)
+  })
+})
+
+describe('template access and sharing (TMPL-26)', () => {
+  const own = async (name = 'Ada Style') =>
+    (await act(ada, 'template.duplicate', { templateId: builtinId(), name }))
+      .body
+
+  describe('access levels', () => {
+    it('refuses a non-member on a restricted design', async () => {
+      const made = await own()
+      expect(
+        (
+          await act(bob, 'template.update', {
+            templateId: made.id,
+            name: made.name,
+            theme: made.theme,
+            layouts: made.layouts,
+          })
+        ).status,
+      ).toBe(403)
+      expect(
+        (await act(bob, 'template.get', { slug: made.permalinkSlug })).status,
+      ).toBe(403)
+    })
+
+    it('lets a viewer read and duplicate, but not update', async () => {
+      const made = await own()
+      await act(ada, 'template.share', {
+        templateId: made.id,
+        email: 'bob@example.com',
+        role: 'viewer',
+      })
+      expect(
+        (await act(bob, 'template.get', { slug: made.permalinkSlug })).status,
+      ).toBe(200)
+      expect(
+        (await act(bob, 'template.duplicate', { templateId: made.id })).status,
+      ).toBe(200)
+      const update = await act(bob, 'template.update', {
+        templateId: made.id,
+        name: made.name,
+        theme: made.theme,
+        layouts: made.layouts,
+      })
+      expect(update.status).toBe(403)
+    })
+
+    it('lets an editor update, but not delete, share or setAccess', async () => {
+      const made = await own()
+      await act(ada, 'template.share', {
+        templateId: made.id,
+        email: 'bob@example.com',
+        role: 'editor',
+      })
+      const update = await act(bob, 'template.update', {
+        templateId: made.id,
+        name: 'Edited by Bob',
+        theme: made.theme,
+        layouts: made.layouts,
+      })
+      expect(update.status).toBe(200)
+      expect(update.body.name).toBe('Edited by Bob')
+      expect(update.body.myRole).toBe('editor')
+
+      expect(
+        (await act(bob, 'template.delete', { templateId: made.id })).status,
+      ).toBe(403)
+      expect(
+        (
+          await act(bob, 'template.share', {
+            templateId: made.id,
+            email: 'carol@example.com',
+            role: 'viewer',
+          })
+        ).status,
+      ).toBe(403)
+      expect(
+        (
+          await act(bob, 'template.setAccess', {
+            templateId: made.id,
+            visibility: 'public',
+          })
+        ).status,
+      ).toBe(403)
+      expect(
+        (await act(bob, 'template.shares', { templateId: made.id })).status,
+      ).toBe(403)
+      // template.update carries no visibility field at all (TMPL-26) — an
+      // editor sending one anyway (the shape a stale client might still
+      // send) has it silently ignored rather than smuggled through, and the
+      // design's own access is untouched.
+      const withStrayField = await act(bob, 'template.update', {
+        templateId: made.id,
+        name: made.name,
+        theme: made.theme,
+        layouts: made.layouts,
+        visibility: 'public',
+      })
+      expect(withStrayField.status).toBe(200)
+      expect(withStrayField.body.visibility).toBe('restricted')
+    })
+
+    it('lets the owner do everything', async () => {
+      const made = await own()
+      expect(
+        (
+          await act(ada, 'template.setAccess', {
+            templateId: made.id,
+            visibility: 'public',
+          })
+        ).status,
+      ).toBe(200)
+      expect(
+        (
+          await act(ada, 'template.share', {
+            templateId: made.id,
+            email: 'bob@example.com',
+            role: 'editor',
+          })
+        ).status,
+      ).toBe(200)
+      expect(
+        (await act(ada, 'template.shares', { templateId: made.id })).status,
+      ).toBe(200)
+      expect(
+        (await act(ada, 'template.delete', { templateId: made.id })).status,
+      ).toBe(200)
+    })
+
+    // Publishing to everyone needs a confirmed address (AUTH-3), the same
+    // rule deck.setAccess/project.setAccess apply — going public reaches the
+    // public, not just a person the owner names.
+    it('refuses an unverified owner going public (TMPL-26)', async () => {
+      const eve = await registerUnverified('eve@example.com')
+      const made = (
+        await act(eve, 'template.duplicate', { templateId: builtinId() })
+      ).body
+      const res = await act(eve, 'template.setAccess', {
+        templateId: made.id,
+        visibility: 'public',
+      })
+      expect(res.status).toBe(403)
+      expect(res.body.error.code).toBe('email_unverified')
+    })
+  })
+
+  describe('share, invite and unshare round trip', () => {
+    it('grants a confirmed account directly', async () => {
+      const made = await own()
+      const shares = await act(ada, 'template.share', {
+        templateId: made.id,
+        email: 'bob@example.com',
+        role: 'viewer',
+      })
+      expect(shares.status).toBe(200)
+      expect(shares.body).toEqual([
+        expect.objectContaining({ email: 'bob@example.com', role: 'viewer' }),
+      ])
+      expect(
+        (await act(bob, 'template.get', { slug: made.permalinkSlug })).status,
+      ).toBe(200)
+    })
+
+    it('holds an unknown address as a pending invitation, claimed at registration', async () => {
+      const made = await own()
+      const shares = await act(ada, 'template.share', {
+        templateId: made.id,
+        email: 'dana@example.com',
+        role: 'editor',
+      })
+      expect(shares.status).toBe(200)
+      expect(shares.body).toEqual([
+        expect.objectContaining({
+          email: 'dana@example.com',
+          role: 'editor',
+          pending: true,
+        }),
+      ])
+      // An account with no confirmed address yet has not claimed anything —
+      // the invitation is still only a promise (SHARE-3).
+      const danaUnverified = await registerUnverified('dana@example.com')
+      const before = await act(danaUnverified, 'template.update', {
+        templateId: made.id,
+        name: made.name,
+        theme: made.theme,
+        layouts: made.layouts,
+      })
+      expect(before.status).toBe(403)
+
+      // Confirming the address through the real verify-email link is what
+      // claims it (SHARE-3, `claimShareInvites`) — the same token flow a
+      // person follows from their inbox, not a database field flipped by
+      // the test.
+      await request(server)
+        .post('/api/auth/verify-email')
+        .send({ token: await verificationTokenFor('dana@example.com') })
+      const update = await act(danaUnverified, 'template.update', {
+        templateId: made.id,
+        name: made.name,
+        theme: made.theme,
+        layouts: made.layouts,
+      })
+      expect(update.status).toBe(200)
+    })
+
+    it('withdraws a granted share by user id, and an invitation by email', async () => {
+      const made = await own()
+      await act(ada, 'template.share', {
+        templateId: made.id,
+        email: 'bob@example.com',
+        role: 'viewer',
+      })
+      await act(ada, 'template.share', {
+        templateId: made.id,
+        email: 'dana@example.com',
+        role: 'viewer',
+      })
+      const bobId = (await UserModel.findOne({ email: 'bob@example.com' }))!.id
+      await act(ada, 'template.unshare', {
+        templateId: made.id,
+        userId: bobId,
+        role: 'viewer',
+      })
+      await act(ada, 'template.unshare', {
+        templateId: made.id,
+        email: 'dana@example.com',
+        role: 'viewer',
+      })
+      const shares = await act(ada, 'template.shares', {
+        templateId: made.id,
+      })
+      expect(shares.body).toEqual([])
+      expect(
+        (await act(bob, 'template.get', { slug: made.permalinkSlug })).status,
+      ).toBe(403)
+    })
+
+    // Both addresses look free and are not: neither can ever register, so
+    // an invitation would strand the share and mail someone who may have
+    // asked to be forgotten (see deck.share / share-notify.test.ts).
+    it('refuses a banned address', async () => {
+      const adaId = (await UserModel.findOne({ email: 'ada@example.com' }))!._id
+      await BannedEmailModel.create({
+        email: 'banned@example.com',
+        bannedBy: adaId,
+      })
+      const made = await own()
+      const res = await act(ada, 'template.share', {
+        templateId: made.id,
+        email: 'banned@example.com',
+        role: 'viewer',
+      })
+      expect(res.status).toBe(400)
+    })
+
+    it('refuses an address still held by a deleted account', async () => {
+      await registerUser('gone@example.com')
+      await UserModel.updateOne(
+        { email: 'gone@example.com' },
+        { deletedAt: new Date() },
+      )
+      const made = await own()
+      const res = await act(ada, 'template.share', {
+        templateId: made.id,
+        email: 'gone@example.com',
+        role: 'viewer',
+      })
+      expect(res.status).toBe(400)
+    })
+
+    it('refuses an editor unsharing (owner-only, TMPL-26)', async () => {
+      const made = await own()
+      await act(ada, 'template.share', {
+        templateId: made.id,
+        email: 'bob@example.com',
+        role: 'editor',
+      })
+      const carolId = (await UserModel.findOne({ email: 'carol@example.com' }))!
+        .id
+      const res = await act(bob, 'template.unshare', {
+        templateId: made.id,
+        userId: carolId,
+        role: 'viewer',
+      })
+      expect(res.status).toBe(403)
+    })
+
+    it('mails the design’s own /t/:slug link', async () => {
+      const made = await own()
+      sent = []
+      await act(ada, 'template.share', {
+        templateId: made.id,
+        email: 'bob@example.com',
+        role: 'viewer',
+      })
+      const mail = sent.find(m => m.subject.includes('shared a'))
+      expect(mail?.text).toContain(`/t/${made.permalinkSlug}`)
+    })
+
+    it('gives a copy of a shared design an empty people list of its own', async () => {
+      const made = await own()
+      await act(ada, 'template.share', {
+        templateId: made.id,
+        email: 'bob@example.com',
+        role: 'editor',
+      })
+      const copy = await act(bob, 'template.duplicate', {
+        templateId: made.id,
+      })
+      expect(copy.status).toBe(200)
+      // Bob owns the copy outright, and it carries no one else's access —
+      // carol was never on the source's list, ada was its owner, neither
+      // rides along onto something Bob just made his own.
+      expect(copy.body.myRole).toBe('owner')
+      const shares = await act(bob, 'template.shares', {
+        templateId: copy.body.id,
+      })
+      expect(shares.body).toEqual([])
+    })
+  })
+
+  describe('template.list (TMPL-26)', () => {
+    it('includes a design shared with the caller, and excludes another', async () => {
+      const shared = await own('Shared with Bob')
+      await own('Not shared')
+      await act(ada, 'template.share', {
+        templateId: shared.id,
+        email: 'bob@example.com',
+        role: 'viewer',
+      })
+      const list = await act(bob, 'template.list')
+      const names = list.body.map((t: { name: string }) => t.name)
+      expect(names).toContain('Shared with Bob')
+      expect(names).not.toContain('Not shared')
+    })
+
+    it('does not count a shared design toward duplicate name choosing', async () => {
+      // Bob owns nothing named "Style A" or "Style A 2" — both names are only
+      // on designs shared with him, by two different owners. If the shared
+      // ones counted, his own next copy would be numbered past both; since
+      // they must not, it lands on "Style A 2".
+      const stylea = await own('Style A')
+      await act(ada, 'template.share', {
+        templateId: stylea.id,
+        email: 'bob@example.com',
+        role: 'viewer',
+      })
+      const dana = await registerUser('dana@example.com')
+      const stylea2 = (
+        await act(dana, 'template.duplicate', {
+          templateId: builtinId(),
+          name: 'Style A 2',
+        })
+      ).body
+      await act(dana, 'template.share', {
+        templateId: stylea2.id,
+        email: 'bob@example.com',
+        role: 'viewer',
+      })
+
+      const copy = await act(bob, 'template.duplicate', {
+        templateId: stylea.id,
+      })
+      expect(copy.status).toBe(200)
+      expect(copy.body.name).toBe('Style A 2')
+    })
+  })
+
+  describe('myRole', () => {
+    it('is null for a built-in and for a public design nobody added the caller to', async () => {
+      const builtin = await act(ada, 'template.get', { slug: builtinId() })
+      expect(builtin.body.myRole).toBeNull()
+
+      const made = await own()
+      await act(ada, 'template.setAccess', {
+        templateId: made.id,
+        visibility: 'public',
+      })
+      const seenByBob = await act(bob, 'template.get', {
+        slug: made.permalinkSlug,
+      })
+      expect(seenByBob.body.myRole).toBeNull()
+    })
+
+    it('is owner/editor/viewer for the respective people, in template.list', async () => {
+      const made = await own()
+      await act(ada, 'template.share', {
+        templateId: made.id,
+        email: 'bob@example.com',
+        role: 'editor',
+      })
+      await act(ada, 'template.share', {
+        templateId: made.id,
+        email: 'carol@example.com',
+        role: 'viewer',
+      })
+      const findRole = (list: { id: string; myRole: string | null }[]) =>
+        list.find(t => t.id === made.id)!.myRole
+
+      expect(findRole((await act(ada, 'template.list')).body)).toBe('owner')
+      expect(findRole((await act(bob, 'template.list')).body)).toBe('editor')
+      expect(findRole((await act(carol, 'template.list')).body)).toBe('viewer')
+    })
+
+    it('is owner on the design carried by deck.get and GET /decks/:slug, for a lecture drawn with it', async () => {
+      const made = await own()
+      const project = await act(ada, 'project.create', { title: 'Physics' })
+      await act(ada, 'project.switchTemplate', {
+        projectId: project.body.id,
+        templateId: made.id,
+      })
+      const deck = await act(ada, 'deck.create', {
+        projectId: project.body.id,
+        title: 'Waves',
+      })
+
+      const got = await act(ada, 'deck.get', { deckId: deck.body.id })
+      expect(got.body.template.myRole).toBe('owner')
+
+      const viaRoute = await request(server)
+        .get(`/api/decks/${deck.body.permalinkSlug}`)
+        .set('Authorization', `Bearer ${ada}`)
+      expect(viaRoute.body.template.myRole).toBe('owner')
+    })
+  })
+
+  describe('applying a template requires read access (TMPL-26)', () => {
+    // Otherwise pointing a deck of your own at a restricted template you
+    // cannot read, then reading it back through deck.get's own design
+    // resolution, is a way around every access check above.
+    const bobsDeck = async () => {
+      const project = await act(bob, 'project.create', { title: 'Bob U' })
+      const deck = await act(bob, 'deck.create', {
+        projectId: project.body.id,
+        title: 'Waves',
+      })
+      return deck.body.id as string
+    }
+
+    it('refuses a non-member switching a deck onto a restricted design', async () => {
+      const made = await own()
+      const deckId = await bobsDeck()
+      const res = await act(bob, 'deck.switchTemplate', {
+        deckId,
+        templateId: made.id,
+      })
+      expect(res.status).toBe(400)
+    })
+
+    it('lets a non-member switch onto a public design', async () => {
+      const made = await own()
+      await act(ada, 'template.setAccess', {
+        templateId: made.id,
+        visibility: 'public',
+      })
+      const deckId = await bobsDeck()
+      const res = await act(bob, 'deck.switchTemplate', {
+        deckId,
+        templateId: made.id,
+      })
+      expect(res.status).toBe(200)
+    })
+
+    it('lets someone the design was shared with switch onto it', async () => {
+      const made = await own()
+      await act(ada, 'template.share', {
+        templateId: made.id,
+        email: 'bob@example.com',
+        role: 'viewer',
+      })
+      const deckId = await bobsDeck()
+      const res = await act(bob, 'deck.switchTemplate', {
+        deckId,
+        templateId: made.id,
+      })
+      expect(res.status).toBe(200)
+    })
+
+    describe('project.switchTemplate', () => {
+      it('refuses a non-member switching a project onto a restricted design', async () => {
+        const made = await own()
+        const project = await act(bob, 'project.create', { title: 'Bob U' })
+        const res = await act(bob, 'project.switchTemplate', {
+          projectId: project.body.id,
+          templateId: made.id,
+        })
+        expect(res.status).toBe(400)
+      })
+
+      it('lets a non-member switch onto a public design', async () => {
+        const made = await own()
+        await act(ada, 'template.setAccess', {
+          templateId: made.id,
+          visibility: 'public',
+        })
+        const project = await act(bob, 'project.create', { title: 'Bob U' })
+        const res = await act(bob, 'project.switchTemplate', {
+          projectId: project.body.id,
+          templateId: made.id,
+        })
+        expect(res.status).toBe(200)
+      })
+
+      it('lets someone the design was shared with switch onto it', async () => {
+        const made = await own()
+        await act(ada, 'template.share', {
+          templateId: made.id,
+          email: 'bob@example.com',
+          role: 'viewer',
+        })
+        const project = await act(bob, 'project.create', { title: 'Bob U' })
+        const res = await act(bob, 'project.switchTemplate', {
+          projectId: project.body.id,
+          templateId: made.id,
+        })
+        expect(res.status).toBe(200)
+      })
+    })
+
+    describe('user.setTemplate', () => {
+      it('refuses a non-member setting a restricted design as their default', async () => {
+        const made = await own()
+        const res = await act(bob, 'user.setTemplate', {
+          templateId: made.id,
+        })
+        expect(res.status).toBe(400)
+      })
+
+      it('lets a non-member set a public design as their default', async () => {
+        const made = await own()
+        await act(ada, 'template.setAccess', {
+          templateId: made.id,
+          visibility: 'public',
+        })
+        const res = await act(bob, 'user.setTemplate', {
+          templateId: made.id,
+        })
+        expect(res.status).toBe(200)
+      })
+
+      it('lets someone the design was shared with set it as their default', async () => {
+        const made = await own()
+        await act(ada, 'template.share', {
+          templateId: made.id,
+          email: 'bob@example.com',
+          role: 'viewer',
+        })
+        const res = await act(bob, 'user.setTemplate', {
+          templateId: made.id,
+        })
+        expect(res.status).toBe(200)
+      })
+    })
+
+    describe("deck.import's settings restore", () => {
+      /** A minimal, well-formed deck export naming `templateId`. */
+      const yamlNaming = (templateId: string): string =>
+        YAML.stringify({
+          version: 1,
+          kind: 'deck',
+          title: 'Imported',
+          templateId,
+          settings: {},
+          slides: [{ layout: 'title', title: 'Imported' }],
+        })
+
+      const bobsProject = async () =>
+        (await act(bob, 'project.create', { title: 'Bob U' })).body.id as string
+
+      it('falls back to the default design, with a warning, for a restricted one Bob may not read', async () => {
+        const made = await own()
+        const res = await act(bob, 'deck.import', {
+          projectId: await bobsProject(),
+          content: yamlNaming(made.id),
+        })
+        expect(res.status).toBe(200)
+        expect(res.body.deck.templateId).toBe(defaultTemplateId())
+        expect(res.body.warnings.join(' ')).toMatch(/Unknown template/)
+      })
+
+      it('imports onto a public design without a warning', async () => {
+        const made = await own()
+        await act(ada, 'template.setAccess', {
+          templateId: made.id,
+          visibility: 'public',
+        })
+        const res = await act(bob, 'deck.import', {
+          projectId: await bobsProject(),
+          content: yamlNaming(made.id),
+        })
+        expect(res.status).toBe(200)
+        expect(res.body.deck.templateId).toBe(made.id)
+        expect(res.body.warnings).toEqual([])
+      })
+
+      it('imports onto a shared design without a warning', async () => {
+        const made = await own()
+        await act(ada, 'template.share', {
+          templateId: made.id,
+          email: 'bob@example.com',
+          role: 'viewer',
+        })
+        const res = await act(bob, 'deck.import', {
+          projectId: await bobsProject(),
+          content: yamlNaming(made.id),
+        })
+        expect(res.status).toBe(200)
+        expect(res.body.deck.templateId).toBe(made.id)
+        expect(res.body.warnings).toEqual([])
+      })
+    })
+
+    describe('an inherited default that goes stale (TMPL-26)', () => {
+      // Bob sets a design ada shared with him as his own account default;
+      // ada later unshares him. Neither a fresh project nor a fresh lecture
+      // may inherit a design Bob can no longer even open — they fall back to
+      // the deployment default exactly as they would for one since deleted.
+      it("falls back once Bob's account default is unshared from him", async () => {
+        const made = await own()
+        await act(ada, 'template.share', {
+          templateId: made.id,
+          email: 'bob@example.com',
+          role: 'viewer',
+        })
+        // Bob sets it as his account default while he can still read it.
+        expect(
+          (await act(bob, 'user.setTemplate', { templateId: made.id })).status,
+        ).toBe(200)
+
+        const bobId = (await UserModel.findOne({ email: 'bob@example.com' }))!
+          .id
+        await act(ada, 'template.unshare', {
+          templateId: made.id,
+          userId: bobId,
+          role: 'viewer',
+        })
+
+        // A fresh project inherits the account default (TMPL-24) — stale
+        // now, so it falls back rather than pointing at a design Bob can no
+        // longer even open.
+        const project = await act(bob, 'project.create', { title: 'Bob U' })
+        expect(project.body.templateId).toBe(defaultTemplateId())
+
+        // A fresh lecture inherits its project's default; also independently
+        // stale if the project itself was pointed at the design before Bob
+        // lost access to it. Written directly, the way an existing project
+        // that predates the unshare would already hold it.
+        await ProjectModel.updateOne(
+          { _id: project.body.id },
+          { templateId: made.id },
+        )
+        const deck = await act(bob, 'deck.create', {
+          projectId: project.body.id,
+          title: 'Waves',
+        })
+        expect(deck.body.templateId).toBe(defaultTemplateId())
+
+        expect(
+          (await act(bob, 'template.get', { slug: made.permalinkSlug })).status,
+        ).toBe(403)
+      })
+    })
+  })
+})
+
+describe('migrating a template’s stored visibility (TMPL-26)', () => {
+  const adaId = async () =>
+    (await UserModel.findOne({ email: 'ada@example.com' }))!.id
+
+  it('folds private and unlisted down to restricted, and leaves public alone', async () => {
+    const ownerId = await adaId()
+    const fixture = (visibility: TemplateDb['visibility']) =>
+      TemplateModel.create({
+        ownerId,
+        name: `Fixture ${visibility}`,
+        theme: {},
+        layouts: listBuiltinTemplates()[0]!.layouts,
+        visibility,
+      })
+    const priv = await fixture('private')
+    const unlisted = await fixture('unlisted')
+    const pub = await fixture('public')
+    const { backfillTemplateVisibility } =
+      await import('../../src/jobs/migrate-template-visibility')
+    const migrated = await backfillTemplateVisibility()
+    expect(migrated).toBe(2)
+
+    expect((await TemplateModel.findById(priv.id))!.visibility).toBe(
+      'restricted',
+    )
+    expect((await TemplateModel.findById(unlisted.id))!.visibility).toBe(
+      'restricted',
+    )
+    expect((await TemplateModel.findById(pub.id))!.visibility).toBe('public')
+
+    // Idempotent: a second run finds nothing left to change.
+    expect(await backfillTemplateVisibility()).toBe(0)
+  })
+
+  it('reads private/unlisted as restricted even before the backfill runs', async () => {
+    const doc = await TemplateModel.create({
+      ownerId: await adaId(),
+      name: 'Not yet migrated',
+      permalinkSlug: 'not-yet-migrated',
+      theme: {},
+      layouts: listBuiltinTemplates()[0]!.layouts,
+      visibility: 'unlisted',
+    })
+    const res = await act(ada, 'template.get', { slug: doc.permalinkSlug! })
+    expect(res.body.visibility).toBe('restricted')
   })
 })

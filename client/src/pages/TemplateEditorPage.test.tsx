@@ -52,7 +52,8 @@ const template = (over: Partial<Template> = {}): Template => ({
     layout('content', 'Content', ['title', 'body']),
     layout('whiteboard', 'Whiteboard', []),
   ],
-  visibility: 'private',
+  visibility: 'restricted',
+  myRole: 'owner',
   voteScore: 0,
   createdAt: '2026-01-01T00:00:00.000Z',
   ...over,
@@ -184,6 +185,40 @@ describe('TemplateEditorPage (TMPL-4)', () => {
     // Throwing the work away goes back to where the author came from
     fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
     expect(await screen.findByText('back at the lecture')).toBeInTheDocument()
+  })
+
+  // TMPL-26: changing general access is a save of its own (`template.setAccess`),
+  // separate from the content draft `template.update` saves — it must not
+  // silently discard whatever unsaved rename or edit the author is mid-way
+  // through, which the naive "adopt whatever the server just handed back"
+  // read of its result would do.
+  it('keeps an unsaved rename after changing general access', async () => {
+    const loaded = template()
+    vi.mocked(dispatchAction).mockImplementation((action: string) => {
+      if (action === 'template.get') return Promise.resolve(loaded)
+      if (action === 'template.list') return Promise.resolve([])
+      if (action === 'template.setAccess') {
+        return Promise.resolve({ ...loaded, visibility: 'public' })
+      }
+      return Promise.resolve({ urls: [] })
+    })
+    renderPage()
+
+    const name = await screen.findByLabelText('Template name')
+    fireEvent.change(name, { target: { value: 'Renamed' } })
+
+    fireEvent.change(screen.getByLabelText('Who can use it'), {
+      target: { value: 'public' },
+    })
+    await vi.waitFor(() =>
+      expect(screen.getByLabelText('Who can use it')).toHaveValue('public'),
+    )
+
+    // Still there, unsaved
+    expect(screen.getByLabelText('Template name')).toHaveValue('Renamed')
+    // Still counts as unsaved work
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
   })
 
   it('leaves without asking when nothing is unsaved', async () => {

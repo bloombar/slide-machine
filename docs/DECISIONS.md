@@ -1793,3 +1793,95 @@ the name space, since bounding it is what created the sprayable surface.
 Deleted alongside: the `CONSENT_COOKIE_SLOTS`/`consentCookieSlot` machinery, and the
 `oauth-mcp.test.ts` test that asserted the name space stayed under a fixed ceiling (its property no longer
 holds by design — the point now is that the space is *not* artificially small).
+
+## Template visibility and sharing (2026-09-27)
+
+Judgment calls the brief for [TMPL-26](SPEC.md#tmpl-26) left open, implementing a design's people list and
+general access alongside a lecture's.
+
+**No migration runner, so a startup backfill again.** The brief asked for "the way this repo already does
+data migrations"; there is still no such runner (confirmed by the same grep the brief suggested). The one
+precedent is `jobs/pin-template-versions.ts` — a fire-and-forget pass at startup, idempotent because its own
+query only ever matches what it has not yet fixed. `jobs/migrate-template-visibility.ts` follows it exactly:
+`updateMany` folding `private`/`unlisted` to `restricted`, wired into `index.ts` next to the version backfill.
+`toTemplateDto`'s `legacyVisibility` is the read-time safety net the brief also asked for, covering the window
+between a fresh deploy and the backfill's first pass, and any document the pass somehow misses.
+
+**`template.shares` is owner-only, unlike `deck.shares`.** A lecture's own share list is readable by its owner
+*or* an editor (`deckSettingsView`). The brief's access section states plainly that "Owner-only: template.delete
+and all access/share actions" for a design, with no carve-out for reading the list — so an editor of a design
+can change its content but cannot see who else is on it. Kept as stated rather than silently generalized to
+match the lecture's looser rule, since the brief was explicit and a design's people list is arguably more
+sensitive (it can include unclaimed email addresses) than a lecture's.
+
+**`template.update` carries no `visibility` field at all (round 2).** The first pass kept it there, gated
+inside the handler so only the owner could set it — but that meant an editor's ordinary save (which sends the
+whole draft, `visibility` included, because the client held it as part of the same form state) hit the
+owner-only check and 400'd on every edit, and separately meant an *owner* whose address was never confirmed
+could still flip a design public through `template.update` without `template.setAccess`'s `requireVerifiedEmail`
+gate ever running — two defects, both from the same field existing in two places with two different rules.
+Dropped entirely: general access changes only through `template.setAccess`, which already enforces owner-only
+and the verified-email requirement, and `template.update`'s own schema is now honestly what it edits — content,
+never access. The client's `TemplateEditor` no longer carries `visibility` in its draft state at all; the
+visibility `<select>` in `TemplateSettings` calls `template.setAccess` directly and shows whatever the server
+refuses it for (e.g. AUTH-3's "confirm your address first"), which is the shape slice 2's `AccessSettings` swap
+keeps.
+
+**A new `AccessLevel` value (`'editor'`) rather than reusing `'edit'`.** Templates now carry a real ACL and
+go through `canViewAcl`/`canEditAcl` like a lecture's, so `'edit'` would have been accurate. Kept as a
+separate label anyway, because the access-registry audit test (`access-registry.test.ts`) pins resource+level
+pairs so that *weakening* a guard shows as a diff a reviewer reads — collapsing `template.update`'s level onto
+the same name a lecture's content gate uses would make the two indistinguishable in that table, and a future
+change to one policy's rule could silently read as covering both. Kept distinct at the cost of one more union
+member and a doc comment explaining why.
+
+**A design's copy starts unshared even when the source was shared with the caller.** `template.duplicate`
+already produced a private/restricted copy before this slice; this only confirms that a copy carries none of
+the source's people list — a viewer or editor duplicating a design they do not own gets something wholly
+their own, not a design that quietly keeps sharing with whoever the original was shared with.
+
+**Applying a template now requires reading it (round 2).** The first pass left every `templateId`-taking
+action on `templateExists` — real-but-unreadable and nonexistent answered differently, which meant anyone
+could point their own deck or project at someone else's restricted design, then read, export and duplicate it
+back through `drawsAnEditableDeck`'s "editing a lecture drawn with it" fallback — the very fallback the
+*correct* rule depends on staying narrow. Closed by extracting `isTemplateReadable(userId, templateId)`
+(`access/template.ts`) — a built-in, a public one, a member, or one that draws a lecture the caller may
+edit — and calling it everywhere a bare `templateId` is taken as plain input rather than as the resource an
+access policy already loaded: `project.switchTemplate`, `deck.switchTemplate`, `user.setTemplate`, and
+`deck.import`'s settings restore. Each refuses (or, for the import path, warns and falls back) identically to
+an unknown id, so the message never tells a caller which restricted template id they guessed right.
+
+**Round 1 left `project.create`'s and `deck.create`'s own inherited defaults on `templateExists`, wrongly
+reasoning both were bounded by a fixed gate.** They are not: `owner.templateId` and `project.templateId` are
+each set once and read again later, and access can change in between — the concrete case is an owner who sets
+someone else's shared design as their account default (or a project's), and is later unshared from it. The
+account or project keeps the id, so every new project or lecture it seeds would otherwise inherit a template
+its own creator can no longer even open — worse than a stranger's restricted design, since it looks like
+theirs. Fixed in round 2: both now check `isTemplateReadable` for the creating user at creation time, and fall
+back to the deployment default exactly as a deleted template already did, rather than merely at the two points
+that write the default (`user.setTemplate`, `project.switchTemplate`) and trusting it stays valid.
+
+**`drawsAnEditableDeck`'s doc comment, corrected rather than merely re-asserted.** It claimed a restricted
+design is only ever drawn by a lecture belonging to its own author or people list — true again now that every
+entry point enforces `isTemplateReadable`, but only because of that enforcement, not as some inherent property
+of the model. Reworded to say so, and to name `isTemplateReadable` as the thing that makes it true, so the
+next person touching one of those call sites sees what they would be un-making.
+
+**Changing general access must not discard an unsaved edit (round 2).** `TemplateSettings` saves visibility
+through `template.setAccess` on its own, and the page adopted whatever came back by replacing its whole
+`template` state — which `TemplateEditor`'s "adopt a newly saved template" effect reads as a new document to
+load, discarding an unsaved rename or edit sitting in the draft. The fix is at both ends, because either one
+alone still breaks under normal React re-render behaviour: the page's `onTemplateChanged` now merges only
+`visibility`/`myRole` into the existing `template` object, keeping `name`/`theme`/`layouts` the exact same
+references; and the adopt effect now compares those three fields **by reference** rather than the whole object,
+so it only resets the draft when they have genuinely changed (a real save) and leaves it alone when only access
+changed underneath it. Comparing by reference rather than by value is deliberate: a real save's response can
+carry a `theme`/`layouts` that is *value-equal* to what was already there and still needs adopting (the save
+comment already notes geometry gets measured back in), so value-equality would have been the wrong test in the
+other direction.
+
+**The general-access select is owner-only, not merely a courtesy.** `template.setAccess` already refuses an
+editor server-side, so before this the control simply errored when an editor tried it — see `visibilityError`.
+Disabling it client-side (`myRole !== 'owner'`) is not a new rule, only surfacing the existing one before the
+click rather than after, and threading `myRole` down to `TemplateSettings` for it is also what let CHEAP-FIX D's
+`deck.get`/`GET /decks/:slug` tests exist to check against.

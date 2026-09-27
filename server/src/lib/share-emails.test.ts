@@ -88,6 +88,21 @@ describe('the message', () => {
   it('leaves the sign-up ending out for an existing account', () => {
     expect(shareEmailText(notice)).not.toContain('do not have a Slide Machine')
   })
+
+  // TMPL-26: a shared design reads as "a design template", not the bare
+  // word "template", which says nothing about what kind of thing it is.
+  it('names a shared design as a design template', () => {
+    const design = { ...notice, kind: 'template' as const }
+    expect(shareEmailSubject(design)).toBe(
+      'Ada shared a design template with you: Numerical Methods',
+    )
+    expect(shareEmailText(design)).toContain(
+      'shared a design template with you',
+    )
+    expect(shareEmailText(design)).toContain(
+      'You can view this design template.',
+    )
+  })
 })
 
 describe('sendShareEmail', () => {

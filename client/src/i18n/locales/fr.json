@@ -300,7 +300,8 @@
       "duplicate": "Impossible de dupliquer ce modèle",
       "load": "Impossible de charger ce modèle",
       "save": "Impossible d’enregistrer le modèle",
-      "delete": "Impossible de supprimer le modèle"
+      "delete": "Impossible de supprimer le modèle",
+      "setAccess": "Impossible de changer qui peut accéder à ce modèle"
     },
     "page": {
       "saved": "Enregistré",
@@ -312,13 +313,11 @@
     "addLayoutChoose": "Choisir un type…",
     "removeLayout": "Retirer la disposition {name}",
     "visibility": {
-      "private": "Moi seul",
-      "unlisted": "Toute personne ayant le lien",
+      "restricted": "Restreint",
       "public": "Publique"
     },
     "visibilityHint": {
-      "private": "À vous seul. Personne d’autre ne peut la trouver ni la copier.",
-      "unlisted": "Quiconque reçoit le lien peut la copier.",
+      "restricted": "Seul vous et les personnes avec qui vous la partagez peuvent l’ouvrir.",
       "public": "Visible dans la bibliothèque publique, copiable par tous."
     },
     "boxAt": "{slot} : {x}% depuis la gauche, {y}% depuis le haut, {w}% de large, {h}% de haut",
@@ -540,7 +539,8 @@
         "invalid": "Impossible d’importer ce modèle : {details}",
         "failed": "Impossible d’importer ce modèle"
       }
-    }
+    },
+    "visibilityOwnerOnly": "Seul le propriétaire du modèle peut changer qui peut l’utiliser."
   },
   "layout": {
     "change": "Changer la mise en page",

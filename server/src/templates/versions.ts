@@ -192,11 +192,16 @@ export const resolveDeckTemplate = async (
  * the template is gone the read fallback supplies a default to carry identity,
  * and the pinned structure still wins — a deleted template leaves its lectures
  * looking exactly as they did.
+ *
+ * `userId` is the signed-in caller opening the lecture, so `myRole` (TMPL-26)
+ * reads correctly on the design carried alongside it — omit it only where
+ * there is genuinely no caller to attribute it to.
  */
 export const resolveDeckTemplateForRead = async (
   deck: PinnableDeck,
+  userId?: string,
 ): Promise<Template | undefined> => {
-  const live = await resolveTemplateForRead(deck.templateId)
+  const live = await resolveTemplateForRead(deck.templateId, userId)
   const version = await getVersion(deck.templateVersionId ?? undefined)
   if (!version) return live
   if (!live) return undefined

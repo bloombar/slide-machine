@@ -21,6 +21,7 @@ const template: Template = {
   },
   layouts: [],
   visibility: 'public',
+  myRole: null,
   voteScore: 0,
   createdAt: '2026-07-01T00:00:00.000Z',
 }

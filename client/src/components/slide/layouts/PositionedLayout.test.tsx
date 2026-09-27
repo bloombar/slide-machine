@@ -43,7 +43,8 @@ const template = (l: Layout): Template => ({
   name: 'Mine',
   theme: { background: '#ffffff', text: '#111111' },
   layouts: [l],
-  visibility: 'private',
+  visibility: 'restricted',
+  myRole: 'owner',
   voteScore: 0,
   createdAt: '2026-01-01T00:00:00.000Z',
 })

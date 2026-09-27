@@ -50,6 +50,7 @@ import {
 import { withProjectSettingsAudit } from '../lib/admin-edit'
 import {
   custom,
+  isTemplateReadable,
   projectOwner,
   projectSettings,
   projectSettingsView,
@@ -69,7 +70,6 @@ import {
   removeInvite,
   upsertInvite,
 } from '../lib/share-invites'
-import { templateExists } from '../templates/resolve'
 import type { HydratedDocument, Types } from 'mongoose'
 import { DeckModel, loadDeckAcls } from '../models/deck'
 import { deleteProjectCascade } from '../lib/cascade'
@@ -125,11 +125,13 @@ export const projectCreate = defineAction<ProjectCreateInput, Project, Signed>({
     // The owner's account default is the creation-time design (TMPL-24); the
     // project stores its own copy and can switch independently afterwards,
     // exactly as a lecture does with its project's. A stale choice — a
-    // template since deleted — is dropped rather than inherited, so the model
-    // default (the deployment's template) applies instead.
+    // template since deleted, or one the owner can no longer read because
+    // they were unshared from it since setting it as their default
+    // (TMPL-26) — is dropped rather than inherited, so the model default
+    // (the deployment's template) applies instead.
     const owner = await UserModel.findById(ownerId).catch(() => null)
     const templateId =
-      owner?.templateId && (await templateExists(owner.templateId))
+      owner?.templateId && (await isTemplateReadable(ownerId, owner.templateId))
         ? owner.templateId
         : undefined
     const doc = await ProjectModel.create({
@@ -565,7 +567,11 @@ export const projectSwitchTemplate = defineAction<
   }),
   execute: (ctx, input, access) =>
     withProjectSettingsAudit(access, async doc => {
-      if (!(await templateExists(input.templateId))) {
+      // Readable, not merely existing (TMPL-26): a project the caller may
+      // switch is not licence to point it at someone else's restricted
+      // design just because the id is known. Refused identically to an
+      // unknown id either way.
+      if (!(await isTemplateReadable(access.userId, input.templateId))) {
         throw new ActionValidationError('project.switchTemplate', [
           'templateId: unknown template',
         ])
