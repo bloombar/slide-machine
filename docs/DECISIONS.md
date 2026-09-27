@@ -2574,3 +2574,10 @@ observer got there first), and only ever asserts the positive: `#01` present onc
 delete just resolved in.** Sort and query are page-local state, not carried in the URL (see round 2's own
 decision on that), so a plain reload lands back on Latest with an empty box — Mine and the design's own name
 are set again before the check means anything.
+
+### Load-more after a delete, and a page of duplicates (supervisor, TMPL-28)
+
+`useDiscover` throws away a load-more answer that was in flight across a `remove()`, and fetches again from the corrected offset. Whether the server read that page before or after the delete can't be known from the client, so no slice of the answer is safe to keep. Refetching and removing duplicates is right under either order.
+
+A load-more that brings back only rows already on screen ends the list (`hasMore: false`) instead of asking for the same offset again, which `LoadMore`'s observer would repeat forever. The known limit: the offset counts rows held, not rows the server has handed out. If ten or more rows below the fold are edited or published ahead during one scroll, the list stops early. Switching sort or searching starts a fresh list. A server-side cursor would remove the lag if it ever matters.
+

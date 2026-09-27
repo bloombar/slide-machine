@@ -213,10 +213,9 @@ export function useDiscover<
   // one is in flight the caller sees null and can show a loading state.
   const current = page && page.sort === sort && page.q === q ? page : null
 
-  // How many rows `remove()` has taken out of the page *since the current
-  // `loadMore()` fetch started* — read (and reset to 0) only inside
-  // `loadMore` itself, so it means nothing outside a fetch actually in
-  // flight. See `loadMore`'s own comment for what it corrects.
+  // How many `remove()` calls have landed *since the current `loadMore()`
+  // fetch started* — reset when each one starts, and read only when it
+  // answers, to tell whether that answer crossed a delete.
   const removedDuringLoad = useRef(0)
 
   const loadMore = useCallback(() => {
@@ -230,30 +229,20 @@ export function useDiscover<
           // Guard again on arrival: the sort or query may have changed while
           // this page was in flight, and appending it would mix two lists.
           if (!prev || prev.sort !== sort || prev.q !== q) return prev
-          // A `remove()` landing while this fetch was in flight deleted a
-          // row at a position *before* `requestedFrom` — the only rows a
-          // caller can delete are ones already on screen — which shifts the
-          // server's own ordered list, and this fetch's offset, that many
-          // rows earlier. Rather than a second round trip to refetch from
-          // the corrected offset, the same number of rows is dropped off
-          // the front of what already came back: a simple correction, not
-          // a proven-correct one for every possible interleaving of the
-          // two requests on the server, but sufficient for the case that
-          // actually happens here — a delete's own request has already
-          // finished (its `.then()` is what calls `remove`) by the time it
-          // can race a load-more's still-pending one.
-          const skip = removedDuringLoad.current
+          // A `remove()` while this fetch was in flight shifted the server's
+          // list under it, and which side of the delete the server read this
+          // page on is unknowable from here — so no slice of it can be
+          // trusted. Discard it: the page keeps `hasMore`, the next trigger
+          // asks again from the corrected `prev.lectures.length`, and a
+          // de-duplicated refetch is right under either ordering.
+          if (removedDuringLoad.current > 0) return prev
           const already = new Set(prev.lectures.map(item => item.id))
-          const appended = res.lectures
-            .slice(skip)
-            .filter(item => !already.has(item.id))
-          // Nothing new to add: return the exact same object rather than a
-          // same-content copy, or a `LoadMore` watching this page's identity
-          // (its own IntersectionObserver rebuilds on every new `loadMore`,
-          // which a new `page` object would otherwise trigger) would rebuild
-          // and immediately re-fire the very request that just answered
-          // with nothing.
-          if (appended.length === 0) return prev
+          const appended = res.lectures.filter(item => !already.has(item.id))
+          // Nothing new came back (every row was already on screen, e.g.
+          // after enough newer rows were published ahead of the offset).
+          // Stop loading on its own rather than re-asking the same offset
+          // forever; a sort or search change starts a fresh list.
+          if (appended.length === 0) return { ...prev, hasMore: false }
           return {
             ...prev,
             lectures: [...prev.lectures, ...appended],

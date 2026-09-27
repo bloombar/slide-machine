@@ -29,7 +29,7 @@ beforeEach(() => {
 })
 
 describe('useDiscover: an all-duplicate "load more" response', () => {
-  it('drops the duplicates, keeps the page reference stable, and the next offset correct', async () => {
+  it('drops the duplicates and stops loading rather than re-asking the same offset', async () => {
     mockDispatch.mockResolvedValueOnce({ items: [{ id: 'a' }], hasMore: true })
     const { result } = renderHook(() => useDiscover<Row>({ source: SOURCE }))
     await waitFor(() => expect(result.current.page).not.toBeNull())
@@ -45,32 +45,20 @@ describe('useDiscover: an all-duplicate "load more" response', () => {
     await waitFor(() => expect(result.current.loadingMore).toBe(false))
 
     expect(result.current.page?.lectures.map(r => r.id)).toEqual(['a'])
-    // Nothing to append means nothing changed — the same page object
-    // (`return prev`), not a same-content copy of it: a copy would still
-    // read as a change to anything watching this value's identity, such as
-    // `LoadMore`'s own IntersectionObserver, which rebuilds and immediately
-    // re-fires on any new `loadMore` a changed `page` produces.
-    expect(result.current.page).toBe(pageBefore)
-
-    // A second "load more" must still ask for offset 1 (the one row this
-    // hook actually holds), not 2 (as if the duplicate had been counted).
-    mockDispatch.mockResolvedValueOnce({ items: [{ id: 'b' }], hasMore: false })
+    expect(pageBefore?.hasMore).toBe(true)
+    // Re-asking would return the same duplicates forever, and `LoadMore`
+    // re-fires whenever `loadMore` changes identity — so the list stops.
+    expect(result.current.page?.hasMore).toBe(false)
+    const calls = mockDispatch.mock.calls.length
     await act(async () => {
       result.current.loadMore()
     })
-    await waitFor(() => expect(result.current.loadingMore).toBe(false))
-
-    expect(mockDispatch).toHaveBeenLastCalledWith('row.feed', {
-      sort: 'latest',
-      offset: 1,
-      limit: 10,
-    })
-    expect(result.current.page?.lectures.map(r => r.id)).toEqual(['a', 'b'])
+    expect(mockDispatch.mock.calls.length).toBe(calls)
   })
 })
 
 describe('useDiscover: a delete racing an in-flight load more', () => {
-  it('corrects the offset a stale response was fetched at', async () => {
+  it('discards the answer that crossed the delete and asks again from the corrected offset', async () => {
     mockDispatch.mockResolvedValueOnce({
       items: [{ id: 'a' }, { id: 'b' }],
       hasMore: true,
@@ -99,16 +87,37 @@ describe('useDiscover: a delete racing an in-flight load more', () => {
     })
     expect(result.current.page?.lectures.map(r => r.id)).toEqual(['b'])
 
-    // The stale response — fetched at offset 2, before the delete — answers
-    // with what would have come after both original rows. One of its own
-    // two rows is dropped to correct for the row removed underneath it.
+    // Whether the server read that page before or after the delete is
+    // unknowable, so its answer is set aside — neither 'c' nor 'd' lands,
+    // and the list still has more to load.
     await act(async () => {
       resolveLoadMore?.({ items: [{ id: 'c' }, { id: 'd' }], hasMore: false })
       await Promise.resolve()
     })
     await waitFor(() => expect(result.current.loadingMore).toBe(false))
+    expect(result.current.page?.lectures.map(r => r.id)).toEqual(['b'])
+    expect(result.current.page?.hasMore).toBe(true)
 
-    expect(result.current.page?.lectures.map(r => r.id)).toEqual(['b', 'd'])
+    // The next load asks from the corrected offset, 1, and lands whatever
+    // follows 'b' under the server's post-delete order.
+    mockDispatch.mockResolvedValueOnce({
+      items: [{ id: 'c' }, { id: 'd' }],
+      hasMore: false,
+    })
+    await act(async () => {
+      result.current.loadMore()
+    })
+    await waitFor(() => expect(result.current.loadingMore).toBe(false))
+    expect(mockDispatch).toHaveBeenLastCalledWith('row.feed', {
+      sort: 'latest',
+      offset: 1,
+      limit: 10,
+    })
+    expect(result.current.page?.lectures.map(r => r.id)).toEqual([
+      'b',
+      'c',
+      'd',
+    ])
   })
 })
 

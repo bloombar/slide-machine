@@ -32,6 +32,10 @@ interface Props {
   onCancel: () => void
 }
 
+/** A stable no-op for `Modal`'s `onClose` while busy: a fresh function each
+ * render would re-run `Modal`'s effect, and with it its focus handling. */
+const IGNORE_CLOSE = () => {}
+
 export default function ConfirmDialog({
   title,
   message,
@@ -49,7 +53,7 @@ export default function ConfirmDialog({
       role="alertdialog"
       ariaLabel={title}
       size="sm"
-      onClose={busy ? () => {} : onCancel}
+      onClose={busy ? IGNORE_CLOSE : onCancel}
       initialFocusRef={cancelRef}
     >
       <h3 className="text-lg font-bold">{title}</h3>
