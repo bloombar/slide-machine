@@ -1,0 +1,8 @@
+# Gitignored files Claude Code copies into each new worktree (`claude --worktree`
+# and subagents run with `isolation: worktree`). Uses .gitignore syntax; only
+# files that match here AND are gitignored are copied.
+#
+# Local development credentials only. server/.env.production is deliberately
+# left out: an agent's worktree has no need for production secrets.
+client/.env
+server/.env
