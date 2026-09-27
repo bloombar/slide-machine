@@ -9,15 +9,19 @@
  * (`TemplateCard`, shared), with more room here for a byline, a layout
  * count and a description below the thumbnail. Unlike the Design tab, a
  * card here is never "selected" for anything — clicking it opens the
- * design's own page (`/t/:slug`), the same landing `TemplateDesignPanel`'s
- * duplicate and edit already use, so its own Back button returns here.
+ * design's own page (`/t/:slug`) as a plain link (`TemplateCard`'s `linkTo`),
+ * the same landing `TemplateDesignPanel`'s duplicate and edit already use,
+ * so its own Back button returns here.
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import type { Template, TemplatePage } from '@slide-machine/shared'
+import type {
+  Template,
+  TemplateFeedSort,
+  TemplatePage,
+} from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
-import { ApiError } from '../api/http'
 import { templateName } from '../i18n/templateName'
 import ConfirmDialog from '../components/ConfirmDialog'
 import DiscoverControls, {
@@ -43,7 +47,7 @@ const TEMPLATE_SOURCE: DiscoverSource<Template> = {
 
 /** Latest/Top, the same two Discover offers, plus "Mine" — a design's own
  * third sort (TMPL-28), which no lecture list has. */
-const SORTS: SortTab[] = [
+const SORTS: SortTab<TemplateFeedSort>[] = [
   { value: 'latest', labelKey: 'discover.latest' },
   { value: 'top', labelKey: 'discover.top' },
   { value: 'mine', labelKey: 'templatesPage.mine' },
@@ -52,14 +56,17 @@ const SORTS: SortTab[] = [
 export default function DesignTemplatesPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const discover = useDiscover<Template>({ source: TEMPLATE_SOURCE })
+  const discover = useDiscover<Template, TemplateFeedSort>({
+    source: TEMPLATE_SOURCE,
+  })
   const [busyId, setBusyId] = useState<string | undefined>()
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<Template | null>(null)
-  // Ids a delete already removed (below). `useDiscover` only knows how to
-  // refetch a whole page, not to take one row out of it, so a delete here
-  // is reflected by filtering rather than by telling the hook about it.
-  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set())
+  // Set only while the confirmed delete's own request is in flight, so the
+  // dialog's confirm button can be held down against a second click — never
+  // conflated with `busyId`, which also covers a Duplicate in flight and
+  // must not disable a dialog that is not even open.
+  const [deleting, setDeleting] = useState(false)
 
   /** Opens a design's own page, remembering this page so its Back returns
    * here — the same `state.from` chain `TemplateDesignPanel` starts. */
@@ -85,27 +92,28 @@ export default function DesignTemplatesPage() {
   const edit = (template: Template) => open(template)
 
   const remove = (template: Template) => {
-    setBusyId(template.id)
+    setDeleting(true)
     setError(null)
     dispatchAction('template.delete', { templateId: template.id })
       .then(() => {
-        setRemovedIds(prev => new Set(prev).add(template.id))
+        // Shrinks the same array `loadMore`'s own offset is computed from —
+        // see `useDiscover.remove`'s own comment for why this must go
+        // through the hook rather than a filter kept alongside it.
+        discover.remove(template.id)
         setConfirming(null)
       })
-      .catch((e: unknown) => {
-        setError(
-          e instanceof ApiError && e.message
-            ? e.message
-            : t('template.errors.delete'),
-        )
+      .catch(() => {
+        // Closed either way (round 2): a dialog left open over an error the
+        // reader cannot see through it is worse than losing the confirm
+        // step — the error below the controls is what is actually visible.
+        setConfirming(null)
+        setError(t('template.errors.delete'))
       })
-      .finally(() => setBusyId(undefined))
+      .finally(() => setDeleting(false))
   }
 
   const { page, searching, query, error: loadError, loadingMore } = discover
-  const items = (page?.lectures ?? []).filter(
-    template => !removedIds.has(template.id),
-  )
+  const items = page?.lectures ?? []
 
   const message = (text: string) => (
     <p className="px-1 py-6 text-sm text-slate-500">{text}</p>
@@ -120,7 +128,12 @@ export default function DesignTemplatesPage() {
       )
     if (!page)
       return message(searching ? t('discover.searching') : t('common.loading'))
-    if (items.length === 0) {
+    // Nothing to draw a grid of, but there IS more to fetch (every row on
+    // this page was just deleted, round 2): the load trigger still has to
+    // show, or a caller who cleared their own last page in view would be
+    // stuck looking at an "empty" message the moment before scrolling on
+    // would have moved past it.
+    if (items.length === 0 && !page.hasMore) {
       if (searching)
         return message(t('templatesPage.noMatches', { query: query.trim() }))
       return message(
@@ -131,29 +144,29 @@ export default function DesignTemplatesPage() {
     }
     return (
       <>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map(template => (
-            <TemplateCard
-              key={template.id}
-              template={template}
-              selected={false}
-              onSelect={() => open(template)}
-              onDuplicate={duplicate}
-              onEdit={
-                template.myRole === 'owner' || template.myRole === 'editor'
-                  ? edit
-                  : undefined
-              }
-              onDelete={
-                template.myRole === 'owner'
-                  ? () => setConfirming(template)
-                  : undefined
-              }
-              busyId={busyId}
-              showMeta
-            />
-          ))}
-        </div>
+        {items.length > 0 && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {items.map(template => (
+              <TemplateCard
+                key={template.id}
+                template={template}
+                linkTo={{
+                  to: `/t/${template.permalinkSlug}`,
+                  state: { from: '/app/templates' },
+                }}
+                onDuplicate={duplicate}
+                // `TemplateCard` already gates these on `myRole` itself
+                // (round 2) — passing them unconditionally here just gives
+                // it the handler; whether they render is its call, not a
+                // second copy of the same rule kept alongside it.
+                onEdit={edit}
+                onDelete={template => setConfirming(template)}
+                busyId={busyId}
+                showMeta
+              />
+            ))}
+          </div>
+        )}
         {page.hasMore && (
           <LoadMore onLoadMore={discover.loadMore} loading={loadingMore} />
         )}
@@ -187,6 +200,7 @@ export default function DesignTemplatesPage() {
             name: templateName(t, confirming),
           })}
           confirmLabel={t('common.delete')}
+          busy={deleting}
           onConfirm={() => remove(confirming)}
           onCancel={() => setConfirming(null)}
         />

@@ -20,6 +20,11 @@ interface Props {
    * would overstate that (TMPL-11).
    */
   tone?: 'danger' | 'neutral'
+  /** Disables the confirm button while the action it triggers is still in
+   * flight, so a slow request cannot be fired twice by an impatient second
+   * click (TMPL-28). Cancel stays enabled — closing on a request already
+   * sent is a display choice, not a second copy of the request. */
+  busy?: boolean
   onConfirm: () => void
   onCancel: () => void
 }
@@ -29,6 +34,7 @@ export default function ConfirmDialog({
   message,
   confirmLabel,
   tone = 'danger',
+  busy = false,
   onConfirm,
   onCancel,
 }: Props) {
@@ -56,7 +62,8 @@ export default function ConfirmDialog({
         </button>
         <button
           onClick={onConfirm}
-          className={`rounded-md px-4 py-2 text-sm font-medium text-white ${
+          disabled={busy}
+          className={`rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-60 ${
             tone === 'neutral'
               ? 'bg-blue-600 hover:bg-blue-500'
               : 'bg-red-600 hover:bg-red-500'

@@ -29,8 +29,9 @@ const layoutLabel = (layout: Layout): string =>
 
 export default function TemplateCard({
   template,
-  selected,
+  selected = false,
   onSelect,
+  linkTo,
   onDuplicate,
   onEdit,
   onDelete,
@@ -39,8 +40,13 @@ export default function TemplateCard({
   showMeta = false,
 }: {
   template: Template
-  selected: boolean
-  onSelect: () => void
+  /** Ignored when `linkTo` is given. */
+  selected?: boolean
+  onSelect?: () => void
+  /** Opens the design's own page as a link instead of selecting it
+   * (TMPL-28) — see `PreviewCard`'s own doc comment for why a link, not a
+   * radio, is what the Design Templates page's card needs. */
+  linkTo?: { to: string; state?: unknown }
   onDuplicate?: (template: Template) => void
   onEdit?: (template: Template) => void
   onDelete?: (template: Template) => void
@@ -95,6 +101,7 @@ export default function TemplateCard({
           layout={shown}
           selected={selected}
           onSelect={onSelect}
+          linkTo={linkTo}
           captionClassName={`flex items-center gap-1.5 ${
             pageable ? 'pr-20' : ''
           }`}
@@ -158,10 +165,14 @@ export default function TemplateCard({
           page only. `template.owner` is `null` for a built-in and `undefined`
           only when the caller never asked for it — neither carries a name to
           link to, so both are simply skipped rather than one standing in
-          for "built-in" and the other for "unknown". */}
+          for "built-in" and the other for "unknown". Guarded on
+          `displayName` too, not merely on `owner` existing: an owner record
+          with nothing to show (a deleted account) must not render a link
+          with no visible text, which would still be focusable and read
+          nothing to a screen reader. */}
       {showMeta && (
         <div className="px-1 text-xs text-slate-500">
-          {template.owner && (
+          {template.owner?.displayName && (
             <Link
               to={`/u/${template.owner.id}`}
               className="block truncate font-medium hover:text-indigo-600"

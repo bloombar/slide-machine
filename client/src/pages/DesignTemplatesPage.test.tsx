@@ -168,6 +168,28 @@ describe('DesignTemplatesPage sorting and search (TMPL-28)', () => {
     fireEvent.change(searchBox(), { target: { value: 'zzz' } })
     expect(await screen.findByText(/no matches for/i)).toBeInTheDocument()
   })
+
+  it('reports a failure to load the feed', async () => {
+    mockDispatch.mockRejectedValue(new Error('offline'))
+    renderPage()
+    expect(
+      await screen.findByText(/could not load the templates/i),
+    ).toBeInTheDocument()
+  })
+
+  it('names the search, not the feed, when a search fails', async () => {
+    mockDispatch.mockImplementation(async (name: string) =>
+      name === 'template.feed'
+        ? { items: [template()], hasMore: false }
+        : Promise.reject(new Error('offline')),
+    )
+    renderPage()
+    await screen.findByText('Shipped')
+    fireEvent.change(searchBox(), { target: { value: 'cat' } })
+    expect(
+      await screen.findByText(/could not run that search/i),
+    ).toBeInTheDocument()
+  })
 })
 
 describe('DesignTemplatesPage lazy loading (TMPL-28)', () => {
@@ -188,6 +210,60 @@ describe('DesignTemplatesPage lazy loading (TMPL-28)', () => {
       offset: 1,
       limit: 10,
     })
+  })
+
+  // Round 2: a delete must shrink the same count `loadMore`'s offset is
+  // computed from, or the next page silently skips whatever the deleted
+  // row's removal shifted into view on the server's own ordered list.
+  it('fetches the offset that accounts for a delete, and shows the next item', async () => {
+    const a = template({ id: 'a1', name: 'Alpha', myRole: 'owner' })
+    const b = template({ id: 'a2', name: 'Beta', myRole: 'owner' })
+    const c = template({ id: 'a3', name: 'Gamma', myRole: 'owner' })
+    mockDispatch.mockImplementation(async (name: string, input) => {
+      if (name === 'template.delete') return {}
+      const { offset } = input as { offset: number }
+      if (offset === 0) return { items: [a, b], hasMore: true }
+      // The correct next offset is 1 (one row retained after the delete),
+      // not 2 (the count fetched before it) — only the former lands on c.
+      if (offset === 1) return { items: [c], hasMore: false }
+      throw new Error(`unexpected offset ${offset}`)
+    })
+    renderPage()
+    await screen.findByText('Alpha')
+    await screen.findByText('Beta')
+
+    fireEvent.click(screen.getByLabelText('Delete Alpha'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(screen.queryByText('Alpha')).toBeNull())
+
+    fireEvent.click(screen.getByRole('button', { name: /load more/i }))
+    expect(await screen.findByText('Gamma')).toBeInTheDocument()
+    expect(mockDispatch).toHaveBeenLastCalledWith('template.feed', {
+      sort: 'latest',
+      offset: 1,
+      limit: 10,
+    })
+  })
+
+  // Round 2: deleting every row on the loaded page must not read as "no
+  // designs" while the server still has more to give.
+  it('keeps "Load more" once every loaded row is deleted, while more remain', async () => {
+    const a = template({ id: 'a1', name: 'Alpha', myRole: 'owner' })
+    mockDispatch.mockImplementation(async (name: string) => {
+      if (name === 'template.delete') return {}
+      return { items: [a], hasMore: true }
+    })
+    renderPage()
+    await screen.findByText('Alpha')
+
+    fireEvent.click(screen.getByLabelText('Delete Alpha'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(screen.queryByText('Alpha')).toBeNull())
+
+    expect(screen.queryByText(/no designs/i)).toBeNull()
+    expect(
+      screen.getByRole('button', { name: /load more/i }),
+    ).toBeInTheDocument()
   })
 })
 
@@ -214,6 +290,20 @@ describe('DesignTemplatesPage cards (TMPL-28)', () => {
     expect(screen.getByText('1 layout')).toBeInTheDocument()
   })
 
+  // Round 2: `owner` truthy but empty is not the same as no owner at all —
+  // both must render no link, neither should render an empty, focusable one.
+  it('shows no creator link when the owner has no display name', async () => {
+    mockDispatch.mockResolvedValue({
+      items: [template({ owner: { id: 'ghost', displayName: '' } })],
+      hasMore: false,
+    })
+    renderPage()
+    await screen.findByText('Shipped')
+    // Only the card's own "opens the design" link should exist — no second,
+    // empty one for a nameless owner.
+    expect(screen.getAllByRole('link')).toHaveLength(1)
+  })
+
   it('hides edit and delete for a design the caller does not own', async () => {
     mockDispatch.mockResolvedValue({ items: [template()], hasMore: false })
     renderPage()
@@ -235,7 +325,7 @@ describe('DesignTemplatesPage cards (TMPL-28)', () => {
     mockDispatch.mockResolvedValue({ items: [template()], hasMore: false })
     renderPage()
     await screen.findByText('Shipped')
-    fireEvent.click(screen.getByRole('radio', { name: /Shipped/ }))
+    fireEvent.click(screen.getByRole('link', { name: /Shipped/ }))
     expect(
       await screen.findByText('landed:/t/built-1 from:/app/templates'),
     ).toBeInTheDocument()
@@ -260,6 +350,21 @@ describe('DesignTemplatesPage cards (TMPL-28)', () => {
     ).toBeInTheDocument()
   })
 
+  it('shows a localised error and stays put when duplicate fails', async () => {
+    mockDispatch.mockImplementation(async (name: string) => {
+      if (name === 'template.duplicate')
+        return Promise.reject(new Error('nope'))
+      return { items: [template()], hasMore: false }
+    })
+    renderPage()
+    await screen.findByText('Shipped')
+    fireEvent.click(screen.getByLabelText('Duplicate Shipped'))
+    expect(
+      await screen.findByText('Could not duplicate that template'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/^landed:/)).toBeNull()
+  })
+
   it('confirms, dispatches and removes a design the owner deletes', async () => {
     mockDispatch.mockImplementation(async (name: string) => {
       if (name === 'template.delete') return {}
@@ -277,5 +382,55 @@ describe('DesignTemplatesPage cards (TMPL-28)', () => {
     await waitFor(() =>
       expect(screen.queryByText('My Style')).not.toBeInTheDocument(),
     )
+  })
+
+  it('cancelling the confirm dialog dispatches nothing and keeps the row', async () => {
+    mockDispatch.mockResolvedValue({ items: [mine], hasMore: false })
+    renderPage()
+    await screen.findByText('My Style')
+    fireEvent.click(screen.getByLabelText('Delete My Style'))
+    await screen.findByRole('alertdialog')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(mockDispatch).not.toHaveBeenCalledWith(
+      'template.delete',
+      expect.anything(),
+    )
+    expect(screen.getByText('My Style')).toBeInTheDocument()
+  })
+
+  it('closes the dialog, shows a localised error, and keeps the row when delete fails', async () => {
+    mockDispatch.mockImplementation(async (name: string) => {
+      if (name === 'template.delete') return Promise.reject(new Error('nope'))
+      return { items: [mine], hasMore: false }
+    })
+    renderPage()
+    await screen.findByText('My Style')
+    fireEvent.click(screen.getByLabelText('Delete My Style'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    expect(
+      await screen.findByText('Could not delete the template'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(screen.getByText('My Style')).toBeInTheDocument()
+  })
+
+  it('disables the confirm button while the delete is in flight', async () => {
+    let resolveDelete: (() => void) | undefined
+    mockDispatch.mockImplementation(async (name: string) => {
+      if (name === 'template.delete')
+        return new Promise(resolve => {
+          resolveDelete = () => resolve({})
+        })
+      return { items: [mine], hasMore: false }
+    })
+    renderPage()
+    await screen.findByText('My Style')
+    fireEvent.click(screen.getByLabelText('Delete My Style'))
+    const confirm = await screen.findByRole('button', { name: 'Delete' })
+    fireEvent.click(confirm)
+    expect(confirm).toBeDisabled()
+    resolveDelete?.()
+    await waitFor(() => expect(screen.queryByText('My Style')).toBeNull())
   })
 })

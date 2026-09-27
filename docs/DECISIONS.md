@@ -2431,16 +2431,81 @@ values, so `DeckFeed` passes nothing new and renders identically.
 the URL either (`DeckFeed`/`useDiscover` hold it in `useState` alone), and the brief only asked for the URL if
 Discover already did something similar — it does not, so the Design Templates page does not either.
 
-**A delete on the page is applied by filtering a `removedIds` set client-side, rather than mutating
-`useDiscover`'s own page state.** The hook's only notion of change is "refetch a page from offset 0"; it has
-no setter for "and also drop this one id from what is already loaded". Filtering the rendered list by id
-avoids growing the hook a mutation API for one caller's one action, at the cost of a delete not shrinking
-`hasMore`'s count until the next natural refetch — invisible in practice, since the row is gone either way.
+**A delete on the page is applied through a `remove(id)` on `useDiscover` itself, not a `removedIds` set kept
+alongside it (round 2, replacing round 1's approach).** Round 1 filtered the rendered list by a client-side set
+of deleted ids while leaving the hook's own `lectures` array untouched — which looked harmless until
+`loadMore`'s offset, computed from that same array's length, silently counted the deleted row anyway. Deleting
+a row shifts everything after it one position earlier on the server's own ordered list; an offset that still
+counts the deleted row then lands one row past where the next page actually starts, skipping whatever shifted
+into the gap. `remove(id)` shrinks the array `loadMore` reads its offset from, which is what keeps the two in
+step — see `useDiscover.ts`'s own doc comment on `remove`. The same round also de-duplicates by id when
+appending a loaded page, for the same family of bug from the other direction (a row shifting back into a page
+already fetched, from a delete or a publish elsewhere), and the page's own empty state now checks `hasMore`
+before reading "nothing loaded" as "nothing left" — deleting every row on the current page must still offer
+"Load more" when the server has more to give.
 
-**A card on this page is never "selected": `TemplateCard`'s `selected`/`onSelect` are wired to `false`/"open
-the design's own page" instead of a radiogroup choice.** `PreviewCard` (which `TemplateCard` still uses
-underneath) always renders `role="radio"`; the brief asked for the exact same card, layout-paging and all, and
-building a second non-radio variant of `PreviewCard` for this one page would have duplicated the very thing
-being shared. There is no ESLint a11y plugin in this repo to flag a `role="radio"` outside a `radiogroup`
-(checked `eslint.config.js`), so this does not currently surface as a lint error; worth a second look if such a
-plugin is ever added.
+**A card on this page is never "selected": it opens as a plain link, not a radio (round 2, replacing round 1's
+non-radiogroup `role="radio"`).** Round 1 kept `PreviewCard` always rendering `role="radio"` and simply
+avoided wrapping this page's cards in a `radiogroup`, on the reasoning that no a11y lint rule here would flag
+it — true, but beside the point: a radio outside any group is still the accessibility tree's word for a choice
+that does not exist, and a `<button>` also cannot be opened in a new tab the way a link can. `PreviewCard`
+gained a `linkTo` prop (`{to, state}`) that renders a react-router `<Link>` in its place instead, carrying
+`state.from` the same way a caller's own `navigate(to, {state})` would; `TemplateCard` forwards it, and
+`TemplateLibrary`'s own use is unchanged (no `linkTo`, so it still renders the radio it always has).
+
+### Round 2 (code review)
+
+Fixes from the first review pass, beyond the two above.
+
+**The creator link is guarded on `template.owner?.displayName`, not merely on `template.owner` existing.** An
+owner record with an id but nothing to show (a deleted account) is not the same case as no owner at all, but
+both must render no link — round 1's plain `template.owner &&` would have rendered a link with no visible
+text for the former, focusable and read as nothing by a screen reader.
+
+**The page's own `onEdit`/`onDelete` no longer re-check `myRole` before handing `TemplateCard` a handler.**
+`TemplateCard` already gates both on `canEdit`/`canDelete` internally; round 1's matching checks in the page
+were a second copy of the same rule that could drift from the first, not an extra safeguard.
+
+**`useDiscover`'s sort type is now `Sort extends TemplateFeedSort = FeedSort`, not a bare `TemplateFeedSort`
+on every caller.** Before this, `DeckFeed`'s own `discover.setSort` was typed to accept `'mine'` even though
+nothing in the lecture feed's vocabulary has it — a caller could type-check code no lecture list should ever
+run. `DiscoverControls` grew the same generic parameter so a caller passing `discover.sort`/`setSort` straight
+through still type-checks without an explicit type argument (inferred from the props, the way JSX already
+infers other generic components). `DesignTemplatesPage` is the one caller that explicitly asks for
+`useDiscover<Template, TemplateFeedSort>`.
+
+**A delete's confirm dialog closes on failure too, rather than staying open over an error hidden behind it.**
+Round 1 left the dialog open on a failed `template.delete`, following `TemplateDesignPanel`'s own pattern
+exactly — but that pattern's error is genuinely invisible there too, sitting behind an open modal; copying it
+was copying a defect, not a convention worth keeping. This page's own delete now closes the dialog either way
+and shows `t('template.errors.delete')` on the page underneath, where it is actually visible. `ConfirmDialog`
+gained a `busy` prop (disables the confirm button, cancel stays live) so a slow delete cannot be fired twice by
+an impatient second click.
+
+**The e2e spec builds every design but one through the action API, not eleven-plus trips through the Design
+tab.** `template.duplicate {templateId: 'classic', name}` then `.setAccess`/`.share` are the same calls the UI
+itself makes; doing them directly, authenticated with a bearer token the way `admin-usage-reset.spec.ts` and
+`admin-settings.spec.ts` already do, cut the spec from creating fifteen designs by hand to one (kept to still
+exercise the real duplicate-rename-save-publish path at least once). The eleven bulk designs are still created
+*sequentially*, not in parallel, because "Latest" orders by `updatedAt` and the test's own assertions depend on
+which one landed last.
+
+**The guest's own email is verified too, not only the owner's.** `template.share` treats an unconfirmed
+recipient as a pending invitation rather than a grant (SHARE-3) — sharing with an unverified guest would have
+made every "Mine" assertion pass by accident (nothing shown, expected nothing shown) rather than by testing
+what the step claims to test.
+
+**Bulk design names are zero-padded (`#01`..`#11`), and several assertions in the spec name the exact page a
+result belongs on.** `getByText('#1')` also matches `#10` and `#11` as a substring; zero-padding makes every
+name a distinct two-character suffix instead. Separately, "Latest" is newest-first and the bulk designs are
+created in order, so `#11` (saved last) is on page one and `#01` (saved first) is the one "Load more" reveals
+— the reverse of what round 1 assumed.
+
+**Several `not.toBeVisible()` checks were replaced with waiting for a positive signal, or dropped as redundant
+once one already existed.** Two kinds of false pass turned up chasing this: asserting absence immediately
+after a search input change can pass while the 250ms debounce is still in flight, before the new (possibly
+still-matching) results have even loaded; and once the page's own "No matches for “{query}”" message is on
+screen, it names the query in its own text, so a plain `getByText(theQuery)` finds *that* paragraph and reports
+"visible" — the opposite of what the assertion was written to prove. Waiting for the "No matches" message
+first (itself the settled, positive proof) makes the followup checks either trustworthy or, in most cases,
+simply unnecessary.

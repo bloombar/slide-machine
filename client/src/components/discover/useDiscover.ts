@@ -19,6 +19,7 @@ import {
   DISCOVER_PAGE_SIZE,
   type DeckFeedResponse,
   type FeedDeck,
+  type FeedSort,
   type SearchProject,
   type SearchResults,
   type SearchUser,
@@ -35,7 +36,7 @@ const SEARCH_DEBOUNCE_MS = 250
  * hook by naming its own trio, instead of forking it — style templates
  * (TMPL-28) are the first to.
  */
-export interface DiscoverSource<T = FeedDeck> {
+export interface DiscoverSource<T extends { id: string } = FeedDeck> {
   /** Serves the unfiltered feed: `{ sort, offset, limit }` -> `{items, hasMore}`. */
   feedAction: string
   /** Searches the same content: `{ q, sort, offset, limit }` -> a response
@@ -53,13 +54,18 @@ export const LECTURE_SOURCE: DiscoverSource<FeedDeck> = {
   searchAction: 'social.search',
 }
 
-const defaultNormalizeSearch = <T>(res: unknown): T[] =>
+const defaultNormalizeSearch = <T extends { id: string }>(res: unknown): T[] =>
   (res as SearchResults).lectures as unknown as T[]
 
 /** One page of results, tagged with the sort and query it answers so a stale
- * response from a superseded request is never rendered. */
-interface LoadedPage<T> {
-  sort: TemplateFeedSort
+ * response from a superseded request is never rendered.
+ *
+ * `Sort` is generic, not hardcoded to `TemplateFeedSort`, so a caller whose
+ * sort vocabulary is narrower — a lecture list has no "Mine" — is held to
+ * that narrower type by the compiler rather than merely by nobody wiring a
+ * "Mine" tab up. */
+interface LoadedPage<T extends { id: string }, Sort extends TemplateFeedSort> {
+  sort: Sort
   q: string
   lectures: T[]
   projects: SearchProject[]
@@ -68,12 +74,15 @@ interface LoadedPage<T> {
 }
 
 /** Fetches one page from whichever action the current query calls for. */
-const fetchPage = async <T>(
+const fetchPage = async <
+  T extends { id: string },
+  Sort extends TemplateFeedSort,
+>(
   source: DiscoverSource<T>,
-  sort: TemplateFeedSort,
+  sort: Sort,
   q: string,
   offset: number,
-): Promise<Omit<LoadedPage<T>, 'sort' | 'q'>> => {
+): Promise<Omit<LoadedPage<T, Sort>, 'sort' | 'q'>> => {
   if (q) {
     const res = await dispatchAction<unknown>(source.searchAction, {
       q,
@@ -105,9 +114,12 @@ const fetchPage = async <T>(
   }
 }
 
-export interface Discover<T = FeedDeck> {
-  sort: TemplateFeedSort
-  setSort: (sort: TemplateFeedSort) => void
+export interface Discover<
+  T extends { id: string } = FeedDeck,
+  Sort extends TemplateFeedSort = FeedSort,
+> {
+  sort: Sort
+  setSort: (sort: Sort) => void
   query: string
   setQuery: (query: string) => void
   /** The query actually being answered — trimmed, so spaces alone stay in feed
@@ -115,7 +127,7 @@ export interface Discover<T = FeedDeck> {
   searching: boolean
   /** Results for the current sort and query, or null while the first page of
    * them is still in flight. */
-  page: LoadedPage<T> | null
+  page: LoadedPage<T, Sort> | null
   /** True when the first page could not be loaded at all. */
   error: boolean
   /** True while a `loadMore()` is in flight. */
@@ -123,18 +135,34 @@ export interface Discover<T = FeedDeck> {
   /** Appends the next page; a no-op when one is already loading or the list is
    * exhausted. */
   loadMore: () => void
+  /**
+   * Drops one row from the loaded page, for a caller that deletes something
+   * out from under this list (a design's own Delete, TMPL-28).
+   *
+   * This has to shrink the same array `loadMore`'s offset is computed from
+   * (`lectures.length`), not merely hide the row in the caller's own render:
+   * deleting a row shifts every row after it, on the server's own ordered
+   * list, one position earlier. An offset computed as if the deleted row
+   * were still counted would then land one row past where the next page
+   * actually starts, silently skipping whatever shifted into the gap.
+   * Filtering the row out of this state is what keeps the offset honest.
+   */
+  remove: (id: string) => void
 }
 
-export function useDiscover<T = FeedDeck>({
-  source = LECTURE_SOURCE as DiscoverSource<T>,
-  initialSort = 'latest',
+export function useDiscover<
+  T extends { id: string } = FeedDeck,
+  Sort extends TemplateFeedSort = FeedSort,
+>({
+  source = LECTURE_SOURCE as unknown as DiscoverSource<T>,
+  initialSort = 'latest' as Sort,
 }: {
   source?: DiscoverSource<T>
-  initialSort?: TemplateFeedSort
-} = {}): Discover<T> {
-  const [sort, setSort] = useState<TemplateFeedSort>(initialSort)
+  initialSort?: Sort
+} = {}): Discover<T, Sort> {
+  const [sort, setSort] = useState<Sort>(initialSort)
   const [query, setQuery] = useState('')
-  const [page, setPage] = useState<LoadedPage<T> | null>(null)
+  const [page, setPage] = useState<LoadedPage<T, Sort> | null>(null)
   const [error, setError] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
 
@@ -177,17 +205,23 @@ export function useDiscover<T = FeedDeck>({
     setLoadingMore(true)
     fetchPage(source, sort, q, current.lectures.length)
       .then(res => {
-        setPage(prev =>
+        setPage(prev => {
           // Guard again on arrival: the sort or query may have changed while
           // this page was in flight, and appending it would mix two lists.
-          prev && prev.sort === sort && prev.q === q
-            ? {
-                ...prev,
-                lectures: [...prev.lectures, ...res.lectures],
-                hasMore: res.hasMore,
-              }
-            : prev,
-        )
+          if (!prev || prev.sort !== sort || prev.q !== q) return prev
+          // De-duplicate by id: a row can shift across the offset boundary
+          // between this fetch and the last — a publish landing between
+          // ranking and loading, or two callers loading pages at once — and
+          // arrive again rather than being skipped, which appending blindly
+          // would show twice.
+          const already = new Set(prev.lectures.map(item => item.id))
+          const appended = res.lectures.filter(item => !already.has(item.id))
+          return {
+            ...prev,
+            lectures: [...prev.lectures, ...appended],
+            hasMore: res.hasMore,
+          }
+        })
       })
       .catch(() => {
         // A failed "load more" leaves what is already on screen alone; the
@@ -195,6 +229,14 @@ export function useDiscover<T = FeedDeck>({
       })
       .finally(() => setLoadingMore(false))
   }, [source, current, sort, q, loadingMore])
+
+  const remove = useCallback((id: string) => {
+    setPage(prev =>
+      prev
+        ? { ...prev, lectures: prev.lectures.filter(item => item.id !== id) }
+        : prev,
+    )
+  }, [])
 
   return {
     sort,
@@ -206,5 +248,6 @@ export function useDiscover<T = FeedDeck>({
     error,
     loadingMore,
     loadMore,
+    remove,
   }
 }
