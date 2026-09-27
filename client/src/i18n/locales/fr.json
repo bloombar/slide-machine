@@ -39,6 +39,7 @@
     "home": "Accueil",
     "profile": "Profil",
     "accountSettings": "Paramètres du compte",
+    "designTemplates": "Modèles de conception",
     "logIn": "Connexion",
     "logOut": "Déconnexion",
     "legal": "Informations et mentions légales"
@@ -667,6 +668,18 @@
     "votes": "{count, plural, one {# vote} other {# votes}}",
     "votesBreakdown": "{up} pour · {down} contre",
     "unknownOwner": "Inconnu"
+  },
+  "templatesPage": {
+    "heading": "Modèles de conception",
+    "mine": "Les miens",
+    "searchLabel": "Rechercher des modèles de conception",
+    "searchPlaceholder": "Rechercher des modèles…",
+    "loadFailed": "Impossible de charger les modèles.",
+    "searchFailed": "Impossible d’effectuer cette recherche.",
+    "noMatches": "Aucun résultat pour « {query} ».",
+    "emptyMine": "Aucun modèle pour l’instant.",
+    "empty": "Aucun modèle trouvé.",
+    "layoutCount": "{count, plural, one {# disposition} other {# dispositions}}"
   },
   "vote": {
     "upNamed": "Voter pour {name}",

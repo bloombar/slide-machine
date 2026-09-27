@@ -2392,3 +2392,55 @@ writes, so carrying them forward is correct by construction. `layoutCount`/`desc
 that same draft (a layout added or removed; `aiInstructions` reworded), so carrying the *old* values forward
 after a save that changed either would go stale immediately — the save that most needs the description to
 reflect a rewritten `aiInstructions` is exactly the save the old code would have shown the previous one on.
+
+## Design Templates page (slice 6) (2026-09-27)
+
+Judgment calls the brief for TMPL-28's page left open.
+
+**`TemplateCard` extracted with the layout-paging state moved from a keyed-by-id map on the parent
+(`TemplateLibrary`) to a plain `useState(0)` local to the card itself.** The map only ever existed to survive
+a re-render without one card's paging leaking onto another's — but a card mounted under a stable
+`key={template.id}` (both callers give it one) already gets exactly that from React for free. Moving the
+state in removed a whole prop (`layoutAt`/`setLayoutAt`) from the extraction rather than threading it through
+a component boundary that no longer needed to know about it.
+
+**`useDiscover`/`DiscoverSource` grew a generic item type and an optional `normalizeSearch`, rather than a
+second hook for templates.** The feed side needed nothing new — `template.feed` already answers
+`{items, hasMore}`, the same shape `deck.feed` does, and `fetchPage`'s non-search branch already read
+`.items` rather than a lecture-specific field. Only the search side differs: a lecture search groups matches
+into `lectures`/`projects`/`users`, while `template.search` answers the same flat `{items, hasMore}` its own
+feed does. `normalizeSearch` is the one seam that needed adding; `LECTURE_SOURCE` supplies none and falls
+back to reading `.lectures`, so `DeckFeed`'s own behaviour is unchanged.
+
+**`DiscoverResults` was not genericized, and the Design Templates page does not use it.** `DiscoverResults`
+groups a search's lecture/project/person matches under labelled headings — sensible for a lecture search,
+meaningless for a template search, which has no such groups. Reusing it would have meant either a "Lectures"
+heading appearing over a list of designs, or teaching the component to suppress a heading nobody asked it to
+grow a flag for. The page instead reads `useDiscover`'s state directly and draws its own grid of
+`TemplateCard`s with its own empty/error strings — the hook (paging, sort, search debounce) is shared exactly
+as the brief asked; the presentational component is not, because sharing it here would have leaked lecture
+vocabulary into a template list.
+
+**`DiscoverControls` grew two seams (`sorts`, `searchLabelKey`/`searchPlaceholderKey`) rather than one.** The
+brief only asked for a third sort option; reusing the component as-is would still have left the search box
+labelled "Search lectures, projects, and people" on a page of designs, which is simply wrong copy, not a
+cosmetic quibble — a screen reader announces it as the field's name. Both seams default to Discover's own
+values, so `DeckFeed` passes nothing new and renders identically.
+
+**The chosen sort is kept in component state, not the URL.** Lecture Discover does not persist its sort to
+the URL either (`DeckFeed`/`useDiscover` hold it in `useState` alone), and the brief only asked for the URL if
+Discover already did something similar — it does not, so the Design Templates page does not either.
+
+**A delete on the page is applied by filtering a `removedIds` set client-side, rather than mutating
+`useDiscover`'s own page state.** The hook's only notion of change is "refetch a page from offset 0"; it has
+no setter for "and also drop this one id from what is already loaded". Filtering the rendered list by id
+avoids growing the hook a mutation API for one caller's one action, at the cost of a delete not shrinking
+`hasMore`'s count until the next natural refetch — invisible in practice, since the row is gone either way.
+
+**A card on this page is never "selected": `TemplateCard`'s `selected`/`onSelect` are wired to `false`/"open
+the design's own page" instead of a radiogroup choice.** `PreviewCard` (which `TemplateCard` still uses
+underneath) always renders `role="radio"`; the brief asked for the exact same card, layout-paging and all, and
+building a second non-radio variant of `PreviewCard` for this one page would have duplicated the very thing
+being shared. There is no ESLint a11y plugin in this repo to flag a `role="radio"` outside a `radiogroup`
+(checked `eslint.config.js`), so this does not currently surface as a lint error; worth a second look if such a
+plugin is ever added.

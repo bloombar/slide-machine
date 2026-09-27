@@ -39,6 +39,7 @@
     "home": "Inicio",
     "profile": "Perfil",
     "accountSettings": "Ajustes de la cuenta",
+    "designTemplates": "Plantillas de diseño",
     "logIn": "Iniciar sesión",
     "logOut": "Cerrar sesión",
     "legal": "Información y avisos legales"
@@ -667,6 +668,18 @@
     "votes": "{count, plural, one {# voto} other {# votos}}",
     "votesBreakdown": "{up} a favor · {down} en contra",
     "unknownOwner": "Desconocido"
+  },
+  "templatesPage": {
+    "heading": "Plantillas de diseño",
+    "mine": "Mías",
+    "searchLabel": "Buscar plantillas de diseño",
+    "searchPlaceholder": "Buscar plantillas…",
+    "loadFailed": "No se pudieron cargar las plantillas.",
+    "searchFailed": "No se pudo realizar esa búsqueda.",
+    "noMatches": "Sin resultados para «{query}».",
+    "emptyMine": "Todavía no hay diseños.",
+    "empty": "No se encontraron diseños.",
+    "layoutCount": "{count, plural, one {# diseño} other {# diseños}}"
   },
   "vote": {
     "upNamed": "Votar a favor de {name}",

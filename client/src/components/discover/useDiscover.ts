@@ -19,10 +19,10 @@ import {
   DISCOVER_PAGE_SIZE,
   type DeckFeedResponse,
   type FeedDeck,
-  type FeedSort,
   type SearchProject,
   type SearchResults,
   type SearchUser,
+  type TemplateFeedSort,
 } from '@slide-machine/shared'
 import { dispatchAction } from '../../api/actions'
 
@@ -30,53 +30,66 @@ import { dispatchAction } from '../../api/actions'
 const SEARCH_DEBOUNCE_MS = 250
 
 /**
- * Which actions back a browsable list. Named rather than hardcoded so a second
- * kind of content — style templates, once TMPL-1/4 gives them an entity — can
- * reuse this hook by naming its own pair, instead of forking it.
+ * Which actions back a browsable list, and what a search answer's rows look
+ * like. Named rather than hardcoded so a second kind of content reuses this
+ * hook by naming its own trio, instead of forking it — style templates
+ * (TMPL-28) are the first to.
  */
-export interface DiscoverSource {
-  /** Serves the unfiltered feed: `{ sort, offset, limit }` -> `DeckPage`. */
+export interface DiscoverSource<T = FeedDeck> {
+  /** Serves the unfiltered feed: `{ sort, offset, limit }` -> `{items, hasMore}`. */
   feedAction: string
-  /** Searches the same content: `{ q, sort, offset, limit }` -> `SearchResults`. */
+  /** Searches the same content: `{ q, sort, offset, limit }` -> a response
+   * `normalizeSearch` can read rows out of. */
   searchAction: string
+  /** Pulls the row list out of a search response. Defaults to a lecture
+   * search's own shape (`SearchResults.lectures`); a template search answers
+   * `{items, hasMore}` like its feed does, so its source supplies its own. */
+  normalizeSearch?: (res: unknown) => T[]
 }
 
 /** Lectures, the only browsable content today (SOC-2/SOC-3). */
-export const LECTURE_SOURCE: DiscoverSource = {
+export const LECTURE_SOURCE: DiscoverSource<FeedDeck> = {
   feedAction: 'deck.feed',
   searchAction: 'social.search',
 }
 
+const defaultNormalizeSearch = <T>(res: unknown): T[] =>
+  (res as SearchResults).lectures as unknown as T[]
+
 /** One page of results, tagged with the sort and query it answers so a stale
  * response from a superseded request is never rendered. */
-interface LoadedPage {
-  sort: FeedSort
+interface LoadedPage<T> {
+  sort: TemplateFeedSort
   q: string
-  lectures: FeedDeck[]
+  lectures: T[]
   projects: SearchProject[]
   users: SearchUser[]
   hasMore: boolean
 }
 
 /** Fetches one page from whichever action the current query calls for. */
-const fetchPage = async (
-  source: DiscoverSource,
-  sort: FeedSort,
+const fetchPage = async <T>(
+  source: DiscoverSource<T>,
+  sort: TemplateFeedSort,
   q: string,
   offset: number,
-): Promise<Omit<LoadedPage, 'sort' | 'q'>> => {
+): Promise<Omit<LoadedPage<T>, 'sort' | 'q'>> => {
   if (q) {
-    const res = await dispatchAction<SearchResults>(source.searchAction, {
+    const res = await dispatchAction<unknown>(source.searchAction, {
       q,
       sort,
       offset,
       limit: DISCOVER_PAGE_SIZE,
     })
+    const normalize = source.normalizeSearch ?? defaultNormalizeSearch<T>
+    const withGroups = res as Partial<SearchResults>
     return {
-      lectures: res.lectures,
-      projects: res.projects,
-      users: res.users,
-      hasMore: res.hasMore,
+      lectures: normalize(res),
+      // Only a lecture search groups matching projects and people; a source
+      // with no such groups (a template search) simply has none to show.
+      projects: withGroups.projects ?? [],
+      users: withGroups.users ?? [],
+      hasMore: (res as { hasMore: boolean }).hasMore,
     }
   }
   const res = await dispatchAction<DeckFeedResponse>(source.feedAction, {
@@ -84,12 +97,17 @@ const fetchPage = async (
     offset,
     limit: DISCOVER_PAGE_SIZE,
   })
-  return { lectures: res.items, projects: [], users: [], hasMore: res.hasMore }
+  return {
+    lectures: res.items as unknown as T[],
+    projects: [],
+    users: [],
+    hasMore: res.hasMore,
+  }
 }
 
-export interface Discover {
-  sort: FeedSort
-  setSort: (sort: FeedSort) => void
+export interface Discover<T = FeedDeck> {
+  sort: TemplateFeedSort
+  setSort: (sort: TemplateFeedSort) => void
   query: string
   setQuery: (query: string) => void
   /** The query actually being answered — trimmed, so spaces alone stay in feed
@@ -97,7 +115,7 @@ export interface Discover {
   searching: boolean
   /** Results for the current sort and query, or null while the first page of
    * them is still in flight. */
-  page: LoadedPage | null
+  page: LoadedPage<T> | null
   /** True when the first page could not be loaded at all. */
   error: boolean
   /** True while a `loadMore()` is in flight. */
@@ -107,13 +125,16 @@ export interface Discover {
   loadMore: () => void
 }
 
-export function useDiscover({
-  source = LECTURE_SOURCE,
+export function useDiscover<T = FeedDeck>({
+  source = LECTURE_SOURCE as DiscoverSource<T>,
   initialSort = 'latest',
-}: { source?: DiscoverSource; initialSort?: FeedSort } = {}): Discover {
-  const [sort, setSort] = useState<FeedSort>(initialSort)
+}: {
+  source?: DiscoverSource<T>
+  initialSort?: TemplateFeedSort
+} = {}): Discover<T> {
+  const [sort, setSort] = useState<TemplateFeedSort>(initialSort)
   const [query, setQuery] = useState('')
-  const [page, setPage] = useState<LoadedPage | null>(null)
+  const [page, setPage] = useState<LoadedPage<T> | null>(null)
   const [error, setError] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
 

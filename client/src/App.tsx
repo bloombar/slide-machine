@@ -21,6 +21,7 @@ import AccountSettingsPage from './pages/AccountSettingsPage'
 import PlanPricingPage from './pages/PlanPricingPage'
 import DeckViewerPage from './pages/DeckViewerPage'
 import TemplateEditorPage from './pages/TemplateEditorPage'
+import DesignTemplatesPage from './pages/DesignTemplatesPage'
 import AboutPage from './pages/AboutPage'
 import ConnectAssistantPage from './pages/ConnectAssistantPage'
 import FeedbackPage from './pages/FeedbackPage'
@@ -102,6 +103,9 @@ export default function App() {
         {/* One canonical place to change anything about an account (AUTH-5);
             the :userId form is how an admin edits someone else's (ADMIN-5). */}
         <Route path="/app/settings" element={<AccountSettingsPage />} />
+        {/* Every design the caller can browse, on a page of its own
+            (TMPL-28) — the Design tab's picker widened into a full library. */}
+        <Route path="/app/templates" element={<DesignTemplatesPage />} />
         {/* Comparing plans needs a page of its own; settings links here. */}
         <Route path="/app/plans" element={<PlanPricingPage />} />
         <Route path="/app/settings/:userId" element={<AccountSettingsPage />} />

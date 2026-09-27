@@ -4,15 +4,23 @@
  * results as much as it governs the unfiltered feed, so switching it while a
  * query is typed reorders what is on screen.
  *
- * Layout-light and fully controlled, so the home sidebar and a future full
- * Discover page can present the same controls at different widths.
+ * Layout-light and fully controlled, so the home sidebar and a full Discover
+ * page — of lectures, or of style templates (`/app/templates`, TMPL-28),
+ * which adds a third "Mine" sort no lecture list has — can present the same
+ * controls at different widths.
  */
 import { useTranslation } from 'react-i18next'
 import { Search } from 'lucide-react'
-import type { FeedSort } from '@slide-machine/shared'
+import type { TemplateFeedSort } from '@slide-machine/shared'
 
-/** The two orders SOC-2 requires, and the message key that labels each. */
-const SORT_TABS: { value: FeedSort; labelKey: string }[] = [
+/** One sort tab: the value it sets, and the message key that labels it. */
+export type SortTab = { value: TemplateFeedSort; labelKey: string }
+
+/** The two orders SOC-2 requires, and the message key that labels each. The
+ * default; a caller with a third sort (template "Mine") passes its own via
+ * `sorts` rather than this component growing a template-specific option of
+ * its own. */
+const SORT_TABS: SortTab[] = [
   { value: 'latest', labelKey: 'discover.latest' },
   { value: 'top', labelKey: 'discover.top' },
 ]
@@ -24,9 +32,12 @@ export default function DiscoverControls({
   onQueryChange,
   heading,
   className = '',
+  sorts = SORT_TABS,
+  searchLabelKey = 'discover.searchLabel',
+  searchPlaceholderKey = 'discover.searchPlaceholder',
 }: {
-  sort: FeedSort
-  onSortChange: (sort: FeedSort) => void
+  sort: TemplateFeedSort
+  onSortChange: (sort: TemplateFeedSort) => void
   query: string
   onQueryChange: (query: string) => void
   /** Optional title above the controls; omitted when the page has its own. */
@@ -35,6 +46,16 @@ export default function DiscoverControls({
    * flex growth, a full page will want neither. Kept out of the component so
    * the same controls sit in either. */
   className?: string
+  /** Which sort tabs to offer, in order. Defaults to Latest/Top; the Design
+   * Templates page (TMPL-28) passes its own with "Mine" appended, rather
+   * than this component special-casing a sort no lecture list has. */
+  sorts?: SortTab[]
+  /** Message keys for the search box's label and placeholder. Default to
+   * Discover's own lecture-flavoured copy; the Design Templates page passes
+   * its own, since "Search lectures, projects, and people" is wrong for a
+   * list of designs. */
+  searchLabelKey?: string
+  searchPlaceholderKey?: string
 }) {
   const { t } = useTranslation()
 
@@ -46,7 +67,7 @@ export default function DiscoverControls({
         </h2>
       )}
       <div className="mt-2 flex justify-center gap-1">
-        {SORT_TABS.map(({ value, labelKey }) => (
+        {sorts.map(({ value, labelKey }) => (
           <button
             key={value}
             type="button"
@@ -71,8 +92,8 @@ export default function DiscoverControls({
           type="search"
           value={query}
           onChange={e => onQueryChange(e.target.value)}
-          aria-label={t('discover.searchLabel')}
-          placeholder={t('discover.searchPlaceholder')}
+          aria-label={t(searchLabelKey)}
+          placeholder={t(searchPlaceholderKey)}
           className="w-full rounded-md border border-slate-200 bg-white py-1.5 pr-2 pl-8 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 focus:outline-none"
         />
       </div>

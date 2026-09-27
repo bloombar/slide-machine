@@ -39,6 +39,7 @@
     "home": "Главная",
     "profile": "Профиль",
     "accountSettings": "Настройки аккаунта",
+    "designTemplates": "Шаблоны дизайна",
     "logIn": "Войти",
     "logOut": "Выйти",
     "legal": "Информация и правовые документы"
@@ -667,6 +668,18 @@
     "votes": "{count, plural, one {# голос} few {# голоса} other {# голосов}}",
     "votesBreakdown": "{up} за · {down} против",
     "unknownOwner": "Неизвестно"
+  },
+  "templatesPage": {
+    "heading": "Шаблоны дизайна",
+    "mine": "Мои",
+    "searchLabel": "Поиск шаблонов дизайна",
+    "searchPlaceholder": "Поиск шаблонов…",
+    "loadFailed": "Не удалось загрузить шаблоны.",
+    "searchFailed": "Не удалось выполнить поиск.",
+    "noMatches": "Нет совпадений по запросу «{query}».",
+    "emptyMine": "Пока нет дизайнов.",
+    "empty": "Дизайны не найдены.",
+    "layoutCount": "{count, plural, one {# макет} few {# макета} other {# макетов}}"
   },
   "vote": {
     "upNamed": "Голосовать за {name}",
