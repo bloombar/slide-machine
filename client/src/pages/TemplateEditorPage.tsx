@@ -11,10 +11,11 @@
  *
  * Someone shared with as an editor gets the same editor its author does
  * (TMPL-26): `template.update` already accepts either, so the page does too.
- * Everyone else — a built-in, a viewer, or a design merely made public —
- * sees the same page without the editor: every layout as a rendered slide,
- * which is what a design is. A private template belonging to someone else is
- * refused exactly as a missing one is, so the URL says nothing about it.
+ * Everyone else — a built-in, a viewer, or a design merely made public — sees
+ * everything the editor shows, read-only (`TemplateReaderView`, TMPL-29),
+ * plus a way to duplicate it into a copy of their own. A private template
+ * belonging to someone else is refused exactly as a missing one is, so the
+ * URL says nothing about it.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
@@ -32,7 +33,7 @@ import { displayHandle } from '../lib/handle'
 import { templateName } from '../i18n/templateName'
 import AccessSettings from '../components/AccessSettings'
 import TemplateEditor from '../components/template/TemplateEditor'
-import TemplatePreview from '../components/template/TemplatePreview'
+import TemplateReaderView from '../components/template/TemplateReaderView'
 import UnsavedChangesDialog from '../components/UnsavedChangesDialog'
 
 export default function TemplateEditorPage() {
@@ -42,6 +43,14 @@ export default function TemplateEditorPage() {
   const { t } = useTranslation()
   const { user, status } = useAuth()
   const [template, setTemplate] = useState<Template | null>(null)
+  /** Which slug `template` was fetched for. Compared against the current
+   * `slug` below rather than cleared with a `setTemplate(null)` at the top
+   * of the fetch effect — the derived mismatch alone is what makes the page
+   * fall back to its loading state the instant the URL changes (a reader's
+   * duplicate landing them on a new `/t/:slug`), with no synchronous
+   * `setState` call inside the effect body to trigger a needless extra
+   * render for it. */
+  const [loadedSlug, setLoadedSlug] = useState<string | undefined>(undefined)
   /** The rest of the library, for lifting a layout definition from. */
   const [library, setLibrary] = useState<Template[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -49,6 +58,8 @@ export default function TemplateEditorPage() {
   const [saving, setSaving] = useState(false)
   const [savedNote, setSavedNote] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [duplicating, setDuplicating] = useState(false)
+  const [duplicateError, setDuplicateError] = useState<string | null>(null)
   /** Where leaving would go, held while the author is asked about unsaved
    * work; null when nothing is pending. */
   const [leavingTo, setLeavingTo] = useState<string | null>(null)
@@ -66,7 +77,9 @@ export default function TemplateEditorPage() {
     let cancelled = false
     dispatchAction<Template>('template.get', { slug })
       .then(loaded => {
-        if (!cancelled) setTemplate(loaded)
+        if (cancelled) return
+        setTemplate(loaded)
+        setLoadedSlug(slug)
       })
       .catch((e: unknown) => {
         if (cancelled) return
@@ -183,6 +196,41 @@ export default function TemplateEditorPage() {
     else void navigate(to)
   }
 
+  /**
+   * A reader's own way to adopt the design: a copy of their own, landing them
+   * straight in its editor (TMPL-29). The same call and the same "straight
+   * into editing" landing `TemplateDesignPanel`'s library uses — a design is
+   * duplicated to be worked on, not to sit unopened in a library.
+   */
+  const duplicate = () => {
+    if (!template) return
+    setDuplicating(true)
+    setDuplicateError(null)
+    dispatchAction<Template>('template.duplicate', { templateId: template.id })
+      .then(copy => {
+        // Wherever this page itself was reached from carries forward to the
+        // copy's page too — the same `state.from` chain `TemplateDesignPanel`
+        // starts when it duplicates — falling back to this page's own URL
+        // rather than `from`'s '/app' default, so "Back" on the copy has
+        // somewhere to go even when this page was opened directly (a shared
+        // link, a search result) rather than from a lecture's Design tab.
+        // Left `duplicating` true rather than reset: the page is on its way
+        // to the copy's URL, and the button for the design that is leaving
+        // should not spring back to life mid-navigation.
+        void navigate(`/t/${copy.permalinkSlug}`, {
+          state: {
+            from:
+              (location.state as { from?: string } | null)?.from ??
+              location.pathname,
+          },
+        })
+      })
+      .catch(() => {
+        setDuplicateError(t('template.errors.duplicate'))
+        setDuplicating(false)
+      })
+  }
+
   if (loadError) {
     return (
       <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
@@ -193,7 +241,12 @@ export default function TemplateEditorPage() {
     )
   }
 
-  if (!template) {
+  // A new slug means a different design — a reader's Duplicate lands them on
+  // one straight from this same page component, which React Router keeps
+  // mounted across a `/t/:slug` param change rather than remounting — so
+  // `template` from the previous slug is not shown, or clicked on, while its
+  // replacement is still in flight; the page reads as still loading instead.
+  if (!template || loadedSlug !== slug) {
     return (
       <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
         <p className="text-slate-500">{t('common.loading')}</p>
@@ -214,20 +267,45 @@ export default function TemplateEditorPage() {
           <ArrowLeft className="h-4 w-4" aria-hidden />
           {t('common.back')}
         </button>
-        <h1 className="truncate text-2xl font-bold">{name}</h1>
-        {/* Whose design this is, reading through to their profile (SOC-4),
-            in the same voice a project page names its owner. */}
-        {template.owner && (
-          <p className="mt-1 truncate text-slate-600">
-            <Link
-              to={`/u/${template.owner.id}`}
-              className="hover:text-indigo-600 hover:underline"
-            >
-              {displayHandle(template.owner.displayName)}
-            </Link>
-          </p>
-        )}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="truncate text-2xl font-bold">{name}</h1>
+            {/* Whose design this is, reading through to their profile
+                (SOC-4), in the same voice a project page names its owner. */}
+            {template.owner && (
+              <p className="mt-1 truncate text-slate-600">
+                <Link
+                  to={`/u/${template.owner.id}`}
+                  className="hover:text-indigo-600 hover:underline"
+                >
+                  {displayHandle(template.owner.displayName)}
+                </Link>
+              </p>
+            )}
+          </div>
+          {/* A reader's own actions, at the right of the header row. The
+              vote control (TMPL-27) belongs here too, right-most of the
+              two — this slot is left for it rather than built now. */}
+          {!canEdit && (
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={duplicate}
+                disabled={duplicating}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                {t('template.duplicate')}
+              </button>
+              {/* TMPL-27: the vote control lands here in a later slice. */}
+            </div>
+          )}
+        </div>
       </header>
+      {duplicateError && (
+        <p role="alert" className="mb-4 text-sm text-red-600">
+          {duplicateError}
+        </p>
+      )}
 
       {canEdit ? (
         <>
@@ -278,30 +356,20 @@ export default function TemplateEditorPage() {
           )}
         </>
       ) : (
-        <section>
+        <>
           {/* Not theirs to change. Saying so beats offering controls that
-              would be refused, and the design itself is still worth seeing. */}
+              would be refused, and the design itself — everything the
+              editor shows, read-only (TMPL-29) — is still worth seeing. */}
           <p className="mb-4 text-sm text-slate-500">
             {t('template.page.readOnly')}
           </p>
-          <h2 className="mb-3 text-lg font-semibold text-slate-700">
-            {t('template.layoutsLabel')}
-          </h2>
-          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {template.layouts.map(layout => (
-              <li key={layout.type} className="flex flex-col gap-1.5">
-                <TemplatePreview
-                  template={template}
-                  layout={layout}
-                  className="overflow-hidden rounded-lg border border-slate-200 p-1"
-                />
-                <span className="truncate px-1 text-sm font-medium">
-                  {layout.label}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
+          {/* Keyed on the design's own id, so navigating from one design's
+              page straight to another's (the copy Duplicate lands on) remounts
+              the reader rather than carrying over which layout or box the
+              previous design had selected — React Router keeps this same
+              page component mounted across a `/t/:slug` param change. */}
+          <TemplateReaderView key={template.id} template={template} />
+        </>
       )}
 
       {/* Leaving with unsaved work offers to save it, rather than only to

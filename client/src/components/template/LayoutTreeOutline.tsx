@@ -78,6 +78,7 @@ export default function LayoutTreeOutline({
   onDropOn,
   onAddChild,
   onDelete,
+  readOnly,
 }: {
   tree: LayoutNode
   specs: SlotSpec[]
@@ -93,6 +94,10 @@ export default function LayoutTreeOutline({
   /** Deletes a box outright. No confirmation: a box is one undo away, and
    * asking about every one of them would be in the way of designing. */
   onDelete: (id: string) => void
+  /** A reader's view of the same list (TMPL-29): a box is still picked out
+   * by clicking its row, but there is nothing here to add, remove or drag —
+   * rows render plain, with no grip and no drop target. */
+  readOnly?: boolean
 }) {
   const { t } = useTranslation()
   const rows = flatten(tree)
@@ -120,13 +125,20 @@ export default function LayoutTreeOutline({
                 e.preventDefault()
                 onSelect(node.id)
               }}
+              // A readOnly row is never wrapped in `DraggableListRow`, which is
+              // what gives every other row its `tabIndex`/keyboard handling —
+              // so a reader picking a box by keyboard needs the same thing
+              // set directly here, or the outline would be mouse-only for them.
+              tabIndex={readOnly ? 0 : undefined}
+              role={readOnly ? 'button' : undefined}
+              aria-label={readOnly ? label : undefined}
               aria-current={node.id === selectedId}
               className={`group flex cursor-pointer items-center gap-1 rounded ${
                 node.id === selectedId ? 'bg-indigo-50' : 'hover:bg-slate-50'
               }`}
               style={{ paddingLeft: `${depth * 0.75}rem` }}
             >
-              {movable ? (
+              {movable && !readOnly ? (
                 <GripVertical
                   aria-hidden
                   className="h-3 w-3 shrink-0 text-slate-300"
@@ -143,7 +155,7 @@ export default function LayoutTreeOutline({
               >
                 {label}
               </span>
-              {node.container && (
+              {!readOnly && node.container && (
                 <button
                   type="button"
                   // The row selects on click, so this must not also count as
@@ -164,7 +176,7 @@ export default function LayoutTreeOutline({
                   the boxes in it go from here. Hidden until the row is
                   pointed at, and brought back for the keyboard, which never
                   hovers anything. */}
-              {movable && (
+              {!readOnly && movable && (
                 <button
                   type="button"
                   // Deleting must not first select the row it is deleting.
@@ -183,8 +195,10 @@ export default function LayoutTreeOutline({
           )
 
           // The root cannot be dragged anywhere, so it is a plain row rather
-          // than one that advertises a gesture it will not honour.
-          return movable ? (
+          // than one that advertises a gesture it will not honour. Neither
+          // can any row in a reader's view (TMPL-29): there is nothing to
+          // reorder, so every row is plain there too.
+          return movable && !readOnly ? (
             <DraggableListRow
               key={node.id}
               id={node.id}

@@ -163,9 +163,78 @@ describe('TemplateEditorPage (TMPL-4)', () => {
     expect(
       await screen.findByRole('heading', { name: 'My Style', level: 1 }),
     ).toBeInTheDocument()
-    expect(screen.queryByLabelText('Template name')).toBeNull()
-    // Every layout as a slide: that is what a design is
-    expect(screen.getAllByTestId('template-preview').length).toBe(2)
+    // The real field, disabled — not absent, so nothing about the design's
+    // settings is hidden from a reader, only writable to them (TMPL-29).
+    expect(await screen.findByLabelText('Template name')).toBeDisabled()
+    // The layout on screen, rendered as a slide: that is what a design is.
+    expect(await screen.findByTestId('template-preview')).toBeInTheDocument()
+  })
+
+  // TMPL-29: a reader gets a way to make the design their own, landing them
+  // straight in the copy's own editor.
+  it('duplicates the design and opens the copy for a reader', async () => {
+    const original = template({
+      ownerId: 'u2',
+      owner: { id: 'u2', displayName: 'Bram' },
+      visibility: 'public',
+      myRole: null,
+    })
+    const copy = template({
+      id: 'copy-1',
+      permalinkSlug: 'my-style-copy-cd34',
+      ownerId: 'u1',
+      owner: { id: 'u1', displayName: 'Ada' },
+      myRole: 'owner',
+      visibility: 'restricted',
+    })
+    vi.mocked(dispatchAction).mockImplementation(
+      (action: string, payload?: unknown) => {
+        if (action === 'template.get') {
+          const slug = (payload as { slug?: string } | undefined)?.slug
+          return Promise.resolve(slug === copy.permalinkSlug ? copy : original)
+        }
+        if (action === 'template.list') return Promise.resolve([])
+        if (action === 'template.duplicate') return Promise.resolve(copy)
+        if (action === 'template.shares') return Promise.resolve([])
+        return Promise.resolve({ urls: [] })
+      },
+    )
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'My Style', level: 1 })
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
+
+    await vi.waitFor(() =>
+      expect(dispatchAction).toHaveBeenCalledWith('template.duplicate', {
+        templateId: 'mine-1',
+      }),
+    )
+    // React 18 schedules the update this test's second `template.get` (for
+    // the copy's own slug) resolves into at normal priority, which jsdom's
+    // `MessageChannel` needs an actual macrotask tick to flush. A single
+    // tick is enough on an idle machine but not always under full-suite
+    // load, so this retries "yield one tick, then look" rather than betting
+    // on a fixed number of them — the same reasoning `asyncUtilTimeout`
+    // itself was raised for (src/test/setup.ts), scoped to this one test
+    // rather than raised again suite-wide.
+    await vi.waitFor(
+      async () => {
+        await new Promise(resolve => setTimeout(resolve, 0))
+        expect(screen.queryByLabelText('Template name')).not.toBeNull()
+      },
+      { timeout: 5000 },
+    )
+    expect(screen.getByLabelText('Template name')).toBeInTheDocument()
+  })
+
+  // Owners and editors keep the editor as before — no Duplicate button of
+  // their own on this page (TMPL-29).
+  it('offers no Duplicate button to its author', async () => {
+    withTemplate(template())
+    renderPage()
+
+    await screen.findByLabelText('Template name')
+    expect(screen.queryByRole('button', { name: 'Duplicate' })).toBeNull()
   })
 
   // TMPL-26: an editor gets the same editor its author does — template.update
@@ -201,8 +270,8 @@ describe('TemplateEditorPage (TMPL-4)', () => {
     expect(
       await screen.findByRole('heading', { name: 'My Style', level: 1 }),
     ).toBeInTheDocument()
-    expect(screen.queryByLabelText('Template name')).toBeNull()
-    expect(screen.getAllByTestId('template-preview').length).toBe(2)
+    expect(await screen.findByLabelText('Template name')).toBeDisabled()
+    expect(await screen.findByTestId('template-preview')).toBeInTheDocument()
   })
 
   it('refuses a design nobody may read the way it refuses a missing one', async () => {

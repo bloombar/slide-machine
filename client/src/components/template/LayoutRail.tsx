@@ -25,6 +25,7 @@ export default function LayoutRail({
   addable,
   onAddType,
   onAddOwn,
+  readOnly,
 }: {
   layouts: Layout[]
   selected: number
@@ -39,6 +40,9 @@ export default function LayoutRail({
    * thing to type before seeing anything is one thing too many, and the name
    * is editable the moment it exists (TMPL-9). */
   onAddOwn: () => void
+  /** A reader's view of the same rail (TMPL-29): picking a layout still
+   * works, but there is nothing here to add or remove. */
+  readOnly?: boolean
 }) {
   const { t } = useTranslation()
 
@@ -89,7 +93,7 @@ export default function LayoutRail({
             ))}
           </select>
         </label>
-        {selectedName && (
+        {!readOnly && selectedName && (
           <button
             type="button"
             onClick={() => onDelete(selected)}
@@ -129,51 +133,59 @@ export default function LayoutRail({
             {/* Hidden until the row is pointed at, so the list reads as a
                 list. `focus-visible` brings it back for the keyboard, which
                 never hovers anything. */}
-            <button
-              type="button"
-              onClick={() => onDelete(index)}
-              aria-label={t('template.removeLayout', { name: nameOf(layout) })}
-              title={t('template.removeLayout', { name: nameOf(layout) })}
-              className="absolute right-1 rounded p-1 text-slate-400 opacity-0 hover:bg-white hover:text-red-700 focus-visible:opacity-100 group-hover:opacity-100"
-            >
-              <Trash2 className="h-3.5 w-3.5" aria-hidden />
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => onDelete(index)}
+                aria-label={t('template.removeLayout', {
+                  name: nameOf(layout),
+                })}
+                title={t('template.removeLayout', { name: nameOf(layout) })}
+                className="absolute right-1 rounded p-1 text-slate-400 opacity-0 hover:bg-white hover:text-red-700 focus-visible:opacity-100 group-hover:opacity-100"
+              >
+                <Trash2 className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            )}
           </div>
         ))}
       </div>
 
-      {/* Outside the scroller, so adding a layout never scrolls out of reach. */}
-      <div className="flex shrink-0 flex-col gap-2 pt-1">
-        {addable.length > 0 && (
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-slate-600">
-              {t('template.addLayout')}
-            </span>
-            <select
-              value=""
-              onChange={e => {
-                if (e.target.value) onAddType(e.target.value)
-                e.target.value = ''
-              }}
-              className="rounded-md border border-slate-300 px-2 py-1 text-sm"
-            >
-              <option value="">{t('template.addLayoutChoose')}</option>
-              {addable.map(type => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <button
-          type="button"
-          onClick={onAddOwn}
-          className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-        >
-          {t('template.newLayoutAdd')}
-        </button>
-      </div>
+      {/* Outside the scroller, so adding a layout never scrolls out of reach.
+          A reader has nothing to add — the whole section is theirs to look
+          at, not to change (TMPL-29). */}
+      {!readOnly && (
+        <div className="flex shrink-0 flex-col gap-2 pt-1">
+          {addable.length > 0 && (
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-slate-600">
+                {t('template.addLayout')}
+              </span>
+              <select
+                value=""
+                onChange={e => {
+                  if (e.target.value) onAddType(e.target.value)
+                  e.target.value = ''
+                }}
+                className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+              >
+                <option value="">{t('template.addLayoutChoose')}</option>
+                {addable.map(type => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <button
+            type="button"
+            onClick={onAddOwn}
+            className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          >
+            {t('template.newLayoutAdd')}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

@@ -2105,3 +2105,129 @@ walk measure a box before its content or its fit-shrink has settled — lives in
 helper's reliance on that toast as a proxy for "done". Fixing that is a client-side synchronization change
 older and larger than this slice, flagged here rather than made unilaterally under a "server and shared only"
 brief.
+
+## Template reader page (slice 4)
+
+Judgment calls implementing [TMPL-29](SPEC.md#tmpl-29): a reader sees everything the editor shows, read-only.
+
+**Round 1 built a hand-rolled read-out (`<dt>`/`<dd>` pairs mirroring `LayoutInspector`/`SlotInspector`'s own
+fields by hand); round 2 replaces it with the real components inside a `<fieldset disabled>`, after a
+field-by-field review found the hand-rolled version had already drifted** — missing visibility, the whole
+theme/spacing/text-style section, and sixteen `SlotInspector` fields (arrangement, sizing, font, colour,
+alignment, the inherited text-style budget shown as a placeholder), exactly the failure mode copying-by-hand
+invites and the brief warned reusing the real components would avoid. `disabled` on a `<fieldset>` disables
+every descendant form control natively (inputs, selects, textareas, buttons), so every field an inspector
+shows appears in the reader's view by construction and cannot quietly stop matching what the editor shows —
+adding a field to `SlotInspector` adds it here for free. `TemplateSettings`, `LayoutInspector` and
+`SlotInspector` are given real values and no-op callbacks (a click can never reach them, being disabled, so
+what the no-ops do is moot) rather than a `readOnly` prop threaded into each — nothing about their own JSX
+needs to know it is being looked at by a reader rather than an author.
+
+**Round 1's reasoning for *not* doing this — that a `disabled` input still answers `getByLabel` where an
+absent one would not, breaking `template-sharing.spec.ts`'s `guestPage.getByLabel('Template name')` count-0
+assertion — was correct about the collision and wrong about the fix.** The right fix is not avoiding real
+inputs; it is asking the assertion what it actually means. "A viewer cannot edit the design" is `toBeDisabled()`
+/ `not.toBeEditable()`, not "the field is not there" — a screen reader announces a disabled control as
+disabled, which is the accessible signal a reader losing edit access should get, not the control vanishing
+without explanation. Both `template-sharing.spec.ts` and `TemplateEditorPage.test.tsx` are updated to assert
+disabled-ness rather than absence.
+
+**`LayoutCanvas` is still not reused; the reader sees `TemplatePreview` instead, and picks a box from
+`LayoutTreeOutline`.** The canvas's whole point is the click-to-select-and-drag interaction layer over the
+rendered slide — even with every drag handler disabled, carrying its pointer-event plumbing and `CanvasRulers`
+into a reader's page is machinery with nothing left to do. `TemplatePreview` already renders the same slide
+non-interactively (it is what the library's thumbnails use); `LayoutRail` and `LayoutTreeOutline` each keep
+their own `readOnly` prop from round 1, hiding add/delete/drag affordances that a disabled fieldset could only
+grey out, not explain — a disabled trash icon sitting in the corner of a row the reader cannot act on is
+confusing in a way that its absence is not.
+
+**jsdom does not implement a `<fieldset disabled>`'s effect on its descendants for the `.disabled` IDL
+property — only `@testing-library/jest-dom`'s `toBeDisabled()` matcher and the `:disabled` CSS pseudo-class
+read it correctly, both by walking the ancestor chain themselves rather than trusting the DOM's own `.disabled`
+getter.** Confirmed by a throwaway probe (`fieldset disabled` around a nested `<input>`: `.disabled` reads
+`false`, `.matches(':disabled')` reads `true`) before writing a single test against it — this is a real,
+narrow jsdom gap (a real browser, exercised in e2e, has always disabled these fields correctly), not a defect
+in the fieldset approach. `TemplateReaderView.test.tsx`'s "no editable control" test filters
+`container.querySelectorAll(...)` with `el.matches(':disabled')` rather than reading `.disabled` directly, with
+a comment saying why; every other test in the file uses `toBeDisabled()`, which needed no such workaround.
+
+**A second, unrelated timing gap in the same test file: a state update that lands from a second
+`template.get` resolution — the one a reader's `template.duplicate` triggers by navigating to a new
+`/t/:slug` — did not appear in the DOM within `findByLabelText`'s default polling window, even raised to
+5 seconds, until the test yielded one real macrotask (`await new Promise(r => setTimeout(r, 0))`) first.**
+Diagnosed by instrumenting the component with temporary logging: the second `setState` pair provably ran
+(the `.then` callback's own log line printed), yet no subsequent render was ever logged, in a test file where
+thirteen other tests each drive a single fetch-then-render cycle without needing this at all — pointing at
+React 18's scheduler needing an actual macrotask tick to flush a second normal-priority update within one
+test's real-timers-based polling window, a known category of React 18 + jsdom interaction gap, rather than
+anything wrong with the page's own `loadedSlug` logic (traced correctly slug-by-slug across the whole
+sequence). Fixed with one explicit yield and a comment explaining it, rather than raising the suite-wide
+`asyncUtilTimeout` again for one test's sake.
+
+**Layout selection resets the box selection through an explicit `selectLayout` handler, not a `useEffect`.**
+`eslint-plugin-react-hooks`'s `set-state-in-effect` rule flags `setState` called synchronously in an effect
+body (the `[layoutIndex]`-keyed effect this was first written as) as a needless extra render; composing the
+reset into the same handler that changes `layoutIndex` does the same thing in one render, and is also simply
+correct — nothing *external* to React changed that an effect would need to synchronize with.
+
+**The whiteboard is left out of a reader's layout tabs, the same way it is left out of the author's.** It
+carries no boxes and no purpose text, so there is nothing on it for a reader to learn about the design from —
+`TemplateReaderView` filters it out of the initial selection exactly as `LayoutRail` already filters it out of
+the tab list, rather than inventing a second reason for the same layout to be unreachable.
+
+**`TemplateEditorPage.test.tsx`'s two reader-view tests, which asserted `getAllByTestId('template-preview')
+.length === 2`, are rewritten rather than kept passing as written.** They were pinned to the old design (every
+layout as a static thumbnail in a grid, all shown at once) that this slice replaces with the same
+one-layout-at-a-time paradigm the editor uses; asserting a preview count of exactly one, of whichever layout
+is on screen, is the equivalent check under the new shape — round 2 additionally swaps their
+`queryByLabelText('Template name')).toBeNull()` for `findByLabelText('Template name')).toBeDisabled()`, per
+the fieldset rework above. The richer per-field coverage (AI instructions, layout switching, box detail,
+theme/spacing/text-style fields, arrangement/sizing/type fields, the inherited budget, no-write, no
+add/delete/reorder, keyboard selection) lives in `TemplateReaderView.test.tsx`, close to the component whose
+behaviour it is actually about.
+
+**The Duplicate button and the vote-control slot live in `TemplateEditorPage`'s header, not inside
+`TemplateReaderView`.** The brief places them in "the page header row", and they are true page-level concerns
+— navigation (`template.duplicate` then `navigate`) and a future action row — rather than something about
+*reading the design*, which is what `TemplateReaderView` is scoped to. `TemplateDesignPanel`'s duplicate logic
+was not literally extracted into a shared helper: it is four lines around one `dispatchAction` call, and the
+two callers navigate to different places afterwards (the panel also updates the caller's own `value`/library
+state, which the page has none of), so a shared function would take more parameters describing the difference
+than it would save.
+
+**`template.page.readOnly`'s copy changed in all five bundles** ("Duplicate it from a lecture's Design tab…"
+→ "Duplicate it above…"), since the button it was pointing readers at is now on the page itself.
+
+**Round 2, from code review: `duplicate()` and the fetch effect both had a gap around the moment a reader's
+copy lands.** `setDuplicating(false)` ran in a `.finally()`, so it fired on the success path too — re-enabling
+the Duplicate button for the split second before the route actually changed, closed over `template.id` for
+the design that was leaving the page. Fixed by resetting it only in `.catch`, leaving it `true` (and the
+button disabled) through the navigation on success, since nothing re-enables a page that is on its way
+elsewhere. Separately, the fetch effect used to call `setTemplate(null)` synchronously at its own top —
+correct in intent (a new slug should not go on showing the previous design's data, or its Duplicate button,
+while the next fetch is in flight) but flagged by `react-hooks/set-state-in-effect` as a needless extra
+render. Replaced with a `loadedSlug` state set alongside `setTemplate` only inside the `.then`, and the
+page's loading guard reads `!template || loadedSlug !== slug` — the mismatch alone, not an extra `setState`,
+is what makes the page fall back to its loading state the instant `slug` changes, whether from a reader's own
+navigation or a duplicate's. `duplicate()`'s `navigate` call also now carries `state.from` forward from
+whatever this page's own `location.state.from` was (falling back to this page's own URL rather than the
+generic `/app` `from` already computed for "Back"), the same chain `TemplateDesignPanel` starts, so "Back" on
+the copy's page has somewhere sensible to go. `TemplateReaderView` is now keyed on `template.id`: React Router
+keeps `TemplateEditorPage` mounted across a `/t/:slug` param change, so without a key a reader's duplicate
+would otherwise carry over which layout and box the *previous* design had selected into the new one's view.
+
+**`TemplateDescriptorNotice` (the "instructions are getting long" advisory) is dropped from a reader's page
+entirely, rather than reworded.** Its hint text is written to whoever can shorten the instructions
+("Your boxes' instructions total…") — a reader cannot act on it, and the design's length is not something
+they are deciding among when the question is only "does this design suit my lecture", so hiding it is simpler
+than maintaining a second, reader-facing copy of an advisory nobody reading it can do anything about.
+
+**A `readOnly` box row in `LayoutTreeOutline` gets `tabIndex`, `role="button"` and an `aria-label` set directly
+on the row, rather than through `DraggableListRow`.** Every other row's keyboard handling comes from
+`DraggableListRow`, which a `readOnly` row is deliberately not wrapped in (nothing to drag) — so a reader
+tabbing to a box by keyboard needs the same landing spot supplied some other way, or the outline is mouse-only
+for them. Written as three separate JSX attributes (`tabIndex={readOnly ? 0 : undefined}`, and so on) rather
+than a spread object, because `eslint-plugin-i18next`'s `no-literal-string` rule flags a literal `'button'`
+inside a plain object property even though `role` is not one of the attributes it is configured to check on a
+real JSX attribute — the object-literal form and the JSX-attribute form parse differently to the rule, and
+only the latter is exempt.
