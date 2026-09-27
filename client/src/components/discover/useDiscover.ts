@@ -14,7 +14,7 @@
  * Deliberately free of layout, so the home sidebar and a future full Discover
  * page can share it.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   DISCOVER_PAGE_SIZE,
   type DeckFeedResponse,
@@ -148,6 +148,19 @@ export interface Discover<
    * Filtering the row out of this state is what keeps the offset honest.
    */
   remove: (id: string) => void
+  /**
+   * Rewrites one row in place — a design's own vote count changing, TMPL-27
+   * — without waiting for a refetch.
+   *
+   * This is not merely cosmetic: `page` (and the `current` it is derived
+   * into) is reused as-is whenever a sort or query change lands back on one
+   * already fetched, before the fresh refetch that change also kicks off
+   * has come back — so switching sort away and back quickly shows the
+   * *cached* page for an instant. Without patching the row a vote landed
+   * on, that instant would flash the pre-vote counts the cached page still
+   * holds, even though the control that cast the vote already moved on.
+   */
+  patch: (id: string, update: (item: T) => T) => void
 }
 
 export function useDiscover<
@@ -200,22 +213,47 @@ export function useDiscover<
   // one is in flight the caller sees null and can show a loading state.
   const current = page && page.sort === sort && page.q === q ? page : null
 
+  // How many rows `remove()` has taken out of the page *since the current
+  // `loadMore()` fetch started* — read (and reset to 0) only inside
+  // `loadMore` itself, so it means nothing outside a fetch actually in
+  // flight. See `loadMore`'s own comment for what it corrects.
+  const removedDuringLoad = useRef(0)
+
   const loadMore = useCallback(() => {
     if (!current || !current.hasMore || loadingMore) return
     setLoadingMore(true)
-    fetchPage(source, sort, q, current.lectures.length)
+    removedDuringLoad.current = 0
+    const requestedFrom = current.lectures.length
+    fetchPage(source, sort, q, requestedFrom)
       .then(res => {
         setPage(prev => {
           // Guard again on arrival: the sort or query may have changed while
           // this page was in flight, and appending it would mix two lists.
           if (!prev || prev.sort !== sort || prev.q !== q) return prev
-          // De-duplicate by id: a row can shift across the offset boundary
-          // between this fetch and the last — a publish landing between
-          // ranking and loading, or two callers loading pages at once — and
-          // arrive again rather than being skipped, which appending blindly
-          // would show twice.
+          // A `remove()` landing while this fetch was in flight deleted a
+          // row at a position *before* `requestedFrom` — the only rows a
+          // caller can delete are ones already on screen — which shifts the
+          // server's own ordered list, and this fetch's offset, that many
+          // rows earlier. Rather than a second round trip to refetch from
+          // the corrected offset, the same number of rows is dropped off
+          // the front of what already came back: a simple correction, not
+          // a proven-correct one for every possible interleaving of the
+          // two requests on the server, but sufficient for the case that
+          // actually happens here — a delete's own request has already
+          // finished (its `.then()` is what calls `remove`) by the time it
+          // can race a load-more's still-pending one.
+          const skip = removedDuringLoad.current
           const already = new Set(prev.lectures.map(item => item.id))
-          const appended = res.lectures.filter(item => !already.has(item.id))
+          const appended = res.lectures
+            .slice(skip)
+            .filter(item => !already.has(item.id))
+          // Nothing new to add: return the exact same object rather than a
+          // same-content copy, or a `LoadMore` watching this page's identity
+          // (its own IntersectionObserver rebuilds on every new `loadMore`,
+          // which a new `page` object would otherwise trigger) would rebuild
+          // and immediately re-fire the very request that just answered
+          // with nothing.
+          if (appended.length === 0) return prev
           return {
             ...prev,
             lectures: [...prev.lectures, ...appended],
@@ -231,9 +269,23 @@ export function useDiscover<
   }, [source, current, sort, q, loadingMore])
 
   const remove = useCallback((id: string) => {
+    removedDuringLoad.current += 1
     setPage(prev =>
       prev
         ? { ...prev, lectures: prev.lectures.filter(item => item.id !== id) }
+        : prev,
+    )
+  }, [])
+
+  const patch = useCallback((id: string, update: (item: T) => T) => {
+    setPage(prev =>
+      prev
+        ? {
+            ...prev,
+            lectures: prev.lectures.map(item =>
+              item.id === id ? update(item) : item,
+            ),
+          }
         : prev,
     )
   }, [])
@@ -249,5 +301,6 @@ export function useDiscover<
     loadingMore,
     loadMore,
     remove,
+    patch,
   }
 }

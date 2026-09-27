@@ -163,6 +163,18 @@ export default function DesignTemplatesPage() {
                 onDelete={template => setConfirming(template)}
                 busyId={busyId}
                 showMeta
+                // Keeps this row's own `votes` in step with whatever the
+                // control just cast (round 3) — see `useDiscover.patch`'s
+                // own comment for why: a sort switch away and back can show
+                // this exact page again, cached, before its own refetch has
+                // returned, and that instant would flash pre-vote counts
+                // without this.
+                onVote={(templateId, res) =>
+                  discover.patch(templateId, item => ({
+                    ...item,
+                    votes: { up: res.up, down: res.down, myVote: res.myVote },
+                  }))
+                }
               />
             ))}
           </div>

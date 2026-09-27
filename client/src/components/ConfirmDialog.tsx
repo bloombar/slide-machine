@@ -20,10 +20,13 @@ interface Props {
    * would overstate that (TMPL-11).
    */
   tone?: 'danger' | 'neutral'
-  /** Disables the confirm button while the action it triggers is still in
-   * flight, so a slow request cannot be fired twice by an impatient second
-   * click (TMPL-28). Cancel stays enabled — closing on a request already
-   * sent is a display choice, not a second copy of the request. */
+  /** Disables both buttons while the action it triggers is still in flight
+   * (TMPL-28): confirm, so a slow request cannot be fired twice by an
+   * impatient second click; cancel too, and Escape/backdrop with it, since
+   * `onConfirm` and `onCancel` here both drive the same caller state (an
+   * in-flight delete, say) and letting Cancel run concurrently with it
+   * would race the two against each other for no reason a reader would
+   * ever want. */
   busy?: boolean
   onConfirm: () => void
   onCancel: () => void
@@ -46,7 +49,7 @@ export default function ConfirmDialog({
       role="alertdialog"
       ariaLabel={title}
       size="sm"
-      onClose={onCancel}
+      onClose={busy ? () => {} : onCancel}
       initialFocusRef={cancelRef}
     >
       <h3 className="text-lg font-bold">{title}</h3>
@@ -56,7 +59,8 @@ export default function ConfirmDialog({
         <button
           ref={cancelRef}
           onClick={onCancel}
-          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          disabled={busy}
+          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
         >
           {t('common.cancel')}
         </button>

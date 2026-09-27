@@ -86,15 +86,17 @@ export default function TemplateCard({
   return (
     <div
       // A stable hook to scope a test (or a future feature) to this one
-      // card, rather than to `PreviewCard`'s own radio — the vote row below
-      // is that radio's sibling, not its descendant, so
-      // `.closest('[role="radio"]')`-style lookups miss it entirely.
+      // card, rather than to `PreviewCard`'s own control — the vote row
+      // below is that control's sibling, not its descendant, so a
+      // `.closest('[role="radio"]')`-style lookup (or, in link mode, a
+      // lookup off the anchor) misses it entirely.
       data-template-card={template.id}
       className="flex flex-col gap-1.5"
     >
       {/* The arrows sit over the end of the name row rather than in it: the
-          row is inside the radio, and a button cannot hold another button.
-          Same arrangement as the editor rail's delete icon. */}
+          row is inside `PreviewCard`'s own radio-or-link, and neither can
+          hold another interactive element inside it. Same arrangement as
+          the editor rail's delete icon. */}
       <div className="relative">
         <PreviewCard
           template={template}

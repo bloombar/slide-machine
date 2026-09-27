@@ -415,7 +415,7 @@ describe('DesignTemplatesPage cards (TMPL-28)', () => {
     expect(screen.getByText('My Style')).toBeInTheDocument()
   })
 
-  it('disables the confirm button while the delete is in flight', async () => {
+  it('disables confirm and cancel while the delete is in flight', async () => {
     let resolveDelete: (() => void) | undefined
     mockDispatch.mockImplementation(async (name: string) => {
       if (name === 'template.delete')
@@ -430,7 +430,40 @@ describe('DesignTemplatesPage cards (TMPL-28)', () => {
     const confirm = await screen.findByRole('button', { name: 'Delete' })
     fireEvent.click(confirm)
     expect(confirm).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
     resolveDelete?.()
     await waitFor(() => expect(screen.queryByText('My Style')).toBeNull())
+  })
+})
+
+describe('DesignTemplatesPage votes (TMPL-28 round 3)', () => {
+  // A sort switch away and back can land on the exact page `useDiscover`
+  // already holds, shown again before its own fresh refetch has returned —
+  // proving this needs seeing that reused, *cached* render still carries a
+  // vote cast before the round trip, not the zero the original fetch
+  // answered with.
+  it('keeps a cast vote in a page reused across a quick sort round trip', async () => {
+    mockDispatch.mockImplementation(async (name: string, input) => {
+      if (name === 'template.vote')
+        return { up: 1, down: 0, myVote: 1, voteScore: 1 }
+      const { sort } = input as { sort: string }
+      if (sort === 'top') {
+        // Never resolves within this test: the point is to be still in
+        // flight when the sort flips straight back to latest.
+        return new Promise(() => {})
+      }
+      return { items: [template()], hasMore: false }
+    })
+    renderPage()
+    await screen.findByText('Shipped')
+
+    const upvote = () => screen.getByRole('button', { name: 'Upvote Shipped' })
+    fireEvent.click(upvote())
+    await waitFor(() => expect(upvote()).toHaveTextContent('1'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Top' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Latest' }))
+
+    expect(upvote()).toHaveTextContent('1')
   })
 })

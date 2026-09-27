@@ -38,6 +38,15 @@ const publicName = `Public Design ${stamp}`
 const restrictedName = `Restricted Design ${stamp}`
 const sharedName = `Shared Design ${stamp}`
 const deletableName = `Deletable Design ${stamp}`
+// A shared, literal substring (`template.search` matches the query as one
+// contiguous run of characters, never as separate words), so one search
+// finds both and their relative order is what tells Top and Latest apart —
+// created in this order (high, then low) so the two sorts disagree about
+// which comes first even before either is voted on: Latest (newest first)
+// starts them low-before-high, and voting up the high one is what should
+// flip that under Top.
+const highScoreName = `Top Order ${stamp} High`
+const lowScoreName = `Top Order ${stamp} Low`
 // Zero-padded and two digits wide throughout, so "#1" is never a substring
 // of "#10" or "#11" — a plain `getByText` would otherwise match more than
 // one row and a stray one-item assertion would pass for the wrong reason.
@@ -201,6 +210,21 @@ test('design templates page: browse, vote, mine, search, and manage designs (TMP
     )
     await apiSetAccess(ownerPage, ownerAuth.accessToken, deletable.id, 'public')
 
+    // The pair Top's order check votes on — high first, low second, so
+    // Latest already orders them low-before-high before either is voted on.
+    const high = await apiDuplicate(
+      ownerPage,
+      ownerAuth.accessToken,
+      highScoreName,
+    )
+    await apiSetAccess(ownerPage, ownerAuth.accessToken, high.id, 'public')
+    const low = await apiDuplicate(
+      ownerPage,
+      ownerAuth.accessToken,
+      lowScoreName,
+    )
+    await apiSetAccess(ownerPage, ownerAuth.accessToken, low.id, 'public')
+
     // Sequential, not parallel: "Latest" orders by `updatedAt`, so #11 must
     // be the last one saved (and land on page one) and #01 the first (and
     // land on page two) — a `Promise.all` would race that order away.
@@ -253,7 +277,7 @@ test('design templates page: browse, vote, mine, search, and manage designs (TMP
     ).toBeVisible()
   })
 
-  await test.step('Top reflects a vote', async () => {
+  await test.step('a vote persists on the design it was cast on', async () => {
     await searchTemplatesPage(guestPage, publicName)
     const upvote = guestPage.getByRole('button', {
       name: `Upvote ${publicName}`,
@@ -279,6 +303,41 @@ test('design templates page: browse, vote, mine, search, and manage designs (TMP
     ).toHaveText('1')
   })
 
+  await test.step('Top orders by score, differently from Latest', async () => {
+    // A search naming both, so their relative order — not merely which is
+    // present — is what this reads. Latest is newest first and the low
+    // design was saved after the high one, so before either is voted on,
+    // Latest already reads low-then-high.
+    const cards = guestPage
+      .locator('[data-template-card]')
+      .filter({ hasText: 'Top Order' })
+    await searchTemplatesPage(guestPage, `Top Order ${stamp}`)
+    await expect(cards).toHaveCount(2)
+    await expect(cards.nth(0)).toContainText(lowScoreName)
+    await expect(cards.nth(1)).toContainText(highScoreName)
+
+    const upvoteHigh = guestPage.getByRole('button', {
+      name: `Upvote ${highScoreName}`,
+    })
+    await Promise.all([
+      guestPage.waitForResponse(
+        res =>
+          res.url().includes('/api/actions/template.vote') &&
+          res.status() === 200,
+      ),
+      upvoteHigh.click(),
+    ])
+
+    // Same search, Top instead of Latest: the design just voted up now
+    // outranks the one nobody voted on — an order Latest never showed.
+    await guestPage.goto('/app/templates')
+    await guestPage.getByRole('button', { name: 'Top' }).click()
+    await guestPage.getByRole('searchbox').fill(`Top Order ${stamp}`)
+    await expect(cards).toHaveCount(2)
+    await expect(cards.nth(0)).toContainText(highScoreName)
+    await expect(cards.nth(1)).toContainText(lowScoreName)
+  })
+
   await test.step('Mine shows only the caller’s own and shared designs', async () => {
     await guestPage.goto('/app/templates')
     await guestPage.getByRole('button', { name: 'Mine' }).click()
@@ -301,20 +360,32 @@ test('design templates page: browse, vote, mine, search, and manage designs (TMP
     await expect(
       guestPage.getByText(bulkName(BULK_COUNT), { exact: true }),
     ).toBeVisible()
-    await expect(guestPage.getByText(restrictedName)).not.toBeVisible()
+    // `publicName` is a real design this run made, public, and shown on
+    // Latest unfiltered — a query this narrow excluding it is the check
+    // worth making; `restrictedName` never shows up here regardless of
+    // whether search narrows anything at all, so asserting its absence
+    // could not have failed either way.
+    await expect(guestPage.getByText(publicName)).not.toBeVisible()
   })
 
   await test.step('infinite scroll loads a second page', async () => {
     await searchTemplatesPage(guestPage, `Bulk Design ${stamp}`)
     // Ten to a page (DISCOVER_PAGE_SIZE), newest first: #11 down to #02 are
     // on page one, and #01 — saved first, so ranked last — is not yet.
+    //
+    // `LoadMore`'s own IntersectionObserver can fire before this ever
+    // clicks anything — the trigger sits within its rootMargin the moment
+    // page one renders, in a real browser more readily than in a unit
+    // test — so #01 is never asserted absent here; a moment that happened
+    // to be read before the observer fired would make that pass by luck,
+    // not by proof. The button, once page one has settled, is the only
+    // trustworthy thing to wait on: if the observer already did the job,
+    // it is gone (exhausted) by the time this looks; if not, this clicks it.
     await expect(
       guestPage.getByText(bulkName(BULK_COUNT), { exact: true }),
     ).toBeVisible()
-    await expect(guestPage.getByText(bulkName(1), { exact: true })).toHaveCount(
-      0,
-    )
-    await guestPage.getByRole('button', { name: /load more/i }).click()
+    const loadMore = guestPage.getByRole('button', { name: /load more/i })
+    if (await loadMore.isVisible()) await loadMore.click()
     await expect(
       guestPage.getByText(bulkName(1), { exact: true }),
     ).toBeVisible()
@@ -354,6 +425,17 @@ test('design templates page: browse, vote, mine, search, and manage designs (TMP
     // of that, the same reasoning the Latest and Mine steps above use; its
     // own text also names the design, so a plain text-absence check here
     // would be exactly the same false pass those steps avoid.
+    await expect(ownerPage.getByText(/no matches for/i)).toBeVisible()
+
+    // A reload reads the server's own state, not whatever this page's
+    // client-side list still remembers — proving the delete was actually
+    // written, not merely hidden from this one render. Sort and search are
+    // component state, not carried in the URL (see the "sort in state, not
+    // the URL" note in DECISIONS.md), so both are set again after landing
+    // back on the plain, reset page.
+    await ownerPage.reload()
+    await ownerPage.getByRole('button', { name: 'Mine' }).click()
+    await ownerPage.getByRole('searchbox').fill(deletableName)
     await expect(ownerPage.getByText(/no matches for/i)).toBeVisible()
   })
 })

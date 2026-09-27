@@ -2453,7 +2453,7 @@ gained a `linkTo` prop (`{to, state}`) that renders a react-router `<Link>` in i
 `state.from` the same way a caller's own `navigate(to, {state})` would; `TemplateCard` forwards it, and
 `TemplateLibrary`'s own use is unchanged (no `linkTo`, so it still renders the radio it always has).
 
-### Round 2 (code review)
+### Round 2 (code review, TMPL-28)
 
 Fixes from the first review pass, beyond the two above.
 
@@ -2509,3 +2509,68 @@ screen, it names the query in its own text, so a plain `getByText(theQuery)` fin
 "visible" — the opposite of what the assertion was written to prove. Waiting for the "No matches" message
 first (itself the settled, positive proof) makes the followup checks either trustworthy or, in most cases,
 simply unnecessary.
+
+### Round 3 (slice 5's `onVote` threaded in during a rebase, plus a second review pass)
+
+**A duplicate-only "load more" response now returns the exact same `page` object, not a same-content copy.**
+`loadMore`'s own de-duplication (round 2) already dropped rows already on screen, but still built a fresh
+`{...prev, lectures: [...prev.lectures, ...appended]}` even when `appended` was empty — a new object every
+caller watching this value's identity (`LoadMore`'s effect, keyed on the `onLoadMore` callback that closes over
+it) reads as a change. In the degenerate case where a page keeps answering nothing new, that identity churn
+combines with `LoadMore`'s own `IntersectionObserver`, which fires on every (re)subscribe if its target is
+already in view — the button never leaves view when nothing was appended to push it down — into a tight
+refetch loop. Returning `prev` unchanged when there is nothing to append breaks the loop at its source rather
+than only shortening it.
+
+**A `remove()` racing an in-flight `loadMore()` is corrected by dropping rows off the front of the stale
+response, tracked via a ref reset at the start of each fetch.** Every row `remove()` can ever be called on is
+already on screen — a design's own Delete only appears on rows this page is currently showing — so it is
+always at a position before whatever offset the in-flight fetch used, and each one shifts that fetch's answer
+one row too far forward on the server's own ordered list. This is explicitly a heuristic, not a proven-correct
+fix for every possible interleaving of the two requests on the server (a genuine race could in principle have
+the fetch's own query execute either before or after the delete's write lands, and only one of those orderings
+is what dropping rows off the front actually corrects for) — noted as such in `useDiscover.ts`'s own comment.
+It is sufficient for the shape this repo's own callers produce: `remove()` is only ever called from inside a
+`template.delete` dispatch's own `.then()`, after that request has already finished, so by the time it can
+race a `loadMore()` fetch at all, that fetch's own request went out first and is simply still in flight — never
+the reverse order a fully general fix would also have to account for.
+
+**`patch(id, update)` rewrites one row of the loaded page in place, for a vote — wired from
+`DesignTemplatesPage`'s `TemplateCard`s via the `onVote` slice 5's rebase threaded through
+`TemplateLibrary`/`TemplateCard`/`VoteControl`.** Without it, casting a vote only updated `VoteControl`'s own
+local state, never the row `useDiscover` is holding — invisible as long as nothing ever re-reads that row from
+the hook's own state, which stopped being true the moment a sort change could land back on a page already
+fetched (see `useDiscover.patch`'s own doc comment): switching sort away and back shows that *cached* page
+again before its own fresh refetch has returned, and without `patch` that instant would flash the pre-vote
+counts the cached page still held. Tested at the hook level directly (`useDiscover.test.ts`, a new file — this
+hook had none before, only indirect coverage through `DeckFeed.test.tsx` and `DesignTemplatesPage.test.tsx`)
+and again at the page level, reproducing the exact cached-page-reuse window a mocked, never-resolving "Top"
+fetch leaves open.
+
+**`ConfirmDialog`'s `busy` now disables Cancel (and Escape/backdrop-close) too, not only Confirm — reversing
+round 2's stated reasoning that "closing on a request already sent is a display choice."** That reasoning
+undersold what closing does here: `onCancel` and `onConfirm` both drive the same caller state (this page's own
+`confirming`/`deleting`), and letting Cancel run while a delete is still in flight would race the two paths
+against each other in that shared state for no benefit a reader of the dialog could ever want — there is
+nothing to "cancel" once the request is already sent, and offering to only invites confusion about what,
+exactly, got cancelled.
+
+**Two of the e2e spec's own absence checks were replaced because they could not have failed.** Searching for
+`Bulk Design …` and then asserting `restrictedName` absent proved nothing — nothing about that design could
+ever appear under an unrelated query regardless of whether search narrowing worked at all; swapped for
+`publicName`, a real, public, un-matching design a broken "show everything public" implementation could
+plausibly have leaked in. And "Top reflects a vote" only ever checked one design's own count, never an order —
+which does not distinguish Top from Latest at all. Replaced with a real order check: two stamped designs
+(`highScoreName`/`lowScoreName`), created in an order that makes Latest sort them one way, with one voted up so
+Top sorts them the other way — the two sorts have to disagree for the check to mean anything.
+
+**The infinite-scroll step no longer asserts `#01` absent before clicking "Load more."** `LoadMore`'s own
+`IntersectionObserver` can fire before any manual click, in a real browser more readily than under jsdom, so an
+absence check timed against "whatever this render happens to be" could pass by luck rather than by proof. The
+step now waits for page one to settle, clicks the trigger only if it is still there (already gone means the
+observer got there first), and only ever asserts the positive: `#01` present once the second page is in.
+
+**The delete step reloads afterwards and re-asserts "No matches," rather than trusting the same render its own
+delete just resolved in.** Sort and query are page-local state, not carried in the URL (see round 2's own
+decision on that), so a plain reload lands back on Latest with an empty box — Mine and the design's own name
+are set again before the check means anything.
