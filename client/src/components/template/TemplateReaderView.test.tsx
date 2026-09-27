@@ -77,6 +77,7 @@ const template = (over: Partial<Template> = {}): Template => ({
   myRole: null,
   voteScore: 0,
   createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
   ...over,
 })
 
@@ -103,6 +104,7 @@ const richTemplate = (): Template => ({
   myRole: null,
   voteScore: 0,
   createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
   layouts: [
     {
       type: 'content',
