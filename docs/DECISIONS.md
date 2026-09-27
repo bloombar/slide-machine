@@ -2258,3 +2258,104 @@ narrow-screen picker, an outline row — a `<div role="button">`, which is what 
 button inside an inspector, all of which the fieldset already disables — or the new "Back to layout settings"
 control) rather than merely counted, so a stray new writable control would fail the same way a missing
 `readOnly` would.
+
+## Template voting UI (slice 5) (2026-09-27)
+
+Judgment calls the brief for TMPL-27's client left open.
+
+**`VoteControl` grew a `target`/`name`/`onChange`/`size` API rather than staying deck-only with a second,
+near-identical component for templates.** `deck.vote` and `template.vote` return the same `VoteResult` shape
+and differ only in which id field the request carries, so `target: {kind, id}` picks `deck.vote`/`deckId` or
+`template.vote`/`templateId` at the one place that matters — the request itself — and every other line (the
+optimistic shift, the revert on failure, the arrow rendering) stays shared rather than duplicated. `name` is
+new: the old component's aria labels were the bare English words "Upvote"/"Downvote", which a translated
+bundle cannot turn into "Upvote the lecture named X" without knowing what X is, so the caller now passes it
+and `vote.upNamed`/`vote.downNamed` interpolate it, in a new top-level `vote` namespace (`client/src/i18n/
+locales/*.json`) rather than folding it into `discover.*` or `template.*`, since the control is neither's.
+
+**`size="compact"` on `VoteControl`, and a matching `size` on `VoteCount`, rather than a second stripped-down
+component for the card.** The brief asked for "the same size as those icons" on a template card's icon row —
+`h-3.5 w-3.5`, `p-1`, no border — which is a purely visual variant of the same widget, not a different one:
+the dispatch, the optimistic update and the revert are identical to the page-level control, so branching on
+`size` inside the one component kept that logic in one place rather than two copies that could drift.
+
+**A card's cast vote is kept by `VoteControl` itself, not lifted into `TemplateLibrary` (round 2, replacing a
+first pass's `voteOverride` state).** The first pass mirrored `layoutAt`'s keyed-by-id override, but the
+override never actually did anything: nothing read it back into a request, and it only mattered if a
+re-render supplied *new* server-truth props the control was supposed to reconcile against — which
+`VoteControl` was not doing at all (see the next entry). Round 2 removes `voteOverride` outright and gives
+`VoteControl` its own prop-adopting effect instead, so the one component that owns the optimistic-cast/revert
+logic also owns "stay put through a stale re-render, adopt a genuinely new one" — `TemplateLibrary` just
+passes `template.votes` straight through. `TemplateEditorPage` still folds a cast vote into its own `template`
+state via `VoteControl`'s `onChange`, since that page needs the value for other reasons (the header re-renders
+against `template.votes` on every render, not just once on mount).
+
+**The icon row in `TemplateLibrary` now always renders, rather than only when `onDuplicate`/`onEdit`/
+`onDelete` apply.** Before this slice the row was conditional on having at least one of those three actions;
+a vote control or tally is now unconditional per card, so the row itself is unconditional too and the three
+buttons inside it stay individually conditional as before. In practice every caller (`TemplateDesignPanel`)
+always passes `onDuplicate`, so this is mostly a simplification rather than a behaviour change for real
+callers, but it does mean a bare `<TemplateLibrary templates={...} value={...} onChange={...}/>` (as some unit
+tests construct) now shows an icon row it previously would not have.
+
+**`TemplateEditorPage`'s header actions moved out of the `!canEdit` guard into their own always-rendered
+`<div>`, with Duplicate staying reader-only inside it.** The brief wants the vote (or the owner's tally) for
+readers *and* editors, and the original slot was written for readers alone (`TemplateEditorPage`'s own comment
+said as much). Restructuring around one wrapper that always renders, with only Duplicate still conditioned on
+`!canEdit`, keeps the "editor gets no Duplicate of their own here" rule from TMPL-29 rather than only widening
+the existing conditional to include editors, which would have handed Duplicate to editors too.
+
+**Account settings: `max-w-2xl` moved from the whole page onto each tab's own tabpanel (round 2, correcting a
+first pass that only narrowed General).** The first pass judged Privacy/Assistants/Plan's row-based panels
+fine unconstrained; a full-width render showed otherwise — the Plan tab's label and its badge ended up roughly
+1000px apart, and the Assistants tab's how-to text and its token field stretched the same way General's own
+fields would have. Design is the one tab whose content — a card grid with its own natural width — wants the
+full `max-w-5xl` `<main>` room; every other tab (General, Privacy, Assistants, Plan) now carries `max-w-2xl` on
+its own tabpanel — a `<section role="tabpanel">`, one per tab — rather than on the wrapper around all of them,
+which the Design tab would otherwise also inherit.
+
+### Round 2 (code review)
+
+**`VoteControl` adopts fresh `up`/`down`/`myVote` props once nothing is pending, via an effect that reads
+`pending` but does not list it as a dependency.** Round 1 shipped a control whose local state, once mounted,
+never looked at its props again — harmless as long as nothing above it ever re-supplied genuinely new counts,
+which stopped being true the moment `voteOverride` was removed from `TemplateLibrary` (see above): without
+this, a library reload after a duplicate, delete or import would show whatever this control happened to mount
+with. `pending` has to be read, not depended on: including it in the dependency array would re-run the effect
+the instant a vote's own response clears `pending`, and — since the caller's props have not caught up with
+that response yet — reapply the *old* props and silently undo what `cast` just wrote a moment before. The
+`react-hooks/set-state-in-effect` lint rule flags calling `setState` synchronously in an effect body on
+principle; suppressed the way `EditableText.tsx`'s placement effect already does (a wrapping
+`eslint-disable`/`eslint-enable` pair) rather than routed around, since adopting a prop change genuinely is
+the effect's whole job here.
+
+**`TemplateLibrary` grew `data-template-card={template.id}` on each card's outer wrapper, but the voting
+e2e spec ended up not needing it.** Every vote button's accessible name already carries the design's own name
+("Upvote {name}"), which is unique per card, so a Playwright spec can look a button up by its full name
+directly rather than by first scoping to a card's container — which would have needed this hook anyway, since
+the vote row sits beside `PreviewCard`'s radio, not inside it, and `radio.locator('..')` lands one level short
+of the card. Left in regardless: it is a one-line, structurally honest hook (the actual card boundary) for
+whatever the next thing scoped to one card turns out to be, template voting or otherwise.
+
+**`e2e/tests/template-voting.spec.ts` asserts a built-in's vote count as "+1 from whatever it already was",
+never as an absolute.** A built-in has no owner and no per-run identity — every account that has ever voted
+on it across every past run of this suite (the e2e database persists between runs) shares the same tally — so
+an absolute assertion would pass or fail depending on unrelated history. The design this test creates fresh is
+this test's alone, and its counts are asserted as absolutes.
+
+**The same spec waits on `template.vote`'s own response (`page.waitForResponse`) before reloading or
+navigating**, rather than trusting `aria-pressed` alone. `VoteControl` is optimistic — `aria-pressed` flips
+before the request lands — so a reload issued right after a click can cancel that request mid-flight and the
+"vote persisted across a reload" assertion would have been checking a vote that was never actually written.
+
+**`TemplateEditorPage`'s `save` now carries `votes`, `layoutCount` and `description` forward from `prev`, the
+same way it already carried `owner`.** `template.update` returns a bare `toTemplateDto`, not the batch-loaded
+`decorateTemplates` result `template.get`/`.list` use, so all three are absent from what it returns — the
+owner's vote tally would otherwise drop to 0 on the page the instant they saved any edit at all.
+
+**`DeckFeed.test.tsx` and `e2e/tests/voting-feed.spec.ts`'s exact `{ name: 'Upvote' }` locators became `{ name:
+/^Upvote/ }`.** The aria label now names what is being voted on ("Upvote {name}"), so an exact match on the
+old bare word would either never find the button that exists (a false failure) or, worse in the feed-list
+test's negative assertion, continue to report "absent" even if a vote control were mistakenly added there,
+since the button that *would* exist ("Upvote {title}") does not match "Upvote" exactly either — the check
+would keep passing for the wrong reason.

@@ -82,15 +82,16 @@ test('voting + discover feed: upvote persists, owner link, top sort', async ({
   await expect(guestPage.getByTestId('slide')).toBeVisible()
 
   // Up-vote from the fixed viewer widget: the up count becomes 1 and the arrow
-  // reads as active
-  const upvote = guestPage.getByRole('button', { name: 'Upvote' })
+  // reads as active. The aria label names the lecture (TMPL-27 — "Upvote
+  // {name}"), so this matches by prefix rather than the old bare "Upvote".
+  const upvote = guestPage.getByRole('button', { name: /^Upvote/ })
   await upvote.click()
   await expect(upvote).toHaveAttribute('aria-pressed', 'true')
   await expect(upvote).toContainText('1')
 
   // The vote persists across a reload
   await guestPage.reload()
-  const upvoteAfter = guestPage.getByRole('button', { name: 'Upvote' })
+  const upvoteAfter = guestPage.getByRole('button', { name: /^Upvote/ })
   await expect(upvoteAfter).toHaveAttribute('aria-pressed', 'true')
   await expect(upvoteAfter).toContainText('1')
 
@@ -114,7 +115,9 @@ test('voting + discover feed: upvote persists, owner link, top sort', async ({
   // The row reports how many voted (the guest's single up-vote), and offers
   // no way to vote from the list — voting happens inside the lecture
   await expect(row.getByText('1 vote')).toBeVisible()
-  await expect(feedAgain.getByRole('button', { name: 'Upvote' })).toHaveCount(0)
+  await expect(feedAgain.getByRole('button', { name: /^Upvote/ })).toHaveCount(
+    0,
+  )
 
   // The row credits its owner, and that name reaches their public profile
   // (SOC-2 discovery: you find a person through their work)

@@ -198,6 +198,31 @@ describe('TemplateEditorPage (TMPL-4)', () => {
     expect(screen.queryByText('back at the lecture')).toBeNull()
   })
 
+  // TMPL-27 round 2: `template.update` returns a bare `toTemplateDto`, with
+  // none of `decorateTemplates`' batch-loaded fields — `template.get`'s own
+  // `votes` must survive a save the same way `owner` already does, or the
+  // owner's tally would drop to 0 the moment they saved anything.
+  it('keeps the vote tally across a save, which `template.update` does not return', async () => {
+    const loaded = template({ votes: { up: 3, down: 1, myVote: 0 } })
+    const saved = template({ name: 'Renamed', votes: undefined })
+    vi.mocked(dispatchAction).mockImplementation((action: string) => {
+      if (action === 'template.get') return Promise.resolve(loaded)
+      if (action === 'template.list') return Promise.resolve([])
+      if (action === 'template.update') return Promise.resolve(saved)
+      if (action === 'template.shares') return Promise.resolve([])
+      return Promise.resolve({ urls: [] })
+    })
+    renderPage()
+
+    expect(await screen.findByText('4 votes')).toBeInTheDocument()
+    const name = await screen.findByLabelText('Template name')
+    fireEvent.change(name, { target: { value: 'Renamed' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await screen.findByTestId('template-saved')
+    expect(screen.getByText('4 votes')).toBeInTheDocument()
+  })
+
   it('shows a design belonging to someone else rather than editing it', async () => {
     withTemplate(
       template({
@@ -443,6 +468,80 @@ describe('TemplateEditorPage (TMPL-4)', () => {
 
     await screen.findByLabelText('Template name')
     expect(screen.queryByRole('button', { name: 'Duplicate' })).toBeNull()
+  })
+
+  // TMPL-27: the vote lands in the header slot readers and editors both
+  // see; the owner sees the tally that vote feeds instead of buttons.
+  it('shows a vote control to a reader, not a tally', async () => {
+    withTemplate(
+      template({
+        ownerId: 'u2',
+        owner: { id: 'u2', displayName: 'Bram' },
+        visibility: 'public',
+        myRole: null,
+        votes: { up: 3, down: 1, myVote: 0 },
+      }),
+    )
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'My Style', level: 1 })
+    expect(
+      screen.getByRole('button', { name: 'Upvote My Style' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('4 votes')).toBeNull()
+  })
+
+  it('shows a vote control to an editor, not only the owner', async () => {
+    withTemplate(
+      template({
+        ownerId: 'u2',
+        owner: { id: 'u2', displayName: 'Bram' },
+        visibility: 'restricted',
+        myRole: 'editor',
+        votes: { up: 2, down: 0, myVote: 0 },
+      }),
+    )
+    renderPage()
+
+    await screen.findByLabelText('Template name')
+    expect(
+      screen.getByRole('button', { name: 'Upvote My Style' }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows a tally, not buttons, to the design’s own owner', async () => {
+    withTemplate(template({ votes: { up: 3, down: 1, myVote: 0 } }))
+    renderPage()
+
+    await screen.findByLabelText('Template name')
+    expect(screen.getByText('4 votes')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Upvote My Style' })).toBeNull()
+  })
+
+  it('casts a vote from the design’s own page', async () => {
+    const loaded = template({
+      ownerId: 'u2',
+      owner: { id: 'u2', displayName: 'Bram' },
+      visibility: 'public',
+      myRole: null,
+      votes: { up: 0, down: 0, myVote: 0 },
+    })
+    vi.mocked(dispatchAction).mockImplementation((action: string) => {
+      if (action === 'template.get') return Promise.resolve(loaded)
+      if (action === 'template.list') return Promise.resolve([])
+      if (action === 'template.shares') return Promise.resolve([])
+      if (action === 'template.vote') {
+        return Promise.resolve({ up: 1, down: 0, voteScore: 1, myVote: 1 })
+      }
+      return Promise.resolve({ urls: [] })
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'My Style', level: 1 })
+    const up = screen.getByRole('button', { name: 'Upvote My Style' })
+    fireEvent.click(up)
+
+    await vi.waitFor(() => expect(up).toHaveAttribute('aria-pressed', 'true'))
   })
 
   // `TemplateReaderView` is keyed on `template.id`, so moving from one

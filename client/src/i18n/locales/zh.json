@@ -668,6 +668,10 @@
     "votesBreakdown": "{up} 赞成 · {down} 反对",
     "unknownOwner": "未知"
   },
+  "vote": {
+    "upNamed": "为{name}投赞成票",
+    "downNamed": "为{name}投反对票"
+  },
   "plan": {
     "tier": {
       "free": "免费版",

@@ -668,6 +668,10 @@
     "votesBreakdown": "{up} pour · {down} contre",
     "unknownOwner": "Inconnu"
   },
+  "vote": {
+    "upNamed": "Voter pour {name}",
+    "downNamed": "Voter contre {name}"
+  },
   "plan": {
     "tier": {
       "free": "Gratuite",

@@ -83,9 +83,12 @@ describe('DeckFeed', () => {
     await screen.findByText('Waves')
     // 4 up and 2 down is six people having voted
     expect(screen.getByText('6 votes')).toBeInTheDocument()
-    // No voting from the list — that happens inside the lecture
-    expect(screen.queryByRole('button', { name: 'Upvote' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Downvote' })).toBeNull()
+    // No voting from the list — that happens inside the lecture. Matched
+    // by prefix rather than the exact old "Upvote": the aria label now
+    // names what is being voted on ("Upvote {name}", TMPL-27), so an exact
+    // match would silently stop catching a stray vote control here.
+    expect(screen.queryByRole('button', { name: /^Upvote/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Downvote/ })).toBeNull()
   })
 
   it('refetches with the top sort when the Top tab is clicked', async () => {
