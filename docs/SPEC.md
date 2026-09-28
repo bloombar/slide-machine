@@ -822,6 +822,7 @@ Templates are up- and down-voted as lectures are ([SOC-1](#soc-1-voting)), built
 
 - **Latest** (the default) and **Top** list every public template, built-ins included, and rank them as lectures are ranked. **Mine** lists templates the caller owns or has been shared. Search applies within the chosen sort and matches the title, the creator's name, or the AI instructions.
 - Each template is drawn as in the Design tab: its name, a thumbnail whose layouts can be flipped through, and the action row ([TMPL-27](#tmpl-27-template-voting)). Anyone may duplicate a template. Edit and delete appear only on the caller's own templates.
+- An **Import a design** button sits in the same row as the page's heading, behaving exactly as the Design tab's own button does ([TMPL-8](#tmpl-8-template-import-from-google-slides)) — the same shared control, so a design is imported the same way wherever the button appears. In both places it opens the import options in a **modal dialog** rather than inline. A successful import here opens the new design's own page ([TMPL-29](#tmpl-29-a-templates-page-for-readers)), remembering this page as where its "Back" returns to.
 - Each card has room for more detail:
   - the creator's name, linking to their profile ([SOC-4](#soc-4-user-profiles)); omitted for built-ins
   - the number of layouts
@@ -831,6 +832,8 @@ Templates are up- and down-voted as lectures are ([SOC-1](#soc-1-voting)), built
 #### TMPL-29 A template's page for readers
 
 A reader who cannot edit a template sees everything its editor shows, but **read-only**: the name, visibility, AI instructions, and every layout with its boxes and each box's settings. Someone deciding whether to adopt or duplicate a design should not need edit access to learn how it is meant to be used. The page also carries the vote control and a duplicate action. Owners and editors see the editor as before ([TMPL-4](#tmpl-4-custom-templates-create--edit--save)).
+
+An **Export this design** button sits in the header, before the Duplicate button where one appears — anyone who can read the design at all (owner, editor or reader) gets it, since exporting a design one is only reading is exactly the point of taking it elsewhere. Clicking it opens a modal dialog with the export options ([EXP-6](#exp-6-template-export-to-google-slides)). Export now lives only here, not on the Design tabs that used to render it inline.
 
 ### 8. Live Lecture Capture
 
@@ -1251,6 +1254,8 @@ Google Slides has **no separate "template" file type** — a template there is s
 - The template's theme, per-layout geometry, and background images and logos are carried into the exported presentation, so the file stands on its own without referring back to this app.
 - Export is **round-trip compatible with [TMPL-8](#tmpl-8-template-import-from-google-slides)**: a template exported to Google Slides and imported back is materially the same template.
 - The `whiteboard` layout ([TMPL-7](#tmpl-7-whiteboard-layout)) is an app-only blank slate with no visual design to carry, so it is omitted from the export and re-synthesized on import.
+
+Export — as YAML ([EXP-2](#exp-2-standards-based-data-export)), as PowerPoint, or to Google Slides — lives on the design's own page ([TMPL-29](#tmpl-29-a-templates-page-for-readers)), open to anyone who can read it, rather than on any of the Design tabs that offer a design's library.
 
 #### EXP-7 Specialized content export fidelity
 

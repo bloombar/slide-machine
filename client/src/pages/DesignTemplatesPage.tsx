@@ -35,6 +35,7 @@ import {
   type DiscoverSource,
 } from '../components/discover/useDiscover'
 import TemplateCard from '../components/template/TemplateCard'
+import TemplateImportControl from '../components/template/TemplateImportControl'
 
 /** `template.feed` and `template.search` both answer `TemplatePage`
  * (`{items, hasMore}`) — the feed side of `useDiscover` already reads
@@ -200,7 +201,33 @@ export default function DesignTemplatesPage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-6 sm:py-8">
-      <h1 className="text-2xl font-bold">{t('templatesPage.heading')}</h1>
+      {/* Import behaves exactly as it does on the Design tab (TMPL-28): the
+          same shared control, opening in a dialog rather than a settings
+          form this page does not have, staying open with its own report
+          rather than navigating away underneath it. There is nothing here
+          to apply the import to the way the Design tab's picker does, so
+          the page switches to Mine instead — where the new design actually
+          lives — and clears any search, which would otherwise go on hiding
+          a design that does not happen to match it (round 2). Switching
+          sort or clearing the query, whichever actually changes, already
+          makes the page-one effect refetch on its own; `refresh()` only
+          covers the one case neither does — already on Mine with no search
+          active, where nothing about this action changes either input the
+          effect watches. An "Open design" action in the dialog itself is
+          the way from here to the new design's own page, the same one the
+          Design tab's copy gets from `TemplateImportControl`. */}
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">{t('templatesPage.heading')}</h1>
+        <TemplateImportControl
+          onImported={() => {
+            const alreadyMineNoQuery =
+              discover.sort === 'mine' && discover.query.trim() === ''
+            discover.setSort('mine')
+            discover.setQuery('')
+            if (alreadyMineNoQuery) discover.refresh()
+          }}
+        />
+      </div>
       {/* What a design template is for (TMPL-28): plain enough that a first-time
           visitor knows why a page of these exists before browsing them. */}
       <p className="mt-2 mb-4 text-sm text-slate-600">

@@ -40,9 +40,16 @@ import { isPptx, readAsBase64 } from '../../lib/import-file'
 
 export default function TemplateFileImport({
   onImported,
+  onSubmitStart,
 }: {
   /** The new template, so the caller can select it and reload the library. */
   onImported: (template: Template) => void
+  /** A new attempt is starting — before it is known to succeed or fail —
+   * for a caller tracking something about the *previous* attempt that a new
+   * one makes stale (`TemplateImportControl`'s own "Open design" action,
+   * which must not go on pointing at whatever the last successful import
+   * produced once a different file is being tried). */
+  onSubmitStart?: () => void
 }) {
   const { t } = useTranslation()
   const { tidy, setTidy, keepEverySlide } = useConsolidateChoice()
@@ -75,6 +82,7 @@ export default function TemplateFileImport({
   }
 
   const choose = async (file: File) => {
+    onSubmitStart?.()
     // Two kinds through one button, because to the instructor they are the
     // same errand. A PowerPoint file is bytes and travels as base64 — read as
     // text it would arrive as mangled nonsense, and the failure would surface

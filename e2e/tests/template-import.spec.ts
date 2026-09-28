@@ -96,6 +96,11 @@ test('template import: connect, pick a presentation, get a usable design', async
   await expect(imported).toBeVisible()
   await expect(imported).toHaveAttribute('aria-checked', 'true')
 
+  // Reviewing the report is done, so the dialog is closed deliberately —
+  // it stays open on success rather than closing underneath the report — to
+  // get at the library the backdrop was covering.
+  await page.getByRole('button', { name: 'Close', exact: true }).click()
+
   // And an editable one, at a permalink of its own, carrying the layouts the
   // import derived plus the blank slate every template owes (TMPL-7).
   await page.getByRole('button', { name: /^Edit Imported sample deck/ }).click()

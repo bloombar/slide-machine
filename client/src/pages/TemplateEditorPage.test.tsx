@@ -8,7 +8,13 @@
  * work asks first.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  within,
+} from '@testing-library/react'
 import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import type { Layout, LayoutNode, Template } from '@slide-machine/shared'
 import TemplateEditorPage from './TemplateEditorPage'
@@ -1057,6 +1063,119 @@ describe('TemplateEditorPage (TMPL-4)', () => {
       expect(
         await screen.findByText('landed:/app/templates sort:mine'),
       ).toBeInTheDocument()
+    })
+  })
+
+  // Export moved here from the Design tabs (EXP-6): the design's own page is
+  // where its owner, an editor, or a reader visiting it already are.
+  describe('export (EXP-6)', () => {
+    it('offers Export this design to the owner, sitting before the vote tally where Duplicate would be', async () => {
+      withTemplate(template({ myRole: 'owner' }))
+      renderPage()
+
+      await screen.findByLabelText('Template name')
+      const exportButton = screen.getByRole('button', {
+        name: 'Export this design',
+      })
+      // The owner's own tally (`VoteCount`), not vote buttons — read here by
+      // its text rather than a role, since it is a plain span.
+      const tally = screen.getByText(/\d+ votes?/)
+      expect(
+        exportButton.compareDocumentPosition(tally) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Duplicate' })).toBeNull()
+    })
+
+    it('offers Export this design to an editor, sitting before the vote control where Duplicate would be', async () => {
+      withTemplate(template({ myRole: 'editor' }))
+      renderPage()
+
+      await screen.findByLabelText('Template name')
+      const exportButton = screen.getByRole('button', {
+        name: 'Export this design',
+      })
+      const upvote = screen.getByRole('button', { name: /^Upvote/ })
+      expect(
+        exportButton.compareDocumentPosition(upvote) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Duplicate' })).toBeNull()
+    })
+
+    it('offers Export this design to a reader, sitting before Duplicate', async () => {
+      withTemplate(template({ myRole: null }))
+      renderPage()
+
+      await screen.findByText('My Style')
+      const buttons = screen.getAllByRole('button')
+      const exportIndex = buttons.findIndex(
+        b => b.textContent === 'Export this design',
+      )
+      const duplicateIndex = buttons.findIndex(
+        b => b.textContent === 'Duplicate',
+      )
+      expect(exportIndex).toBeGreaterThanOrEqual(0)
+      expect(duplicateIndex).toBeGreaterThan(exportIndex)
+    })
+
+    it('opens a dialog with the three export destinations', async () => {
+      withTemplate(template({ myRole: 'owner' }))
+      renderPage()
+
+      await screen.findByLabelText('Template name')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Export this design' }),
+      )
+
+      const dialog = screen.getByRole('dialog')
+      expect(
+        within(dialog).getByRole('button', { name: 'As YAML' }),
+      ).toBeVisible()
+      expect(
+        within(dialog).getByRole('button', { name: 'As PowerPoint' }),
+      ).toBeVisible()
+      expect(
+        within(dialog).getByRole('button', { name: 'As Google Slides' }),
+      ).toBeVisible()
+
+      // One heading inside the dialog, not the dialog's own plus
+      // `TemplateExportSection`'s own repeating it underneath — and nothing
+      // left over from the section's own top border, meant for sitting
+      // beneath other content on a Design tab that no longer exists.
+      expect(within(dialog).getAllByText('Export this design')).toHaveLength(1)
+    })
+
+    // An export always writes the last *saved* version — there is nothing
+    // else on the server to export — so unsaved edits are said, not silently
+    // dropped.
+    it('warns that unsaved changes will not be in the export', async () => {
+      withTemplate(template({ myRole: 'owner' }))
+      renderPage()
+
+      const name = await screen.findByLabelText('Template name')
+      expect(
+        screen.queryByRole('button', { name: 'Export this design' }),
+      ).toBeInTheDocument()
+
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Export this design' }),
+      )
+      expect(
+        screen.queryByText(/save first to include your changes/i),
+      ).not.toBeInTheDocument()
+      // Closing without changing anything leaves nothing dirty to warn about.
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+      fireEvent.change(name, { target: { value: 'Renamed' } })
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Export this design' }),
+      )
+      expect(
+        screen.getByText(/save first to include your changes/i),
+      ).toBeVisible()
     })
   })
 })

@@ -20,7 +20,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, X } from 'lucide-react'
 import {
   steppableLayouts,
   templateDescription,
@@ -34,7 +34,9 @@ import { useAuth } from '../auth/AuthContext'
 import { displayHandle } from '../lib/handle'
 import { templateName } from '../i18n/templateName'
 import AccessSettings from '../components/AccessSettings'
+import Modal from '../components/Modal'
 import TemplateEditor from '../components/template/TemplateEditor'
+import TemplateExportSection from '../components/template/TemplateExportSection'
 import TemplateReaderView from '../components/template/TemplateReaderView'
 import UnsavedChangesDialog from '../components/UnsavedChangesDialog'
 import VoteControl from '../components/VoteControl'
@@ -75,6 +77,10 @@ export default function TemplateEditorPage() {
     undefined,
   )
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
+  /** Whether the export dialog (EXP-6) is open. Its own logic lives entirely
+   * in `TemplateExportSection`, scoped to `template.id` — this page only
+   * owns whether the dialog is showing. */
+  const [exporting, setExporting] = useState(false)
   /** Where leaving would go, held while the author is asked about unsaved
    * work; null when nothing is pending. */
   const [leavingTo, setLeavingTo] = useState<string | null>(null)
@@ -342,12 +348,22 @@ export default function TemplateEditorPage() {
               </p>
             )}
           </div>
-          {/* The header row's own actions, at the right. A reader's
+          {/* The header row's own actions, at the right. Export sits before
+              Duplicate (EXP-6): anyone who can read the design — owner,
+              editor or reader — gets it, so it takes Duplicate's own place in
+              the row when there is no Duplicate to sit left of. A reader's
               Duplicate sits left of the vote (TMPL-27); an editor gets no
               Duplicate here (`TemplateDesignPanel`'s library already offers
               it), only the vote. The owner sees the tally everyone else's
               vote feeds, not buttons to vote on their own work. */}
           <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setExporting(true)}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              {t('template.exportHeading')}
+            </button>
             {!canEdit && (
               <button
                 type="button"
@@ -498,6 +514,35 @@ export default function TemplateEditorPage() {
           }}
           onCancel={() => setLeavingTo(null)}
         />
+      )}
+
+      {/* Export lives on the design's own page (EXP-6), not the Design tabs
+          that used to render it inline — a design's page is where its
+          author, an editor, or a reader visiting it already are. Reuses
+          `TemplateExportSection` rather than rewriting its logic. */}
+      {exporting && (
+        <Modal
+          onClose={() => setExporting(false)}
+          ariaLabel={t('template.exportHeading')}
+          size="md"
+        >
+          <header className="mb-3 flex items-start justify-between">
+            <h2 className="text-lg font-bold">{t('template.exportHeading')}</h2>
+            <button
+              type="button"
+              aria-label={t('common.close')}
+              onClick={() => setExporting(false)}
+              className="rounded-md p-2 text-slate-500 hover:text-slate-900"
+            >
+              <X className="h-5 w-5" aria-hidden />
+            </button>
+          </header>
+          <TemplateExportSection
+            templateId={template.id}
+            bare
+            hasUnsavedChanges={dirty}
+          />
+        </Modal>
       )}
     </div>
   )

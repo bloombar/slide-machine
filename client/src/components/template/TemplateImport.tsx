@@ -66,10 +66,19 @@ export interface ImportSource {
 
 export default function TemplateImport({
   onImported,
+  onSubmitStart,
   otherSources,
+  alwaysOpen = false,
+  onRequestClose,
 }: {
   /** The new template, so the caller can select it and reload the library. */
   onImported: (template: Template) => void
+  /** A new attempt is starting — before it is known to succeed or fail —
+   * for a caller tracking something about the *previous* attempt that a new
+   * one makes stale (`TemplateImportControl`'s own "Open design" action,
+   * which must not go on pointing at whatever the last successful import
+   * produced once a different presentation is being tried). */
+  onSubmitStart?: () => void
   /**
    * The other ways a design arrives — a template file, or one kept in Drive
    * (EXP-3) — shown inside this panel rather than beside it.
@@ -80,9 +89,20 @@ export default function TemplateImport({
    * panel, and the tab has one button for it.
    */
   otherSources?: React.ReactNode
+  /**
+   * Skips the collapsed button state (TMPL-28/TMPL-29): `TemplateImportControl`
+   * already opens this inside a dialog for the same reason a collapsed
+   * button exists elsewhere — staying out of the way until asked for — so
+   * there is nothing left here to collapse to.
+   */
+  alwaysOpen?: boolean
+  /** Closes whatever opened this when `alwaysOpen`, since there is no local
+   * collapsed state for Cancel to fall back to. */
+  onRequestClose?: () => void
 }) {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
+  const [openState, setOpenState] = useState(false)
+  const open = alwaysOpen || openState
   /** The file chosen in Google's picker, waiting to be imported. */
   const [picked, setPicked] = useState<PickedDriveItem | null>(null)
   const [picking, setPicking] = useState(false)
@@ -110,6 +130,7 @@ export default function TemplateImport({
   const submit = (event: React.FormEvent) => {
     event.preventDefault()
     if (!source || busy) return
+    onSubmitStart?.()
     setBusy(true)
     setError(null)
     setReport(null)
@@ -188,7 +209,7 @@ export default function TemplateImport({
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => setOpenState(true)}
         className="mt-4 inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
       >
         <Upload className="h-4 w-4" aria-hidden="true" />
@@ -233,7 +254,8 @@ export default function TemplateImport({
         <button
           type="button"
           onClick={() => {
-            setOpen(false)
+            if (alwaysOpen) onRequestClose?.()
+            else setOpenState(false)
             setError(null)
             setReport(null)
             setPicked(null)

@@ -36,7 +36,6 @@ import {
 import { dispatchAction } from '../api/actions'
 import { patchTemplateVote } from '../lib/templateVotes'
 import TemplateDesignPanel from './template/TemplateDesignPanel'
-import TemplateExportSection from './template/TemplateExportSection'
 import TemplateUpdateNotice from './template/TemplateUpdateNotice'
 import AccessSettings from './AccessSettings'
 import QuizPanel from './QuizPanel'
@@ -954,7 +953,6 @@ export default function DeckSettingsModal({
             onLibraryChanged={loadTemplates}
             onVote={onVote}
           />
-          <TemplateExportSection templateId={deck.templateId} />
         </section>
       )}
 

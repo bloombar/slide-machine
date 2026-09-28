@@ -290,20 +290,19 @@ describe('ProjectSettingsModal — Design tab', () => {
     expect(body).toEqual({ projectId: 'p1', templateId: 'seminar' })
   })
 
-  // The parity the tab used to lack: the lecture's Design tab could take a
-  // design out as a file or into Drive, and the project's could not.
-  it('offers the same three exports the lecture’s Design tab offers', async () => {
+  // Export moved to the design's own page (EXP-6): the tab no longer
+  // renders it inline.
+  it('no longer offers exports inline — that moved to the design’s own page', async () => {
     mockFetchRoutes({
       '/api/actions/template.list': () => ({ status: 200, body: templates }),
     })
     openDesign()
 
-    expect(await screen.findByText('Export this design')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'As YAML' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'As PowerPoint' })).toBeVisible()
+    await screen.findByText(/Import a design/i)
+    expect(screen.queryByText('Export this design')).not.toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: 'As Google Slides' }),
-    ).toBeVisible()
+      screen.queryByRole('button', { name: 'As YAML' }),
+    ).not.toBeInTheDocument()
   })
 
   it('moves along the tab strip with the arrow keys', () => {

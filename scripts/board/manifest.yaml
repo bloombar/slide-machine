@@ -2431,7 +2431,11 @@
     boxes and each box's settings. Someone deciding whether to adopt or
     duplicate a design should not need edit access to learn how it is meant to
     be used. The page also carries the vote control and a duplicate action.
-    Owners and editors see the editor as before (TMPL-4)."
+    Owners and editors see the editor as before (TMPL-4). An Export this design
+    button sits in the header, before the Duplicate button where one appears —
+    anyone who can read the design at all (owner, editor or reader) gets it,
+    since exporting a design one is only reading is exactly the point of taking
+    it elsewhere. Clicking it opens a…"
   section: §7 Style Template Library
   family: TMPL
   phase: 3

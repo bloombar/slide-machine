@@ -855,6 +855,21 @@ describe('DeckSettingsModal — new-slide overrides (GEN-8)', () => {
     expect(designTab).toHaveFocus()
   })
 
+  // Export moved to the design's own page (EXP-6): the Design tab no longer
+  // renders it inline.
+  it('no longer offers exports on the Design tab', async () => {
+    mockFetchRoutes({
+      '/api/actions/template.list': () => ({ status: 200, body: [] }),
+    })
+    renderModal({}, { viewerIsAdmin: true })
+    fireEvent.click(screen.getByRole('tab', { name: 'Design' }))
+    await screen.findByText(/Import a design/i)
+    expect(screen.queryByText('Export this design')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'As YAML' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('shows three checkboxes checked by default (unset = on) and overflow unchecked (unset = off, GEN-8)', () => {
     mockFetchRoutes({
       '/api/actions/template.list': () => ({ status: 200, body: [] }),

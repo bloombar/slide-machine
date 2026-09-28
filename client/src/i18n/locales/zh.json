@@ -496,6 +496,7 @@
     "exportSlidesConnect": "连接 Google 账户后即可把设计保存到云端硬盘。",
     "exportHeading": "导出这个设计",
     "exportHint": "以文件形式带走，或存到你的 Google 云端硬盘，成为一份以它的版式为版式的演示文稿。",
+    "exportUnsavedNotice": "导出的是最近一次保存的版本——请先保存以包含你的更改。",
     "exportAsYaml": "导出为 YAML",
     "exportAsPptx": "导出为 PowerPoint",
     "exportToSlides": "导出为 Google Slides",
@@ -530,7 +531,8 @@
       "connectPrompt": "连接 Google 账号，以便读取你云端硬盘中的演示文稿。",
       "connect": "连接 Google",
       "otherSources": "或上传文件",
-      "choose": "从 Google 云端硬盘中选择"
+      "choose": "从 Google 云端硬盘中选择",
+      "openDesign": "打开设计"
     },
     "fileImport": {
       "open": "导入设计文件（.yaml 或 .pptx）",

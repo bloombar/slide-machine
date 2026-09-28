@@ -4,10 +4,10 @@
  * colleague reads, or a Google Slides presentation in Drive to keep working
  * in.
  *
- * Shared by the lecture, project and account Design tabs so a design is
- * exported the same way wherever it is chosen. Everything here is scoped to a
- * template id and nothing else, which is why it can be: the lecture that
- * opened the tab is not part of what gets written.
+ * Mounted inside a modal dialog on a design's own page (EXP-6) — the Design
+ * tabs it used to sit inline on no longer render it. Everything here is
+ * scoped to a template id and nothing else, which is why it travels: the
+ * lecture or dialog that hosts it is not part of what gets written.
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -25,9 +25,21 @@ import DrivePicker from '../DrivePicker'
 
 export default function TemplateExportSection({
   templateId,
+  bare = false,
+  hasUnsavedChanges = false,
 }: {
   /** The design to export. */
   templateId: string
+  /** Drops the section's own heading, hint paragraph and top border (EXP-6):
+   * the export dialog on a design's own page already supplies a heading of
+   * its own, and showing both read as the same thing said twice, with a
+   * stray separator line above nothing. */
+  bare?: boolean
+  /** True when the editor holds edits since the last save. An export always
+   * writes the last *saved* version — there is nothing else on the server to
+   * export — so this says so rather than letting an author assume the
+   * download reflects what they are still looking at. */
+  hasUnsavedChanges?: boolean
 }) {
   const { t } = useTranslation()
   const [pickingFolder, setPickingFolder] = useState(false)
@@ -82,13 +94,23 @@ export default function TemplateExportSection({
   }
 
   return (
-    <div className="mt-6 border-t border-slate-100 pt-4">
-      <h3 className="text-sm font-medium text-slate-700">
-        {t('template.exportHeading')}
-      </h3>
-      <p className="mt-1 mb-3 text-xs text-slate-500">
-        {t('template.exportHint')}
-      </p>
+    <div className={bare ? '' : 'mt-6 border-t border-slate-100 pt-4'}>
+      {!bare && (
+        <>
+          <h3 className="text-sm font-medium text-slate-700">
+            {t('template.exportHeading')}
+          </h3>
+          <p className="mt-1 mb-3 text-xs text-slate-500">
+            {t('template.exportHint')}
+          </p>
+        </>
+      )}
+
+      {hasUnsavedChanges && (
+        <p className="mb-3 text-xs text-amber-700">
+          {t('template.exportUnsavedNotice')}
+        </p>
+      )}
 
       {pickingFolder ? (
         <DrivePicker

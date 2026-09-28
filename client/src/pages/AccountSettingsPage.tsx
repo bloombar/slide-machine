@@ -64,7 +64,6 @@ import EmailVerificationNotice from '../components/EmailVerificationNotice'
 import ConnectedAssistantsPanel from '../components/ConnectedAssistantsPanel'
 import { getAgentAccessEnabled, getDefaultTemplateId } from '../runtime-config'
 import TemplateDesignPanel from '../components/template/TemplateDesignPanel'
-import TemplateExportSection from '../components/template/TemplateExportSection'
 import { patchTemplateVote } from '../lib/templateVotes'
 
 /** One settings change, as the account itself holds it: an absent
@@ -670,7 +669,6 @@ export default function AccountSettingsPage() {
                 onLibraryChanged={loadTemplates}
                 onVote={onVote}
               />
-              <TemplateExportSection templateId={accountTemplateId} />
             </section>
           )}
 

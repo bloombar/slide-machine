@@ -39,7 +39,6 @@ import LanguageSelect from './LanguageSelect'
 import VoiceSelect from './VoiceSelect'
 import { getTtsEnabled } from '../runtime-config'
 import TemplateDesignPanel from './template/TemplateDesignPanel'
-import TemplateExportSection from './template/TemplateExportSection'
 
 /** The tabs in order; each id also keys its label under
  * `deck.settings.tabs.<id>` — the same names the lecture settings use. */
@@ -241,7 +240,6 @@ export default function ProjectSettingsModal({
             }}
             onVote={onVote}
           />
-          <TemplateExportSection templateId={project.templateId} />
         </section>
       )}
 

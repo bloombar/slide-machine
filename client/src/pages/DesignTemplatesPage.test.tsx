@@ -10,6 +10,7 @@ import {
   fireEvent,
   cleanup,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import type { Template } from '@slide-machine/shared'
@@ -537,6 +538,258 @@ describe('DesignTemplatesPage votes (TMPL-28 round 3)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Latest' }))
 
     expect(upvote()).toHaveTextContent('1')
+  })
+})
+
+describe('DesignTemplatesPage import (TMPL-28)', () => {
+  // The page has no settings form of its own to unfold an import panel
+  // inside, so the same shared control the Design tab uses opens it in a
+  // dialog instead — never inline on the page.
+  it('offers Import a design in the header row, opening a dialog rather than inline options', async () => {
+    mockDispatch.mockResolvedValue({ items: [template()], hasMore: false })
+    renderPage()
+    await screen.findByText('Shipped')
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Choose from Google Drive' }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /^Import a design$/i }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toBeInTheDocument()
+    expect(
+      within(dialog).getByRole('button', { name: 'Choose from Google Drive' }),
+    ).toBeVisible()
+  })
+
+  // After a successful import, the page does what the Design tab does,
+  // adapted to a page rather than a picker: the dialog stays open with its
+  // report, exactly as the Design tab's import already does, rather than
+  // navigating away underneath it — there is nothing here to apply the
+  // import to in place, so the page switches to Mine (where the new design
+  // now lives) and refreshes it instead. The report's own "Open design"
+  // action is the way from here to the new design's page.
+  it('keeps the dialog open with its report, switches to Mine and shows the import there, and opens the design on request', async () => {
+    const imported = template({
+      id: 'imp-1',
+      permalinkSlug: 'imported-ab12',
+      name: 'Imported',
+      ownerId: 'u1',
+      myRole: 'owner',
+    })
+    mockDispatch.mockImplementation(async (name: string, input) => {
+      if (name === 'template.feed') {
+        const { sort } = input as { sort: string }
+        return sort === 'mine'
+          ? { items: [imported], hasMore: false }
+          : { items: [template()], hasMore: false }
+      }
+      if (name === 'drive.importables')
+        return {
+          folders: [],
+          files: [
+            {
+              id: 'p1',
+              name: 'Photosynthesis',
+              mimeType: 'application/vnd.google-apps.presentation',
+            },
+          ],
+        }
+      if (name === 'template.importFromSlides')
+        return {
+          template: imported,
+          report: { slidesRead: 1, layoutsCreated: 1, approximated: 0 },
+        }
+      throw new Error(`unexpected action ${name}`)
+    })
+    renderPage()
+    await screen.findByText('Shipped')
+
+    fireEvent.click(screen.getByRole('button', { name: /^Import a design$/i }))
+    const dialog = screen.getByRole('dialog')
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Choose from Google Drive' }),
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: /photosynthesis/i }),
+    )
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Import design' }),
+    )
+
+    // The report is still on screen — the dialog did not navigate away.
+    expect(
+      await within(dialog).findByTestId('import-report'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/^landed:/)).toBeNull()
+
+    // Mine is now the active sort, and shows the design that just arrived.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Mine' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      ),
+    )
+    expect(await screen.findByText('Imported')).toBeInTheDocument()
+
+    // The report's own action still opens the new design's page, remembering
+    // this page as where "Back" returns to.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Open design' }))
+    expect(
+      await screen.findByText('landed:/t/imported-ab12 from:/app/templates'),
+    ).toBeInTheDocument()
+  })
+
+  // The only branch the test above never reaches: already on Mine with no
+  // search active, where neither `setSort('mine')` nor `setQuery('')` change
+  // anything the page-one effect watches — `refresh()` is the only thing
+  // that makes the newly imported design show up at all.
+  it('refreshes Mine directly when an import lands while already there', async () => {
+    const before = template({
+      id: 'before-1',
+      permalinkSlug: 'before',
+      name: 'Before',
+      ownerId: 'u1',
+      myRole: 'owner',
+    })
+    const imported = template({
+      id: 'imp-2',
+      permalinkSlug: 'imported-cd34',
+      name: 'Imported Two',
+      ownerId: 'u1',
+      myRole: 'owner',
+    })
+    let mineCalls = 0
+    mockDispatch.mockImplementation(async (name: string, input) => {
+      if (name === 'template.feed') {
+        const { sort } = input as { sort: string }
+        if (sort === 'mine') {
+          mineCalls += 1
+          return mineCalls === 1
+            ? { items: [before], hasMore: false }
+            : { items: [before, imported], hasMore: false }
+        }
+        return { items: [template()], hasMore: false }
+      }
+      if (name === 'drive.importables')
+        return {
+          folders: [],
+          files: [
+            {
+              id: 'p1',
+              name: 'Photosynthesis',
+              mimeType: 'application/vnd.google-apps.presentation',
+            },
+          ],
+        }
+      if (name === 'template.importFromSlides')
+        return {
+          template: imported,
+          report: { slidesRead: 1, layoutsCreated: 1, approximated: 0 },
+        }
+      throw new Error(`unexpected action ${name}`)
+    })
+    renderPageWithState({ sort: 'mine' })
+    await screen.findByText('Before')
+    expect(screen.getByRole('button', { name: 'Mine' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /^Import a design$/i }))
+    const dialog = screen.getByRole('dialog')
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Choose from Google Drive' }),
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: /photosynthesis/i }),
+    )
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Import design' }),
+    )
+
+    await within(dialog).findByTestId('import-report')
+    expect(await screen.findByText('Imported Two')).toBeInTheDocument()
+    expect(mineCalls).toBe(2)
+  })
+
+  // A search active on Mine when an import lands would otherwise go on
+  // hiding a design that does not happen to match it — refreshing re-runs
+  // the very search that hid it, rather than the plain Mine list an author
+  // switched to Mine to see. Clearing the query is what actually fixes it.
+  it('clears an active search after an import, rather than re-running it', async () => {
+    const nonMatching = template({
+      id: 'nm-1',
+      permalinkSlug: 'nm',
+      name: 'Something Else',
+      ownerId: 'u1',
+      myRole: 'owner',
+    })
+    const imported = template({
+      id: 'imp-3',
+      permalinkSlug: 'imported-ef56',
+      name: 'Imported Three',
+      ownerId: 'u1',
+      myRole: 'owner',
+    })
+    mockDispatch.mockImplementation(async (name: string, input) => {
+      if (name === 'template.search')
+        return { items: [nonMatching], hasMore: false }
+      if (name === 'template.feed') {
+        const { sort } = input as { sort: string }
+        return sort === 'mine'
+          ? { items: [nonMatching, imported], hasMore: false }
+          : { items: [template()], hasMore: false }
+      }
+      if (name === 'drive.importables')
+        return {
+          folders: [],
+          files: [
+            {
+              id: 'p1',
+              name: 'Photosynthesis',
+              mimeType: 'application/vnd.google-apps.presentation',
+            },
+          ],
+        }
+      if (name === 'template.importFromSlides')
+        return {
+          template: imported,
+          report: { slidesRead: 1, layoutsCreated: 1, approximated: 0 },
+        }
+      throw new Error(`unexpected action ${name}`)
+    })
+    renderPageWithState({ sort: 'mine' })
+    await screen.findByText('Something Else')
+
+    fireEvent.change(searchBox(), { target: { value: 'nomatch' } })
+    await waitFor(() =>
+      expect(mockDispatch).toHaveBeenCalledWith(
+        'template.search',
+        expect.objectContaining({ q: 'nomatch' }),
+      ),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /^Import a design$/i }))
+    const dialog = screen.getByRole('dialog')
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Choose from Google Drive' }),
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: /photosynthesis/i }),
+    )
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Import design' }),
+    )
+
+    await within(dialog).findByTestId('import-report')
+
+    // The search box itself is cleared, and the newly imported design shows
+    // — a search that never matched it would otherwise still be hiding it.
+    expect(searchBox()).toHaveValue('')
+    expect(await screen.findByText('Imported Three')).toBeInTheDocument()
   })
 })
 

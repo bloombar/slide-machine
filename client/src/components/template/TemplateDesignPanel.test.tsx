@@ -13,6 +13,7 @@ import {
   fireEvent,
   cleanup,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import type { Layout, LayoutNode, Template } from '@slide-machine/shared'
@@ -171,5 +172,24 @@ describe('TemplateDesignPanel (TMPL-4)', () => {
     expect(
       screen.getByText('landed:/t/my-style-ab12 from:/d/lecture-1'),
     ).toBeInTheDocument()
+  })
+
+  // TMPL-28: import used to unfold inline beneath the library; it now opens
+  // in a dialog, the same shared control the Design templates page uses.
+  it('opens Import a design in a dialog, not inline', () => {
+    renderPanel()
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Choose from Google Drive' }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /^Import a design$/i }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toBeInTheDocument()
+    expect(
+      within(dialog).getByRole('button', { name: 'Choose from Google Drive' }),
+    ).toBeVisible()
   })
 })
