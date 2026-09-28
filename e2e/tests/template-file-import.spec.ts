@@ -38,15 +38,15 @@ test('template round trip: export a design to a file, import it back', async ({
   // (TMPL-24).
   await chooseAccountDesign(page, /classic/i)
 
-  // Exporting a design lives on its own page (EXP-6), reached here as a
-  // plain link from the Design templates page — a built-in is readable, so
-  // it exports like any other, and starting from one keeps the round trip
-  // about the file rather than about how a template came to exist.
-  await page.goto('/app/templates')
-  await page
-    .getByRole('link', { name: /classic/i })
-    .first()
-    .click()
+  // Exporting a design lives on its own page (EXP-6) — a built-in is
+  // readable, so it exports like any other, and starting from one keeps the
+  // round trip about the file rather than about how a template came to
+  // exist. Reached directly by its permalink, not through the Design
+  // templates page: built-ins sort after every stored public design there
+  // and the e2e database persists across runs, so Classic drops off page
+  // one long before this spec ever runs (a built-in's permalink is its id,
+  // template-reader.spec.ts's own `/t/classic`).
+  await page.goto('/t/classic')
   await expect(page).toHaveURL(/\/t\//)
   await page.getByRole('button', { name: 'Export this design' }).click()
   const exportDialog = page.getByRole('dialog', { name: 'Export this design' })
@@ -61,7 +61,9 @@ test('template round trip: export a design to a file, import it back', async ({
 
   // Import that same file back, from a lecture's own Design tab this time —
   // the same shared import control, opening in a dialog rather than inline
-  // (TMPL-28).
+  // (TMPL-28). `createProject` needs the home screen's own "Create new"
+  // menu, which the design's page just left behind.
+  await page.goto('/app')
   await createProject(page, projectName)
   await page
     .getByRole('button', { name: `Start a new lecture in ${projectName}` })

@@ -49,6 +49,36 @@ describe('TemplateExportSection', () => {
     ).toBeVisible()
   })
 
+  // `bare` (EXP-6): a caller with a heading of its own — the export dialog
+  // on a design's own page — does not want this section's own heading, hint,
+  // or the top border/margin meant for sitting beneath other content on a
+  // Design tab.
+  it('shows its own heading by default, and drops it when told it is bare', () => {
+    const { rerender } = render(<TemplateExportSection templateId="t1" />)
+    expect(screen.getByText('Export this design')).toBeVisible()
+    expect(screen.getByText(/take it out as a file/i)).toBeVisible()
+
+    rerender(<TemplateExportSection templateId="t1" bare />)
+    expect(screen.queryByText('Export this design')).not.toBeInTheDocument()
+    expect(screen.queryByText(/take it out as a file/i)).not.toBeInTheDocument()
+    // The buttons themselves are unaffected either way.
+    expect(screen.getByRole('button', { name: 'As YAML' })).toBeVisible()
+  })
+
+  // hasUnsavedChanges (EXP-6): an export always writes the last *saved*
+  // version, so unsaved edits are said, not silently dropped.
+  it('warns only when told there are unsaved changes', () => {
+    const { rerender } = render(<TemplateExportSection templateId="t1" />)
+    expect(
+      screen.queryByText(/save first to include your changes/i),
+    ).not.toBeInTheDocument()
+
+    rerender(<TemplateExportSection templateId="t1" hasUnsavedChanges />)
+    expect(
+      screen.getByText(/save first to include your changes/i),
+    ).toBeVisible()
+  })
+
   it('downloads the named design as YAML', async () => {
     const file = { filename: 'x.yaml', contentType: 'text/yaml', content: 'a' }
     mockDispatch.mockResolvedValue(file as never)

@@ -14,8 +14,15 @@
  * appeared. The caller still hears about the new template right away, for
  * whatever "just imported one" means to it — closing the dialog is a
  * separate, deliberate step the author takes once they are done reading.
+ *
+ * An "Open design" action appears once the import lands, alongside the
+ * report — for a caller with nothing of its own to apply the import to
+ * (the Design templates page, TMPL-28), this is the only way in from here
+ * to the new design's own page; a caller that already applies it in place
+ * (the Design tab) can use it just as well to jump straight to editing.
  */
 import { useState } from 'react'
+import { useLocation, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import { Upload, X } from 'lucide-react'
 import type { Template } from '@slide-machine/shared'
@@ -31,13 +38,30 @@ export default function TemplateImportControl({
   onImported: (template: Template) => void
 }) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [open, setOpen] = useState(false)
+  // The design an import just produced, kept only for the "Open design"
+  // action below — cleared whenever the dialog (re)opens, so a stale one
+  // from a previous visit can never show before this one has imported
+  // anything of its own.
+  const [imported, setImported] = useState<Template | null>(null)
+
+  const openDialog = () => {
+    setImported(null)
+    setOpen(true)
+  }
+
+  const handleImported = (template: Template) => {
+    setImported(template)
+    onImported(template)
+  }
 
   return (
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={openDialog}
         className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
       >
         <Upload className="h-4 w-4" aria-hidden="true" />
@@ -63,9 +87,25 @@ export default function TemplateImportControl({
           <TemplateImport
             alwaysOpen
             onRequestClose={() => setOpen(false)}
-            onImported={onImported}
-            otherSources={<TemplateFileImport onImported={onImported} />}
+            onImported={handleImported}
+            otherSources={<TemplateFileImport onImported={handleImported} />}
           />
+          {imported && (
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false)
+                  void navigate(`/t/${imported.permalinkSlug}`, {
+                    state: { from: location.pathname },
+                  })
+                }}
+                className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white"
+              >
+                {t('template.import.openDesign')}
+              </button>
+            </div>
+          )}
         </Modal>
       )}
     </>

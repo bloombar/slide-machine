@@ -496,6 +496,7 @@
     "exportSlidesConnect": "Подключите аккаунт Google, чтобы сохранять дизайны на Диск.",
     "exportHeading": "Экспорт этого дизайна",
     "exportHint": "Заберите его файлом или на Google Диск — презентацией, макеты которой это его макеты.",
+    "exportUnsavedNotice": "Экспортируется последняя сохранённая версия — сначала сохраните, чтобы включить изменения.",
     "exportAsYaml": "В YAML",
     "exportAsPptx": "Как PowerPoint",
     "exportToSlides": "В Google Slides",
@@ -530,7 +531,8 @@
       "connectPrompt": "Подключите аккаунт Google, чтобы прочитать презентацию с вашего Диска.",
       "connect": "Подключить Google",
       "otherSources": "Или загрузите файл",
-      "choose": "Выбрать в Google Диске"
+      "choose": "Выбрать в Google Диске",
+      "openDesign": "Открыть дизайн"
     },
     "fileImport": {
       "open": "Импортировать файл дизайна (.yaml или .pptx)",

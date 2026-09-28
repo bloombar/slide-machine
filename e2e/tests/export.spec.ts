@@ -95,13 +95,12 @@ test('export a design to Google Slides in Drive (EXP-6)', async ({ page }) => {
   await settingsDialog.getByRole('button', { name: 'Connect Google' }).click()
   await settingsDialog.getByRole('button', { name: 'Close settings' }).click()
 
-  // Export lives on the design's own page (EXP-6), reached as a plain link
-  // from the Design templates page.
-  await page.goto('/app/templates')
-  await page
-    .getByRole('link', { name: /nyu elegant/i })
-    .first()
-    .click()
+  // Export lives on the design's own page (EXP-6), reached directly by its
+  // permalink rather than through the Design templates page: built-ins sort
+  // after every stored public design there and the e2e database persists
+  // across runs, so NYU Elegant drops off page one long before this spec
+  // ever runs (a built-in's permalink is its id).
+  await page.goto('/t/nyu-elegant')
   await expect(page).toHaveURL(/\/t\//)
 
   await page.getByRole('button', { name: 'Export this design' }).click()

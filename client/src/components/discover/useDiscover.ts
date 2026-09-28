@@ -161,6 +161,13 @@ export interface Discover<
    * holds, even though the control that cast the vote already moved on.
    */
   patch: (id: string, update: (item: T) => T) => void
+  /**
+   * Refetches page one under the *current* sort and query (TMPL-28), for a
+   * caller whose own action added a row this list should now show — an
+   * import landing on "Mine", say — where the sort is not changing, so the
+   * page-one effect above has nothing to react to on its own.
+   */
+  refresh: () => void
 }
 
 export function useDiscover<
@@ -279,6 +286,15 @@ export function useDiscover<
     )
   }, [])
 
+  const refresh = useCallback(() => {
+    fetchPage(source, sort, q, 0)
+      .then(res => {
+        setPage({ sort, q, ...res })
+        setError(false)
+      })
+      .catch(() => setError(true))
+  }, [source, sort, q])
+
   return {
     sort,
     setSort,
@@ -291,5 +307,6 @@ export function useDiscover<
     loadMore,
     remove,
     patch,
+    refresh,
   }
 }

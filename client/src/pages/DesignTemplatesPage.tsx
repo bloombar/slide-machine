@@ -203,10 +203,23 @@ export default function DesignTemplatesPage() {
     <div className="mx-auto w-full max-w-6xl px-6 py-6 sm:py-8">
       {/* Import behaves exactly as it does on the Design tab (TMPL-28): the
           same shared control, opening in a dialog rather than a settings
-          form this page does not have. */}
+          form this page does not have, staying open with its own report
+          rather than navigating away underneath it. There is nothing here
+          to apply the import to the way the Design tab's picker does, so
+          the page switches to Mine instead — where the new design actually
+          lives — and refreshes it, since a sort already on Mine has nothing
+          of its own to react to a design merely being added to it. An
+          "Open design" action in the dialog itself is the way from here to
+          the new design's own page, the same one the Design tab's copy gets
+          from `TemplateImportControl`. */}
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">{t('templatesPage.heading')}</h1>
-        <TemplateImportControl onImported={open} />
+        <TemplateImportControl
+          onImported={() => {
+            if (discover.sort === 'mine') discover.refresh()
+            else discover.setSort('mine')
+          }}
+        />
       </div>
       {/* What a design template is for (TMPL-28): plain enough that a first-time
           visitor knows why a page of these exists before browsing them. */}

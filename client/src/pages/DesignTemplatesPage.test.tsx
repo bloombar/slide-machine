@@ -565,12 +565,27 @@ describe('DesignTemplatesPage import (TMPL-28)', () => {
   })
 
   // After a successful import, the page does what the Design tab does,
-  // adapted to a page rather than a picker: it opens the new design's own
-  // page, remembering this page as where "Back" returns to.
-  it('opens an imported design’s own page, remembering this page as "from"', async () => {
-    mockDispatch.mockImplementation(async (name: string) => {
-      if (name === 'template.feed')
-        return { items: [template()], hasMore: false }
+  // adapted to a page rather than a picker: the dialog stays open with its
+  // report, exactly as the Design tab's import already does, rather than
+  // navigating away underneath it — there is nothing here to apply the
+  // import to in place, so the page switches to Mine (where the new design
+  // now lives) and refreshes it instead. The report's own "Open design"
+  // action is the way from here to the new design's page.
+  it('keeps the dialog open with its report, switches to Mine and shows the import there, and opens the design on request', async () => {
+    const imported = template({
+      id: 'imp-1',
+      permalinkSlug: 'imported-ab12',
+      name: 'Imported',
+      ownerId: 'u1',
+      myRole: 'owner',
+    })
+    mockDispatch.mockImplementation(async (name: string, input) => {
+      if (name === 'template.feed') {
+        const { sort } = input as { sort: string }
+        return sort === 'mine'
+          ? { items: [imported], hasMore: false }
+          : { items: [template()], hasMore: false }
+      }
       if (name === 'drive.importables')
         return {
           folders: [],
@@ -584,7 +599,7 @@ describe('DesignTemplatesPage import (TMPL-28)', () => {
         }
       if (name === 'template.importFromSlides')
         return {
-          template: { id: 'imp-1', permalinkSlug: 'imported-ab12' },
+          template: imported,
           report: { slidesRead: 1, layoutsCreated: 1, approximated: 0 },
         }
       throw new Error(`unexpected action ${name}`)
@@ -604,6 +619,24 @@ describe('DesignTemplatesPage import (TMPL-28)', () => {
       within(dialog).getByRole('button', { name: 'Import design' }),
     )
 
+    // The report is still on screen — the dialog did not navigate away.
+    expect(
+      await within(dialog).findByTestId('import-report'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/^landed:/)).toBeNull()
+
+    // Mine is now the active sort, and shows the design that just arrived.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Mine' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      ),
+    )
+    expect(await screen.findByText('Imported')).toBeInTheDocument()
+
+    // The report's own action still opens the new design's page, remembering
+    // this page as where "Back" returns to.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Open design' }))
     expect(
       await screen.findByText('landed:/t/imported-ab12 from:/app/templates'),
     ).toBeInTheDocument()

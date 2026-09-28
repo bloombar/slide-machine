@@ -496,6 +496,7 @@
     "exportSlidesConnect": "Connectez un compte Google pour enregistrer des conceptions dans Drive.",
     "exportHeading": "Exporter cette conception",
     "exportHint": "Emportez-la sous forme de fichier, ou dans votre Google Drive en présentation dont les mises en page sont les siennes.",
+    "exportUnsavedNotice": "Exporte la dernière version enregistrée — enregistrez d'abord pour inclure vos modifications.",
     "exportAsYaml": "En YAML",
     "exportAsPptx": "En PowerPoint",
     "exportToSlides": "En Google Slides",
@@ -530,7 +531,8 @@
       "connectPrompt": "Connectez un compte Google pour lire une présentation de votre Drive.",
       "connect": "Connecter Google",
       "otherSources": "Ou téléversez un fichier",
-      "choose": "Choisir dans Google Drive"
+      "choose": "Choisir dans Google Drive",
+      "openDesign": "Ouvrir le design"
     },
     "fileImport": {
       "open": "Importer un fichier de design (.yaml ou .pptx)",

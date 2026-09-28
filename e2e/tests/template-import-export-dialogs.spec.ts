@@ -8,9 +8,12 @@
  * The parser, the export action, and the round trip's own fidelity are all
  * covered elsewhere (`template-file-import.spec.ts`, `template-import.spec.ts`,
  * `imported-template-fidelity.spec.ts`). What is only this spec's is the
- * dialog wiring itself: a design imported from the page's own dialog lands
- * on its own page, and that page's export dialog is the same
- * `TemplateExportSection` the Design tabs used to show inline.
+ * dialog wiring itself: a design imported from the page's own dialog stays
+ * on the page with its report visible (exactly what the Design tab's own
+ * import already does), switches the page to Mine so the new design shows
+ * up there, and offers an explicit "Open design" action to its own page —
+ * where the export dialog is the same `TemplateExportSection` the Design
+ * tabs used to show inline.
  */
 import { readFileSync } from 'node:fs'
 import { test, expect } from './fixtures'
@@ -29,14 +32,12 @@ test('import a design from the Design templates page dialog, then export it from
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page).toHaveURL(/\/app$/)
 
-  // A file to import: exported from a built-in, reached as a plain link
-  // from the Design templates page — the same page this spec comes back to
-  // for the import half below.
-  await page.goto('/app/templates')
-  await page
-    .getByRole('link', { name: /classic/i })
-    .first()
-    .click()
+  // A file to import: exported from a built-in, reached directly by its
+  // permalink rather than through the Design templates page — built-ins
+  // sort after every stored public design there and the e2e database
+  // persists across runs, so Classic drops off page one long before this
+  // spec ever runs (a built-in's permalink is its id).
+  await page.goto('/t/classic')
   await expect(page).toHaveURL(/\/t\//)
 
   await page.getByRole('button', { name: 'Export this design' }).click()
@@ -51,20 +52,35 @@ test('import a design from the Design templates page dialog, then export it from
   // Back to the Design templates page: Import a design sits in the header
   // row, opening in a dialog rather than unfolding inline.
   await page.goto('/app/templates')
-  expect(await page.getByRole('dialog').count()).toBe(0)
   await page.getByRole('button', { name: /^Import a design$/i }).click()
   const importDialog = page.getByRole('dialog', { name: 'Import a design' })
   await expect(importDialog).toBeVisible()
 
   await importDialog.getByLabel(/import a design file/i).setInputFiles(saved!)
 
-  // A successful import here lands on the new design's own page — the same
-  // "chosen straight away" landing the Design tab's import gives, adapted to
-  // a page that has nothing of its own to select it into.
+  // Identically to the Design tab: the dialog stays open — a file import has
+  // no report to show (there was nothing to consolidate, only a straight
+  // restore; the Google Slides half of the panel is what produces one,
+  // covered by `template-import.spec.ts`) — rather than navigating away the
+  // instant the import lands. The page has nothing of its own to apply the
+  // import to in place, so it switches to Mine (where the new design now
+  // lives) behind the still-open dialog, and offers "Open design" once it
+  // has one to open.
+  const openDesign = importDialog.getByRole('button', { name: 'Open design' })
+  await expect(openDesign).toBeVisible()
+  await expect(page).toHaveURL(/\/app\/templates$/)
+  await expect(page.getByRole('button', { name: 'Mine' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+
+  // And "Open design" goes to the new design's own page, remembering this
+  // page as where "Back" returns to.
+  await openDesign.click()
   await expect(page).toHaveURL(/\/t\//)
   await expect(importDialog).not.toBeVisible()
 
-  // And its own Export dialog offers the same three destinations, right back
+  // Its own Export dialog offers the same three destinations, right back
   // where the round trip started.
   await page.getByRole('button', { name: 'Export this design' }).click()
   const secondExport = page.getByRole('dialog', { name: 'Export this design' })
