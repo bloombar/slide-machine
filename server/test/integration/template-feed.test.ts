@@ -359,9 +359,15 @@ describe('template.feed "latest" (TMPL-28)', () => {
 
     const res = await act(bob, 'template.feed', { sort: 'latest', limit: 50 })
     const ids: string[] = res.body.items.map((t: { id: string }) => t.id)
-    expect(ids.slice(0, 3)).toEqual([second.id, third.id, first.id])
     expect(ids).toContain(builtinId())
-    expect(ids.indexOf(first.id)).toBeLessThan(ids.indexOf(builtinId())) // built-ins trail every stored one
+    // Built-ins come first, so the stored designs trail every one of them —
+    // they stay reachable at the top of the default sort rather than being
+    // buried once enough public designs accumulate ahead of them.
+    expect(ids.indexOf(first.id)).toBeGreaterThan(ids.indexOf(builtinId()))
+    const stored = ids.filter(
+      id => !listBuiltinTemplates().some(b => b.id === id),
+    )
+    expect(stored.slice(0, 3)).toEqual([second.id, third.id, first.id])
   })
 
   it('walks the whole merged list by offset, without repeats or gaps', async () => {

@@ -3,7 +3,7 @@
  * every layout but the reserved whiteboard, which cannot be given boxes and
  * would page a card or the editor's rail to a blank slate.
  *
- * Shared so the client library card (`TemplateLibrary.tsx`) and the server's
+ * Shared so the client's own card (`TemplateCard.tsx`) and the server's
  * `layoutCount` card metadata (TMPL-28) agree on the same count without
  * restating the rule in two places.
  */

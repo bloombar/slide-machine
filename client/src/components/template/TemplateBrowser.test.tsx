@@ -6,8 +6,15 @@
  * below it, so one design never offers two radios for the same choice, and
  * infinite scroll still works in select mode.
  */
+import { useState } from 'react'
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  waitFor,
+} from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import type { Template } from '@slide-machine/shared'
 import TemplateBrowser from './TemplateBrowser'
@@ -111,6 +118,90 @@ describe('TemplateBrowser select mode (TMPL-28)', () => {
     fireEvent.click(await screen.findByRole('radio', { name: /Alpha/ }))
     expect(onSelect).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'a', name: 'Alpha' }),
+    )
+  })
+
+  /** A caller that actually applies a selection, the way the three settings
+   * surfaces do: `current` only moves once `onSelect` resolves — refused or
+   * accepted is the harness's own choice to make. */
+  function Harness({
+    initialCurrent,
+    apply,
+  }: {
+    initialCurrent: Template | null
+    apply: boolean
+  }) {
+    const [current, setCurrent] = useState<Template | null>(initialCurrent)
+    return (
+      <MemoryRouter>
+        <TemplateBrowser
+          mode="select"
+          value={current?.id ?? 'none'}
+          current={current}
+          onSelect={t => apply && setCurrent(t)}
+          onCurrentDeleted={() => setCurrent(null)}
+          linkState={{ from: '/x' }}
+        />
+      </MemoryRouter>
+    )
+  }
+
+  it('leaves the pin unchanged when a switch is refused', async () => {
+    const original = template({ id: 'cur-1', name: 'Current' })
+    vi.mocked(dispatchAction).mockResolvedValue({
+      items: [template({ id: 'a', name: 'Alpha' })],
+      hasMore: false,
+    })
+    render(<Harness initialCurrent={original} apply={false} />)
+
+    fireEvent.click(await screen.findByRole('radio', { name: /Alpha/ }))
+
+    // The pin still names the original design, not "Alpha" — the refused
+    // switch never reached it.
+    expect(screen.getByRole('radio', { name: /Current/ })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    // And "Alpha" is still on offer in the grid — a refused switch is not a
+    // delete, so nothing about it disappears.
+    expect(screen.getByRole('radio', { name: /Alpha/ })).toBeInTheDocument()
+  })
+
+  it('moves focus to the pinned card once a grid selection is applied', async () => {
+    const original = template({ id: 'cur-1', name: 'Current' })
+    vi.mocked(dispatchAction).mockResolvedValue({
+      items: [template({ id: 'a', name: 'Alpha' })],
+      hasMore: false,
+    })
+    render(<Harness initialCurrent={original} apply />)
+
+    fireEvent.click(await screen.findByRole('radio', { name: /Alpha/ }))
+
+    // "Alpha"'s own card is gone (it is now the pin, deduped out of the
+    // grid below) — focus would otherwise have fallen to `<body>`.
+    await waitFor(() =>
+      expect(screen.getByRole('radio', { name: /Alpha/ })).toHaveFocus(),
+    )
+  })
+
+  it('clears the pin when the pinned design is the one just deleted', async () => {
+    const current = template({
+      id: 'cur-1',
+      name: 'Current',
+      myRole: 'owner',
+    })
+    vi.mocked(dispatchAction).mockImplementation(async (action: string) => {
+      if (action === 'template.delete') return {}
+      return { items: [], hasMore: false }
+    })
+    render(<Harness initialCurrent={current} apply />)
+
+    await screen.findByText('Current design')
+    fireEvent.click(screen.getByLabelText('Delete Current'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+
+    await waitFor(() =>
+      expect(screen.queryByText('Current design')).not.toBeInTheDocument(),
     )
   })
 })

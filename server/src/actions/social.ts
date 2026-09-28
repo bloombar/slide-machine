@@ -612,10 +612,15 @@ const compareRanked = (a: RankRow, b: RankRow): number => {
  * exactly like a lecture's own feed page. "Latest" and "top" differ because a
  * built-in has no stored document to page through:
  *
- *   - **Latest** appends built-ins after every stored template (SPEC TMPL-28:
- *     "Built-ins ... have no meaningful date") — a plain concatenation, so
- *     paging stays stable by tracking how many stored rows exist and only
- *     reaching into the built-in list once they run out.
+ *   - **Latest** lists built-ins **first**, in their fixed file order, then
+ *     every stored public template newest first. Built-ins are the
+ *     deployment's own stock designs and stay reachable at the top of the
+ *     default sort rather than being buried once enough stored templates
+ *     accumulate ahead of them — with ten or more public stored designs (the
+ *     page size), a built-in appended *after* them would never appear on page
+ *     one at all. A plain concatenation, so paging stays stable by tracking
+ *     how many built-ins there are and only reaching into the stored query
+ *     once they run out.
  *   - **Top** ranks built-ins by their tallied score alongside stored ones, so
  *     a well-liked built-in can outrank a stored template — this needs an
  *     actual merge (see `rankedTop` below).
@@ -659,18 +664,25 @@ const pageOfTemplates = async (
     const total = storedCount + builtins.length
     const hasMore = offset + limit < total
     let items: Template[]
-    if (offset < storedCount) {
+    if (offset < builtins.length) {
+      // Still within the built-in run: take what fits from it, then top up
+      // from the front of the stored query if there is room left on the page.
+      items = builtins.slice(offset, offset + limit)
+      const remaining = limit - items.length
+      if (remaining > 0) {
+        const docs = await TemplateModel.find(filter)
+          .sort(templateSortSpecFor(sort))
+          .limit(remaining)
+        items = [...items, ...docs.map(d => toTemplateDto(d, userId))]
+      }
+    } else {
+      // Past every built-in: page the stored query alone, offset by however
+      // far past the built-in run this page starts.
       const docs = await TemplateModel.find(filter)
         .sort(templateSortSpecFor(sort))
-        .skip(offset)
+        .skip(offset - builtins.length)
         .limit(limit)
       items = docs.map(d => toTemplateDto(d, userId))
-      const remaining = limit - items.length
-      items =
-        remaining > 0 ? [...items, ...builtins.slice(0, remaining)] : items
-    } else {
-      const builtinOffset = offset - storedCount
-      items = builtins.slice(builtinOffset, builtinOffset + limit)
     }
     return { items: await decorateTemplates(items, userId), hasMore }
   }

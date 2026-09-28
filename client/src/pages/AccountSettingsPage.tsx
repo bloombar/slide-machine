@@ -219,9 +219,11 @@ export default function AccountSettingsPage() {
   // Only the owner's own path has a Design tab (TMPL-28): fetching the
   // currently applied design on the admin path would ask for the admin's
   // own account default for a tab that is not there.
-  const [currentTemplate, setCurrentTemplate] = useCurrentTemplate(
-    adminUserId ? '' : accountTemplateId,
-  )
+  const {
+    current: currentTemplate,
+    setCurrent: setCurrentTemplate,
+    patchVote: patchCurrentTemplateVote,
+  } = useCurrentTemplate(adminUserId ? '' : accountTemplateId)
 
   if (userId && userId === viewer?.id) {
     return <Navigate to="/app/settings" replace />
@@ -635,20 +637,8 @@ export default function AccountSettingsPage() {
                 value={accountTemplateId}
                 current={currentTemplate}
                 onSelect={selectTemplate}
-                onCurrentVote={(templateId, result) =>
-                  setCurrentTemplate(t =>
-                    t && t.id === templateId
-                      ? {
-                          ...t,
-                          votes: {
-                            up: result.up,
-                            down: result.down,
-                            myVote: result.myVote,
-                          },
-                        }
-                      : t,
-                  )
-                }
+                onCurrentVote={patchCurrentTemplateVote}
+                onCurrentDeleted={() => setCurrentTemplate(null)}
               />
             </section>
           )}

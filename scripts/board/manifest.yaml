@@ -2420,8 +2420,8 @@
     lecture's chosen template, and while speaking live each new slide
     automatically picks the layout that best fits its content. Latest (the
     default) and Top list every public template, built-ins included, and rank
-    them as lectures are ranked. Mine lists templates the caller owns or has
-    been shared. Search applies within the chosen…"
+    them as lectures are ranked. Built-ins come first on Latest — the
+    deployment's own stock designs, always reachable at the…"
   section: §7 Style Template Library
   family: TMPL
   phase: 3

@@ -10,8 +10,13 @@
  * only in what selecting one applies to and what their own intro text says,
  * which is the caller's business, not this panel's.
  */
+import { useState } from 'react'
 import { useLocation } from 'react-router'
-import type { Template, VoteResult } from '@slide-machine/shared'
+import type {
+  Template,
+  TemplateFeedSort,
+  VoteResult,
+} from '@slide-machine/shared'
 import TemplateBrowser from './TemplateBrowser'
 import TemplateImportControl from './TemplateImportControl'
 import TemplateDescriptorNotice from './TemplateDescriptorNotice'
@@ -21,6 +26,7 @@ export default function TemplateDesignPanel({
   current,
   onSelect,
   onCurrentVote,
+  onCurrentDeleted,
 }: {
   value: string
   /** The design currently applied, however the caller already has it
@@ -34,8 +40,25 @@ export default function TemplateDesignPanel({
    * passed straight through so the caller can patch its own `current` —
    * see `TemplateBrowser`'s own doc comment for why. */
   onCurrentVote?: (templateId: string, result: VoteResult) => void
+  /** The pinned "Current design" was itself just deleted (its owner, from
+   * its own action row) — passed straight through so the caller clears its
+   * own `current` rather than going on pinning a design that no longer
+   * exists. */
+  onCurrentDeleted?: () => void
 }) {
   const location = useLocation()
+  // Mine, if the caller already belongs to this design's people list one way
+  // or another (owns it, or was shared it as an editor or viewer) — that is
+  // the library a caller choosing a design is most likely mid-errand in.
+  // Otherwise Latest, same as the Design Templates page. Frozen at mount
+  // (this panel remounts fresh every time its settings tab is opened, see
+  // `DeckSettingsModal`'s own `{tab === 'template' && ...}`), not recomputed
+  // on every render — a design applied *while* the tab is open should not
+  // retroactively jump the sort out from under whatever the caller is
+  // already browsing.
+  const [initialSort] = useState<TemplateFeedSort>(() =>
+    current?.myRole ? 'mine' : 'latest',
+  )
 
   return (
     <>
@@ -43,10 +66,12 @@ export default function TemplateDesignPanel({
       <TemplateBrowser
         mode="select"
         dense
+        initialSort={initialSort}
         value={value}
         current={current}
         onSelect={onSelect}
         onCurrentVote={onCurrentVote}
+        onCurrentDeleted={onCurrentDeleted}
         linkState={{ from: location.pathname }}
       />
       {/* One way in, three sources, opened in a dialog rather than inline

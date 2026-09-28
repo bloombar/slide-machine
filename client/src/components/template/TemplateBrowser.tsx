@@ -19,7 +19,13 @@
  * below, it is left out there rather than doubled — one design should not
  * offer two radios for the same value.
  */
-import { forwardRef, useImperativeHandle, useState } from 'react'
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react'
 import { useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import type {
@@ -95,6 +101,10 @@ const TemplateBrowser = forwardRef<
      * for it to patch into its own state — the grid's own cards need no such
      * thing, since `useDiscover.patch` already keeps those in step. */
     onCurrentVote?: (templateId: string, result: VoteResult) => void
+    /** Fired when the pinned "Current design" is the one just deleted — the
+     * caller's own object is now stale, and nothing here can un-pin it on
+     * its own, since `current` is the caller's state, not this component's. */
+    onCurrentDeleted?: () => void
   }
 >(function TemplateBrowser(
   {
@@ -106,6 +116,7 @@ const TemplateBrowser = forwardRef<
     current,
     onSelect,
     onCurrentVote,
+    onCurrentDeleted,
   },
   ref,
 ) {
@@ -123,6 +134,12 @@ const TemplateBrowser = forwardRef<
   // conflated with `busyId`, which also covers a Duplicate in flight and
   // must not disable a dialog that is not even open.
   const [deleting, setDeleting] = useState(false)
+  // A grid radio chosen by keyboard or click, remembered only until `current`
+  // catches up to it — its own card unmounts the moment that happens (the
+  // dedupe below), which would otherwise drop focus to `<body>` with nothing
+  // said about where it went. Cleared once handled, or by the next select.
+  const [pendingFocusId, setPendingFocusId] = useState<string | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   useImperativeHandle(ref, () => ({
     // Clears any search too, which would otherwise go on hiding a design
@@ -176,6 +193,11 @@ const TemplateBrowser = forwardRef<
         // see `useDiscover.remove`'s own comment for why this must go
         // through the hook rather than a filter kept alongside it.
         discover.remove(template.id)
+        // The pinned "Current design" is the caller's own state, not this
+        // component's — deleting it out from under itself would otherwise
+        // leave it pinned and selected forever, pointing at a design that no
+        // longer exists.
+        if (template.id === current?.id) onCurrentDeleted?.()
         setConfirming(null)
       })
       .catch(() => {
@@ -194,6 +216,22 @@ const TemplateBrowser = forwardRef<
   // choice, which is not a valid radiogroup.
   const items = (page?.lectures ?? []).filter(item => item.id !== current?.id)
 
+  // Once `current` becomes whatever a grid radio was just chosen for, that
+  // radio's own card is about to unmount (the dedupe above) — focus would
+  // otherwise fall to `<body>` with no word of where the choice went. Moved
+  // onto the pinned card's own radio instead, by querying the DOM directly:
+  // nothing else here holds a ref to a card that no longer exists once this
+  // effect runs.
+  useEffect(() => {
+    if (!pendingFocusId || current?.id !== pendingFocusId) return
+    setPendingFocusId(null)
+    containerRef.current
+      ?.querySelector<HTMLElement>(
+        `[data-template-card="${current.id}"] [role="radio"]`,
+      )
+      ?.focus()
+  }, [current, pendingFocusId])
+
   const message = (text: string) => (
     <p className="px-1 py-6 text-sm text-slate-500">{text}</p>
   )
@@ -203,7 +241,14 @@ const TemplateBrowser = forwardRef<
       key={template.id}
       template={template}
       selected={mode === 'select' ? value === template.id : undefined}
-      onSelect={mode === 'select' ? () => onSelect?.(template) : undefined}
+      onSelect={
+        mode === 'select'
+          ? () => {
+              setPendingFocusId(template.id)
+              onSelect?.(template)
+            }
+          : undefined
+      }
       linkTo={
         mode === 'link'
           ? { to: `/t/${template.permalinkSlug}`, state: linkState }
@@ -245,7 +290,13 @@ const TemplateBrowser = forwardRef<
     // show, or a caller who cleared their own last page in view would be
     // stuck looking at an "empty" message the moment before scrolling on
     // would have moved past it.
-    if (items.length === 0 && !page.hasMore) {
+    //
+    // Read off the fetched page itself (`page.lectures`), not the deduped
+    // `items` shown below the pin: the one design on the page can be exactly
+    // the one already pinned above as "Current design" — that page is not
+    // empty, and saying so while a design is plainly on screen would
+    // contradict the pin sitting right above the message.
+    if (page.lectures.length === 0 && !page.hasMore) {
       if (searching)
         return message(t('templatesPage.noMatches', { query: query.trim() }))
       return message(
@@ -272,6 +323,7 @@ const TemplateBrowser = forwardRef<
     // card that is already applied is drawn above the controls that page
     // through the rest of it. Link mode has no radios at all, so no group.
     <div
+      ref={containerRef}
       role={mode === 'select' ? 'radiogroup' : undefined}
       aria-label={mode === 'select' ? t('template.label') : undefined}
     >
@@ -282,6 +334,12 @@ const TemplateBrowser = forwardRef<
           </p>
           <div className={gridClassName}>
             <TemplateCard
+              // Keyed by id, like every other card: without it, switching
+              // from one design to another reuses this component instance,
+              // which would carry over its own local state — which layout
+              // was being paged through, a vote button's own pending/optimistic
+              // state — from the design just left behind.
+              key={current.id}
               template={current}
               selected
               onSelect={() => onSelect?.(current)}
@@ -290,7 +348,18 @@ const TemplateBrowser = forwardRef<
               onDelete={template => setConfirming(template)}
               busyId={busyId}
               showMeta
-              onVote={(templateId, res) => onCurrentVote?.(templateId, res)}
+              onVote={(templateId, res) => {
+                onCurrentVote?.(templateId, res)
+                // The grid keeps its own cache of vote counts
+                // (`useDiscover.patch`) — patched too, so a vote cast from
+                // the pin already shows the right count if this same design
+                // is ever paged back into the grid below it (its own sort or
+                // search changing which page it lands on).
+                discover.patch(templateId, item => ({
+                  ...item,
+                  votes: { up: res.up, down: res.down, myVote: res.myVote },
+                }))
+              }}
             />
           </div>
         </div>

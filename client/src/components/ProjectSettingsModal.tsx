@@ -69,9 +69,11 @@ export default function ProjectSettingsModal({
   const { t } = useTranslation()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [tab, setTab] = useState<TabId>(initialTab)
-  const [currentTemplate, setCurrentTemplate] = useCurrentTemplate(
-    project.templateId,
-  )
+  const {
+    current: currentTemplate,
+    setCurrent: setCurrentTemplate,
+    patchVote: patchCurrentTemplateVote,
+  } = useCurrentTemplate(project.templateId)
   const closeRef = useRef<HTMLButtonElement>(null)
   const tabRefs = useRef(new Map<TabId, HTMLButtonElement>())
 
@@ -191,20 +193,8 @@ export default function ProjectSettingsModal({
           <TemplateDesignPanel
             value={project.templateId}
             current={currentTemplate}
-            onCurrentVote={(templateId, result) =>
-              setCurrentTemplate(t =>
-                t && t.id === templateId
-                  ? {
-                      ...t,
-                      votes: {
-                        up: result.up,
-                        down: result.down,
-                        myVote: result.myVote,
-                      },
-                    }
-                  : t,
-              )
-            }
+            onCurrentVote={patchCurrentTemplateVote}
+            onCurrentDeleted={() => setCurrentTemplate(null)}
             onSelect={template => {
               dispatchAction<Project>('project.switchTemplate', {
                 projectId: project.id,

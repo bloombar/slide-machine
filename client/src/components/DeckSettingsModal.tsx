@@ -136,9 +136,11 @@ export default function DeckSettingsModal({
   onReformatted,
 }: Props) {
   const { t } = useTranslation()
-  const [currentTemplate, setCurrentTemplate] = useCurrentTemplate(
-    deck.templateId,
-  )
+  const {
+    current: currentTemplate,
+    setCurrent: setCurrentTemplate,
+    patchVote: patchCurrentTemplateVote,
+  } = useCurrentTemplate(deck.templateId)
   // An admin sees a shorter tab list, so a deep link into one of the
   // hidden tabs lands on General instead.
   const tabs = adminOverride
@@ -923,20 +925,8 @@ export default function DeckSettingsModal({
             value={deck.templateId}
             current={currentTemplate}
             onSelect={selectTemplate}
-            onCurrentVote={(templateId, result) =>
-              setCurrentTemplate(t =>
-                t && t.id === templateId
-                  ? {
-                      ...t,
-                      votes: {
-                        up: result.up,
-                        down: result.down,
-                        myVote: result.myVote,
-                      },
-                    }
-                  : t,
-              )
-            }
+            onCurrentVote={patchCurrentTemplateVote}
+            onCurrentDeleted={() => setCurrentTemplate(null)}
           />
         </section>
       )}

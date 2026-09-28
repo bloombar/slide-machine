@@ -19,16 +19,23 @@
  * someone else's account settings, say) fetches nothing and pins nothing,
  * rather than asking the server for a template with no id.
  */
-import { useEffect, useState } from 'react'
-import type { Template } from '@slide-machine/shared'
+import { useCallback, useEffect, useState } from 'react'
+import type { Template, VoteResult } from '@slide-machine/shared'
 import { dispatchAction } from '../../api/actions'
 
-export function useCurrentTemplate(
-  templateId: string,
-): [
-  Template | null | undefined,
-  React.Dispatch<React.SetStateAction<Template | null | undefined>>,
-] {
+export interface UseCurrentTemplate {
+  /** `null` once a fetch has settled with nothing (a deleted template);
+   * `undefined` while still in flight. */
+  current: Template | null | undefined
+  setCurrent: React.Dispatch<React.SetStateAction<Template | null | undefined>>
+  /** A vote cast on the pinned card (TMPL-27): patches `current`'s own tally
+   * in place, the one bit of `TemplateBrowser`'s `onCurrentVote` every
+   * caller needed identically, so it lives here instead of copied at each
+   * of the three call sites. */
+  patchVote: (templateId: string, result: VoteResult) => void
+}
+
+export function useCurrentTemplate(templateId: string): UseCurrentTemplate {
   const [current, setCurrent] = useState<Template | null | undefined>(undefined)
 
   useEffect(() => {
@@ -48,5 +55,22 @@ export function useCurrentTemplate(
     }
   }, [templateId, current])
 
-  return [current, setCurrent]
+  const patchVote = useCallback(
+    (voteId: string, result: VoteResult) =>
+      setCurrent(t =>
+        t && t.id === voteId
+          ? {
+              ...t,
+              votes: {
+                up: result.up,
+                down: result.down,
+                myVote: result.myVote,
+              },
+            }
+          : t,
+      ),
+    [],
+  )
+
+  return { current, setCurrent, patchVote }
 }
