@@ -73,32 +73,23 @@ test('template round trip: export a design to a file, import it back', async ({
   await dialog.getByRole('tab', { name: 'Design' }).click()
 
   const previews = dialog.getByTestId('template-preview')
-
-  // Cards, not previews: a card is on screen as soon as its page lands,
-
-  // while its preview paints later (TMPL-28).
-
-  const cards = dialog.getByRole('radio')
   // Waited for rather than counted straight away: `count()` samples once and
   // does not retry, so a list that has not painted yet reads as zero — which
   // is what made this spec fail under load while passing on its own.
   await expect(previews.first()).toBeVisible()
-  // The pinned current design draws before the list's first page lands;
-  // count once a built-in from that page is on screen (TMPL-28).
-  await expect(page.getByRole('radio', { name: /Midnight/ })).toBeVisible()
-  const before = await cards.count()
-  expect(before).toBeGreaterThan(0)
 
   // The three ways a design arrives share one panel, opened here in a dialog
   // over the settings sheet — the tab has one Import button, not three.
   await dialog.getByRole('button', { name: /^Import a design$/i }).click()
   const importDialog = page.getByRole('dialog', { name: 'Import a design' })
   await importDialog.getByLabel(/import a design file/i).setInputFiles(saved!)
-  await expect(cards).toHaveCount(before + 1)
-
-  // And it is a real template rather than a row in a list: chosen straight
-  // away, the way an import exists to be used.
-  await expect(dialog.getByRole('radio', { checked: true })).toBeVisible()
+  // A real template rather than a row in a list: the author's own copy,
+  // chosen straight away, the way an import exists to be used. (Asserted by
+  // what is applied rather than by counting cards, which infinite scroll can
+  // change underneath the test — TMPL-28.)
+  await expect(
+    dialog.getByRole('radio', { checked: true, name: /Custom/ }),
+  ).toBeVisible()
 })
 
 test('a file that is not a template is refused, and says why', async ({
@@ -122,20 +113,10 @@ test('a file that is not a template is refused, and says why', async ({
   await page.getByRole('tab', { name: 'Design' }).click()
 
   const previews = page.getByTestId('template-preview')
-
-  // Cards, not previews: a card is on screen as soon as its page lands,
-
-  // while its preview paints later (TMPL-28).
-
-  const cards = page.getByRole('radio')
   // Waited for rather than counted straight away: `count()` samples once and
   // does not retry, so a list that has not painted yet reads as zero — which
   // is what made this spec fail under load while passing on its own.
   await expect(previews.first()).toBeVisible()
-  // The pinned current design draws before the list's first page lands;
-  // count once a built-in from that page is on screen (TMPL-28).
-  await expect(page.getByRole('radio', { name: /Midnight/ })).toBeVisible()
-  const before = await cards.count()
 
   await page.getByRole('button', { name: /^Import a design$/i }).click()
   await page.getByLabel(/import a design file/i).setInputFiles({
@@ -147,5 +128,10 @@ test('a file that is not a template is refused, and says why', async ({
 
   await expect(page.getByRole('alert')).toContainText(/could not import/i)
   // Nothing was created: a refused import leaves the library as it was.
-  await expect(cards).toHaveCount(before)
+  // The applied design is untouched, and no design of the author's own was
+  // made
+  await expect(
+    page.getByRole('radio', { checked: true, name: /^Classic$/ }),
+  ).toBeVisible()
+  await expect(page.getByRole('radio', { name: /Custom/ })).toHaveCount(0)
 })
