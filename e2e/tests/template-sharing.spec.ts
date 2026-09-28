@@ -116,12 +116,16 @@ test('template sharing: viewer, then editor, then unshared (TMPL-26)', async ({
   ).toHaveCount(0)
   await guestPage.getByRole('button', { name: 'Close settings' }).click()
 
-  // Opened directly, the design's own page is read-only for the guest.
+  // Opened directly, the design's own page is read-only for the guest — the
+  // real field is there (TMPL-29: a reader sees everything the editor shows),
+  // just disabled rather than absent, so nothing about the design is hidden
+  // from them, only writable.
   await guestPage.goto(designUrl)
   await expect(
     guestPage.getByRole('heading', { name: designName }),
   ).toBeVisible()
-  await expect(guestPage.getByLabel('Template name')).toHaveCount(0)
+  await expect(guestPage.getByLabel('Template name')).toBeDisabled()
+  await expect(guestPage.getByLabel('Template name')).not.toBeEditable()
 
   // The owner raises the guest to editor.
   await ownerPage.getByLabel(`Role for ${guest.name}`).selectOption('editor')

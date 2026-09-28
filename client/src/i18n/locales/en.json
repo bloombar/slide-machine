@@ -305,7 +305,7 @@
     },
     "page": {
       "saved": "Saved",
-      "readOnly": "This design is not yours to change. Duplicate it from a lecture's Design tab to make one of your own.",
+      "readOnly": "This design is not yours to change. Duplicate it above to make one of your own.",
       "missing": "This design does not exist, or is private."
     },
     "visibilityLabel": "Who can use it",

@@ -305,7 +305,7 @@
     },
     "page": {
       "saved": "Guardado",
-      "readOnly": "Este diseño no es tuyo para cambiarlo. Duplícalo desde la pestaña Diseño de una clase para tener uno propio.",
+      "readOnly": "Este diseño no es tuyo para cambiarlo. Duplícalo arriba para tener uno propio.",
       "missing": "Este diseño no existe o es privado."
     },
     "visibilityLabel": "Quién puede usarla",

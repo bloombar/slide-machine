@@ -305,7 +305,7 @@
     },
     "page": {
       "saved": "Enregistré",
-      "readOnly": "Ce modèle ne vous appartient pas. Dupliquez-le depuis l’onglet Conception d’un cours pour en avoir un à vous.",
+      "readOnly": "Ce modèle ne vous appartient pas. Dupliquez-le ci-dessus pour en avoir un à vous.",
       "missing": "Ce modèle n’existe pas ou est privé."
     },
     "visibilityLabel": "Qui peut l’utiliser",
