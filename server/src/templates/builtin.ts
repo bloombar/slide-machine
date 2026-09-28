@@ -510,6 +510,9 @@ export const loadBuiltinTemplates = (
       // A built-in's id is already a readable slug, so it is its permalink.
       permalinkSlug: parsed.data.id,
       visibility: 'public' as const,
+      // Nobody owns, edits or is a viewer of a built-in (TMPL-26) — the
+      // caller's relationship to it is never anything but this.
+      myRole: null,
       voteScore: 0,
       createdAt: '2026-07-01T00:00:00.000Z',
     }

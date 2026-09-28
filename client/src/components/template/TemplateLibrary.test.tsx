@@ -36,6 +36,7 @@ const template = (over: Partial<Template> = {}): Template => ({
     layout('whiteboard', 'Whiteboard', []),
   ],
   visibility: 'public',
+  myRole: null,
   voteScore: 0,
   createdAt: '2026-01-01T00:00:00.000Z',
   ...over,
@@ -45,7 +46,8 @@ const mine = template({
   id: 'mine-1',
   ownerId: 'u1',
   name: 'My Style',
-  visibility: 'private',
+  visibility: 'restricted',
+  myRole: 'owner',
 })
 
 /** Three layouts to page through, plus the whiteboard that is never paged to.

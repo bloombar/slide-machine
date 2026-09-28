@@ -48,6 +48,7 @@ const template = (over: Partial<Template> = {}): Template => ({
   theme: { background: '#ffffff', text: '#000000', accent: '#ff0000' },
   layouts: [layout('content', 'Content', ['title', 'body'])],
   visibility: 'public',
+  myRole: null,
   voteScore: 0,
   createdAt: '2026-01-01T00:00:00.000Z',
   ...over,
@@ -58,7 +59,8 @@ const mine = template({
   permalinkSlug: 'my-style-ab12',
   ownerId: 'u1',
   name: 'My Style',
-  visibility: 'private',
+  visibility: 'restricted',
+  myRole: 'owner',
 })
 
 const copy = template({
@@ -66,7 +68,8 @@ const copy = template({
   permalinkSlug: 'shipped-2-cd34',
   ownerId: 'u1',
   name: 'Shipped 2',
-  visibility: 'private',
+  visibility: 'restricted',
+  myRole: 'owner',
 })
 
 /** Stands in for the template's own page, so a test can say where the panel

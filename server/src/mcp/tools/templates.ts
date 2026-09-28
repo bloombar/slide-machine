@@ -58,8 +58,9 @@ export const listTemplates = defineTool({
   name: 'list_templates',
   title: 'List templates',
   description:
-    'Lists the slide designs this account can use — the built-in ones and any ' +
-    'it has authored — with the id of each and the layout names it offers. ' +
+    'Lists the slide designs this account can use — the built-in ones, any ' +
+    'it has authored, and any shared with it — with the id of each and the ' +
+    'layout names it offers. ' +
     'Layout names are what add_slide and edit_slides accept as layoutType. ' +
     'Pass templateId to see, for one template, every layout’s boxes with their ' +
     'kind and budget (maxChars / maxItems) — omit it for the short list above, ' +
@@ -82,14 +83,14 @@ export const listTemplates = defineTool({
     if (input.templateId) {
       const template = templates.find(t => t.id === input.templateId)
       if (!template) {
-        // template.list is this account's OWN library (its templates plus
-        // the built-ins) — but a lecture can legitimately sit on a template
-        // outside it (deck.switchTemplate only checks the template exists at
-        // all, not that it is in this list). Absence here is not proof the
-        // id is wrong, so the id must not be called unknown.
+        // template.list is this account's own library (its templates, ones
+        // shared with it, plus the built-ins) — but a lecture can legitimately
+        // sit on a template outside it (deck.switchTemplate only checks the
+        // template exists at all, not that it is in this list). Absence here
+        // is not proof the id is wrong, so the id must not be called unknown.
         return {
           isError: true,
-          text: `"${input.templateId}" is not among this account’s own templates (list_templates with no templateId lists those). It may still be a real template the account does not own — a lecture on it can be read with read_lecture, whose response includes its layouts and content either way.`,
+          text: `"${input.templateId}" is not among this account’s own templates or the ones shared with it (list_templates with no templateId lists those). It may still be a real template the account does not own — a lecture on it can be read with read_lecture, whose response includes its layouts and content either way.`,
           data: null,
         }
       }

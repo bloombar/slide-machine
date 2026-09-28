@@ -207,6 +207,33 @@ export interface DeckSharesInput {
   deckId: string
 }
 
+/** Design general-access change; owner-only (TMPL-26). */
+export interface TemplateSetAccessInput {
+  templateId: string
+  visibility: Visibility
+}
+
+/** Grants view or edit access to a design (TMPL-26); same rules as
+ * `DeckShareInput`. */
+export interface TemplateShareInput {
+  templateId: string
+  email: string
+  role: ShareRole
+}
+
+/** Revokes a previously granted design share, or withdraws a pending
+ * invitation; same rules as `DeckUnshareInput`. */
+export interface TemplateUnshareInput {
+  templateId: string
+  userId?: string
+  email?: string
+  role: ShareRole
+}
+
+export interface TemplateSharesInput {
+  templateId: string
+}
+
 /** Owner-only: delete the lecture and everything in it. */
 export interface DeckDeleteInput {
   deckId: string

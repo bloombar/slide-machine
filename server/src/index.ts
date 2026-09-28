@@ -13,6 +13,7 @@ import { startSoftDeletePurgeSweep } from './jobs/soft-delete-purge'
 import { startCostRollupSweep } from './jobs/cost-rollup'
 import { startDeckViewPurgeSweep } from './jobs/deck-view-purge'
 import { startTemplateVersionBackfill } from './jobs/pin-template-versions'
+import { startTemplateVisibilityBackfill } from './jobs/migrate-template-visibility'
 
 const main = async (): Promise<void> => {
   try {
@@ -43,6 +44,9 @@ const main = async (): Promise<void> => {
   // Pin any lecture that predates template versions, so a template edit stops
   // reaching into it (TMPL-11). No-op once every lecture is pinned.
   startTemplateVersionBackfill()
+  // Fold any template still holding the retired private/unlisted visibility
+  // down to restricted (TMPL-26). No-op once none remain.
+  startTemplateVisibilityBackfill()
 }
 
 main()

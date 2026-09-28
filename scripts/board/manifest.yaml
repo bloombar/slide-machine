@@ -2374,6 +2374,69 @@
   phase: 3
   status: Backlog
   review: false
+- id: TMPL-26
+  title: Template visibility & sharing
+  full: "A template is public or restricted, with the same two values, the same
+    people list and the same share flow as a lecture (SHARE-3). Its owner shares
+    a restricted template by email as a viewer or an editor. An unconfirmed
+    address is invited rather than granted, as for a lecture. Viewers may open
+    the template, apply it to their lectures and duplicate it. Editors may also
+    edit it. Only the owner may delete it or change who has access. A new
+    template starts restricted. Existing templates keep their reach: public
+    stays public, and private and unlisted become restricted. Unlisted templates
+    are narrowed rather than listed, because they were never published. A
+    template shared with someone appears in…"
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 3
+  status: Backlog
+  review: false
+- id: TMPL-27
+  title: Template voting
+  full: "Templates are up- and down-voted as lectures are (SOC-1), built-ins
+    included. Each user has one changeable vote per template, and the net score
+    drives the Top sort. The vote control sits at the right-hand end of each
+    template's action row (duplicate, edit, delete), at the same size, wherever
+    templates are listed: the Design tab of lecture, project and account
+    settings, and the Design Templates page (TMPL-28). It also appears on the
+    template's own page. An owner sees their own template's tally, not the
+    buttons, as with a lecture. Account settings uses the same page width as
+    other pages, so its Design tab has room for the row."
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 3
+  status: Backlog
+  review: false
+- id: TMPL-28
+  title: Design Templates page
+  full: "Design Templates, linked from the navigation menu just below Account
+    settings, is a page for browsing and searching templates. It uses the same
+    mechanics as the lecture Discover list (SOC-2): infinite scroll, search, and
+    a choice of sort. Latest (the default) and Top list every public template,
+    built-ins included, and rank them as lectures are ranked. Mine lists
+    templates the caller owns or has been shared. Search applies within the
+    chosen sort and matches the name and the AI instructions. Each template is
+    drawn as in the Design tab: its name, a thumbnail whose layouts can be
+    flipped through, and the action row (TMPL-27). Anyone may duplicate a
+    template. Edit and delete appear only on the…"
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 3
+  status: Backlog
+  review: false
+- id: TMPL-29
+  title: A template's page for readers
+  full: "A reader who cannot edit a template sees everything its editor shows, but
+    read-only: the name, visibility, AI instructions, and every layout with its
+    boxes and each box's settings. Someone deciding whether to adopt or
+    duplicate a design should not need edit access to learn how it is meant to
+    be used. The page also carries the vote control and a duplicate action.
+    Owners and editors see the editor as before (TMPL-4)."
+  section: §7 Style Template Library
+  family: TMPL
+  phase: 3
+  status: Backlog
+  review: false
 - id: EVAL-4
   title: Quiz response ingestion
   full: The application reads a published Form's responses back — per-item

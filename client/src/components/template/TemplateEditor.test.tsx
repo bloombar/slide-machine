@@ -42,7 +42,8 @@ const template = (over: Partial<Template> = {}): Template => ({
     layout('content', 'Content', ['title', 'body']),
     layout('whiteboard', 'Whiteboard', []),
   ],
-  visibility: 'private',
+  visibility: 'restricted',
+  myRole: 'owner',
   voteScore: 0,
   createdAt: '2026-01-01T00:00:00.000Z',
   ...over,
@@ -54,6 +55,7 @@ const renderEditor = (onSave = vi.fn(), over: Partial<Template> = {}) => {
       template={template(over)}
       layoutSources={[template()]}
       onSave={onSave}
+      onTemplateChanged={vi.fn()}
       onCancel={vi.fn()}
     />,
   )
@@ -67,7 +69,6 @@ const saved = (onSave: ReturnType<typeof vi.fn>) => {
     name: string
     theme: Record<string, unknown>
     layouts: Layout[]
-    visibility: Template['visibility']
     aiInstructions?: string
   }
 }
@@ -706,12 +707,34 @@ describe('template settings', () => {
     expect(saved(onSave).theme.accent).toBe('#00ff00')
   })
 
-  it('saves who may use it (TMPL-4 sharing)', () => {
-    const onSave = renderEditor()
+  it('changes general access through template.setAccess directly, not through Save (TMPL-26)', async () => {
+    const onTemplateChanged = vi.fn()
+    render(
+      <TemplateEditor
+        template={template()}
+        layoutSources={[template()]}
+        onSave={vi.fn()}
+        onTemplateChanged={onTemplateChanged}
+        onCancel={vi.fn()}
+      />,
+    )
+    vi.mocked(dispatchAction).mockResolvedValueOnce(
+      template({ visibility: 'public' }) as never,
+    )
     fireEvent.change(screen.getByLabelText('Who can use it'), {
       target: { value: 'public' },
     })
-    expect(saved(onSave).visibility).toBe('public')
+    await vi.waitFor(() => expect(onTemplateChanged).toHaveBeenCalled())
+    expect(dispatchAction).toHaveBeenCalledWith('template.setAccess', {
+      templateId: 'mine-1',
+      visibility: 'public',
+    })
+    expect(onTemplateChanged.mock.calls[0]![0].visibility).toBe('public')
+  })
+
+  it('disables general access for anyone but the owner (TMPL-26)', () => {
+    renderEditor(vi.fn(), { myRole: 'editor' })
+    expect(screen.getByLabelText('Who can use it')).toBeDisabled()
   })
 
   it('restyles every box that follows a text style, in one edit', () => {
@@ -949,6 +972,7 @@ describe('the design’s instructions for the AI', () => {
         template={template()}
         layoutSources={[template()]}
         onSave={vi.fn()}
+        onTemplateChanged={vi.fn()}
         onCancel={vi.fn()}
         onDirtyChange={onDirtyChange}
       />,

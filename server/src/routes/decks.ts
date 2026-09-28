@@ -153,7 +153,7 @@ decksRouter.get('/decks/:slug', optionalAuth, async (req, res) => {
   const { filter, options } = asOf(deck.deletedAt)
   const parents = deck.deletedAt ? withDeleted : {}
 
-  const template = await resolveDeckTemplateForRead(deck)
+  const template = await resolveDeckTemplateForRead(deck, req.userId)
   if (!template) throw notFound
 
   const isOwner = acl.ownerId === req.userId

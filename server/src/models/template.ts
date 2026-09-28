@@ -15,9 +15,12 @@ import type {
   Layout,
   Template,
   TemplateRenderMode,
+  Visibility,
 } from '@slide-machine/shared'
+import type { ResolvedAcl } from '../lib/access'
 import { softDeletePlugin } from './plugins/soft-delete'
 import { adoptDefaultTree, normalizePositions } from '../templates/builtin'
+import { shareInviteSchema, type ShareInviteDb } from './share-invite'
 
 export interface TemplateDb {
   ownerId: Types.ObjectId
@@ -34,8 +37,22 @@ export interface TemplateDb {
   /** What the design asks the AI to keep in mind for every lecture drawn
    * with it (GEN-6/GEN-11). */
   aiInstructions?: string
-  /** Private by default; unlisted or public once the author shares it. */
-  visibility: 'private' | 'unlisted' | 'public'
+  /**
+   * General access, the same vocabulary a lecture uses (TMPL-26): restricted
+   * by default, public once the author lists it. Stored values may still be
+   * the earlier three-way `private`/`unlisted`/`public` on a document nobody
+   * has saved since the migration ran — `legacyVisibility` maps both dead
+   * values to `restricted` wherever this is read.
+   */
+  visibility: Visibility | 'private' | 'unlisted'
+  /** Effective user ids with view access (TMPL-26), the same shape a
+   * project's people list has. */
+  viewers: string[]
+  /** Effective user ids with edit access (TMPL-26). */
+  editors: string[]
+  /** Shares offered to addresses with no account yet (SHARE-3); they confer
+   * no access until claimed. Server-only, not in the Template DTO. */
+  invites?: ShareInviteDb[]
   /** Net vote score, denormalized like a deck's so lists can sort on it. */
   voteScore: number
   createdAt: Date
@@ -60,11 +77,15 @@ const templateSchema = new Schema<TemplateDb>(
     theme: { type: Schema.Types.Mixed, required: true },
     layouts: { type: Schema.Types.Mixed, required: true },
     aiInstructions: { type: String },
-    visibility: {
-      type: String,
-      enum: ['private', 'unlisted', 'public'],
-      default: 'private',
-    },
+    // Not a strict enum: a document written before the TMPL-26 migration ran
+    // may still hold `private`/`unlisted` for the moment between startup and
+    // the backfill completing (jobs/migrate-template-visibility.ts), and a
+    // strict enum would refuse to load it rather than let `toTemplateDto`'s
+    // safety net map it.
+    visibility: { type: String, default: 'restricted' },
+    viewers: { type: [String], default: [] },
+    editors: { type: [String], default: [] },
+    invites: { type: [shareInviteSchema], default: [] },
     voteScore: { type: Number, default: 0 },
   },
   { timestamps: true },
@@ -74,12 +95,60 @@ templateSchema.plugin(softDeletePlugin)
 
 export const TemplateModel = model<TemplateDb>('Template', templateSchema)
 
+/** Maps a document's stored visibility onto the current two-value
+ * vocabulary (TMPL-26): both retired states read as `restricted`, the
+ * closer of the two to what they meant (visible to nobody but the author,
+ * or to whoever had the link — neither is "public"). Applied on every read,
+ * so no stored document has to be rewritten to be read correctly. */
+const legacyVisibility = (v: TemplateDb['visibility']): Visibility =>
+  v === 'public' ? 'public' : 'restricted'
+
+/** A stored template's ACL is always its own — a design belongs to no
+ * project to inherit from, unlike a lecture's (TMPL-26). */
+export const templateAcl = (
+  doc: Pick<
+    TemplateDb,
+    'ownerId' | 'visibility' | 'viewers' | 'editors' | 'invites'
+  >,
+): ResolvedAcl => ({
+  ownerId: doc.ownerId.toString(),
+  visibility: legacyVisibility(doc.visibility),
+  viewers: doc.viewers,
+  editors: doc.editors,
+  inherited: false,
+  invites: doc.invites ?? [],
+})
+
+/** The caller's relationship to a stored template (TMPL-26): `owner` for its
+ * author, `editor`/`viewer` for someone on its people list, `null` for
+ * everyone else (including a signed-out caller) — never computed for a
+ * built-in, which has no owner or people list of its own. */
+export const templateRoleFor = (
+  doc: Pick<TemplateDb, 'ownerId' | 'viewers' | 'editors'>,
+  userId?: string,
+): Template['myRole'] => {
+  if (!userId) return null
+  if (doc.ownerId.toString() === userId) return 'owner'
+  if (doc.editors.includes(userId)) return 'editor'
+  if (doc.viewers.includes(userId)) return 'viewer'
+  return null
+}
+
 /**
  * The wire shape. A stored template's id is its document id, which is what a
  * deck or project stores in `templateId` — the same field that holds a
  * built-in's slug, so the two are interchangeable to every reader.
+ *
+ * `userId` is the signed-in caller, when known, and decides `myRole`
+ * (TMPL-26); omit it where the DTO is read by something other than the
+ * caller it belongs to (generation, export, another user's stored template
+ * resolved only to read its structure) — it then reads `null`, same as a
+ * built-in.
  */
-export const toTemplateDto = (doc: HydratedDocument<TemplateDb>): Template => ({
+export const toTemplateDto = (
+  doc: HydratedDocument<TemplateDb>,
+  userId?: string,
+): Template => ({
   id: doc._id.toString(),
   ownerId: doc.ownerId.toString(),
   // A template made before permalinks existed is addressed by its id, so
@@ -94,7 +163,8 @@ export const toTemplateDto = (doc: HydratedDocument<TemplateDb>): Template => ({
   // longer exists. Applied on read, so no stored document is rewritten.
   layouts: adoptDefaultTree(normalizePositions(doc.layouts)),
   ...(doc.aiInstructions ? { aiInstructions: doc.aiInstructions } : {}),
-  visibility: doc.visibility,
+  visibility: legacyVisibility(doc.visibility),
+  myRole: templateRoleFor(doc, userId),
   voteScore: doc.voteScore,
   createdAt: doc.createdAt.toISOString(),
 })

@@ -11,12 +11,15 @@
  * them, and nothing on the render path reads them, so changing one cannot
  * move a slide in a lecture that is already saved.
  */
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Template, TextStyleSpec } from '@slide-machine/shared'
 import {
   MAX_TEMPLATE_INSTRUCTIONS,
   TEXT_STYLE_ROLES,
 } from '@slide-machine/shared'
+import { dispatchAction } from '../../api/actions'
+import { ApiError } from '../../api/http'
 import { FONT_STACKS } from '../slide/fonts'
 import { themeTextStyles } from '../slide/theme'
 
@@ -48,28 +51,67 @@ const toNumber = (raw: string): number | undefined => {
 }
 
 export default function TemplateSettings({
+  templateId,
   name,
   visibility,
+  myRole,
   aiInstructions,
   theme,
   onName,
-  onVisibility,
+  onVisibilityChanged,
   onAiInstructions,
   onTheme,
   onRecord,
 }: {
+  /** Who general access is changed through directly (TMPL-26):
+   * `template.setAccess` is owner-only and enforced server-side, so this
+   * control calls it on its own rather than folding the choice into the
+   * rest of the draft that `template.update` saves — an editor may reach
+   * that action, but never this one. Slice 2 replaces this select with the
+   * full `AccessSettings` sharing panel; this stays deliberately small. */
+  templateId: string
   name: string
   visibility: Template['visibility']
+  /** The caller's own relationship to the design (TMPL-26). Only the owner
+   * may change general access — an editor sees the select disabled, since
+   * `template.setAccess` would refuse them anyway. */
+  myRole: Template['myRole']
   aiInstructions: string
   theme: Record<string, unknown>
   onName: (name: string) => void
-  onVisibility: (v: Template['visibility']) => void
+  /** Fired with the template as the server now has it, once a general-access
+   * change is saved. */
+  onVisibilityChanged: (updated: Template) => void
   onAiInstructions: (value: string) => void
   onTheme: (patch: Record<string, unknown>) => void
   onRecord: (key?: string) => void
 }) {
   const { t } = useTranslation()
   const styles = themeTextStyles(theme)
+  const [visibilityError, setVisibilityError] = useState<string | null>(null)
+  const [savingVisibility, setSavingVisibility] = useState(false)
+
+  const changeVisibility = async (next: Template['visibility']) => {
+    setVisibilityError(null)
+    setSavingVisibility(true)
+    try {
+      const updated = await dispatchAction<Template>('template.setAccess', {
+        templateId,
+        visibility: next,
+      })
+      onVisibilityChanged(updated)
+    } catch (e) {
+      // The server's own words when it has any — e.g. AUTH-3's "confirm
+      // your address first" for going public — rather than a generic one.
+      setVisibilityError(
+        e instanceof ApiError && e.message
+          ? e.message
+          : t('template.errors.setAccess'),
+      )
+    } finally {
+      setSavingVisibility(false)
+    }
+  }
 
   const setStyle = (role: string, patch: Partial<TextStyleSpec>) => {
     const stored =
@@ -116,24 +158,32 @@ export default function TemplateSettings({
             </span>
             <select
               value={visibility}
-              onChange={e => {
-                onRecord()
-                onVisibility(e.target.value as Template['visibility'])
-              }}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+              disabled={savingVisibility || myRole !== 'owner'}
+              onChange={e =>
+                // No `onRecord()`: general access is not part of the
+                // editor's undo-able draft (TMPL-26) — it saves through
+                // `template.setAccess` immediately, so there is nothing here
+                // for Undo to step back to.
+                void changeVisibility(e.target.value as Template['visibility'])
+              }
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
             >
-              <option value="private">
-                {t('template.visibility.private')}
-              </option>
-              <option value="unlisted">
-                {t('template.visibility.unlisted')}
+              <option value="restricted">
+                {t('template.visibility.restricted')}
               </option>
               <option value="public">{t('template.visibility.public')}</option>
             </select>
           </label>
           <p className="text-xs text-slate-500">
-            {t(`template.visibilityHint.${visibility}`)}
+            {myRole === 'owner'
+              ? t(`template.visibilityHint.${visibility}`)
+              : t('template.visibilityOwnerOnly')}
           </p>
+          {visibilityError && (
+            <p role="alert" className="text-xs text-red-600">
+              {visibilityError}
+            </p>
+          )}
         </div>
       </div>
 

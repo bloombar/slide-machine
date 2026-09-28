@@ -17,7 +17,7 @@ import {
   type Locale,
 } from '@slide-machine/shared'
 import { defineAction } from './define'
-import { projectOwner, type ProjectAccess } from './access'
+import { isTemplateReadable, projectOwner, type ProjectAccess } from './access'
 import { registerAction, ActionValidationError } from './dispatch'
 import { requireImportVolume } from '../billing/meter-hooks'
 import { meterUsage } from '../billing/usage-context'
@@ -25,7 +25,6 @@ import { BYTES_PER_MB } from '../billing/usage'
 import { parseDeckImport, type ImportedDeck } from '../lib/deck-import'
 import { permalinkSlug } from '../lib/slug'
 import { defaultTemplateId } from '../templates/builtin'
-import { templateExists } from '../templates/resolve'
 import { currentVersionIdFor } from '../templates/versions'
 import { ttsVoiceIdSchema } from '../lib/tts-voice'
 import { DeckModel, resolveDeckAcl, toDeckDto } from '../models/deck'
@@ -43,17 +42,21 @@ interface ResolvedSettings {
 /**
  * Validates the imported template + General-tab settings against what the app
  * accepts, keeping the valid ones and collecting a warning for each dropped or
- * substituted value. An unknown template falls back to the deployment's
- * default rather than failing the whole import (EXP-3 "restore faithfully…
- * if possible"). Async because a template may be user-authored and stored.
+ * substituted value. An unreadable template — unknown, or one `userId` may
+ * not open (TMPL-26) — falls back to the deployment's default rather than
+ * failing the whole import (EXP-3 "restore faithfully… if possible") or,
+ * worse, silently drawing the new lecture with a design its new owner cannot
+ * even see the source of. The two are warned about identically, so the
+ * message never tells an importer which restricted template id they guessed.
  */
 const resolveSettings = async (
   doc: ImportedDeck,
+  userId: string,
 ): Promise<ResolvedSettings> => {
   const warnings: string[] = []
 
   let templateId = doc.templateId
-  if (!(await templateExists(templateId))) {
+  if (!(await isTemplateReadable(userId, templateId))) {
     warnings.push(
       `Unknown template "${templateId}" — using the default template instead.`,
     )
@@ -117,14 +120,14 @@ export const deckImport = defineAction<
     projectId: z.string().min(1),
     content: z.string().min(1),
   }),
-  execute: async (ctx, input, { project }) => {
+  execute: async (ctx, input, { userId, project }) => {
     const parsed = parseDeckImport(input.content)
     if ('errors' in parsed) {
       throw new ActionValidationError('deck.import', parsed.errors)
     }
     const doc = parsed.data
 
-    const settings = await resolveSettings(doc)
+    const settings = await resolveSettings(doc, userId)
     const title = doc.title.trim()
 
     // Create the new lecture. A titled import is treated as user-named so the

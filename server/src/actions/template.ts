@@ -1,14 +1,18 @@
 /**
- * Template actions (TMPL-1, TMPL-4).
- *   - template.list      — the caller's library: their own plus the built-ins.
+ * Template actions (TMPL-1, TMPL-4, TMPL-26).
+ *   - template.list      — the caller's library: their own, ones shared with
+ *                          them, plus the built-ins.
  *   - template.export    — a template serialized to YAML for download (EXP-2).
  *   - template.duplicate — a copy of a template the caller can see, theirs to
  *                          edit. This is also how one is created: starting
  *                          from an existing template means no starter theme or
  *                          layout set is written into code, so a deployment
  *                          shipping its own built-ins is unaffected.
- *   - template.update    — rename, retheme, or retune a template's layouts.
- *   - template.delete    — tombstone a template the caller authored.
+ *   - template.update    — rename, retheme, or retune a design's content —
+ *                          the owner or an editor.
+ *   - template.delete    — tombstone a template the caller owns.
+ *   - template.setAccess, .share, .unshare, .shares — who can reach a design
+ *     and how (TMPL-26), owner-only, mirroring a lecture's own share actions.
  *
  * Built-ins are read-only: they come from files a deployment controls, and
  * editing one into the database would silently diverge from the file it came
@@ -17,12 +21,14 @@
 import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
 import type {
+  DeckShare,
   ExportDownload,
   ExportToDriveResult,
   GenerationProvider,
   Layout,
   Template,
   TemplateDescriptorStatus,
+  Visibility,
 } from '@slide-machine/shared'
 import { KEEP_EVERY_SLIDE_BY_DEFAULT } from '@slide-machine/shared'
 import { MAX_TEMPLATE_INSTRUCTIONS } from '@slide-machine/shared'
@@ -36,7 +42,7 @@ import {
   repointDecoration,
 } from '../lib/template-import'
 import { fetchAssets } from '../import/assets'
-import { TemplateModel, toTemplateDto } from '../models/template'
+import { TemplateModel, templateAcl, toTemplateDto } from '../models/template'
 import { UserModel } from '../models/user'
 import {
   layoutDescriptors,
@@ -53,10 +59,23 @@ import { templateToYaml } from '../lib/template-yaml'
 import { templateToPptx, templatePictures } from '../lib/template-pptx'
 import { createGoogleSlidesFromTemplateLive } from '../lib/export-google'
 import { decryptToken } from '../lib/token-crypto'
+import { sharesOfAcl } from '../lib/shares'
+import {
+  normalizeEmail,
+  invitable,
+  upsertInvite,
+  removeInvite,
+} from '../lib/share-invites'
+import { notifyShare } from '../lib/share-emails'
+import {
+  requireVerifiedEmail,
+  requireVerifiedEmailWhenMailable,
+} from '../auth/verified'
 import {
   requiresGoogleDrive,
   signedIn,
-  templateAuthor,
+  templateEditor,
+  templateOwner,
   templateReadable,
   templateReadableBySlug,
   type Signed,
@@ -65,14 +84,19 @@ import {
   type WithGoogle,
 } from './access'
 
-/** A design the caller may read: a built-in, their own, one its author
- * shared, or one that draws a lecture they may edit. */
+/** A design the caller may read: a built-in, one they are a member of,
+ * one that is public, or one that draws a lecture they may edit. */
 const readableById = templateReadable(
   (input: { templateId: string }) => input.templateId,
 )
 
-/** The author alone — renaming, retheming, deleting. */
-const authorOf = templateAuthor(
+/** Owner or editor — the design's content. */
+const editorOf = templateEditor(
+  (input: { templateId: string }) => input.templateId,
+)
+
+/** The owner alone — deleting a design, or changing who else may reach it. */
+const ownerOf = templateOwner(
   (input: { templateId: string }) => input.templateId,
 )
 import { isLive } from '../lib/export-mode'
@@ -129,9 +153,12 @@ const templateBody = z.object({
     .max(MAX_TEMPLATE_INSTRUCTIONS)
     .optional()
     .transform(v => v || undefined),
-  /** Private until the author shares it: unlisted is reachable by link,
-   * public is listed for discovery (TMPL-4). */
-  visibility: z.enum(['private', 'unlisted', 'public']).optional(),
+  // General access has no field here (TMPL-26): `template.update` is
+  // reachable by an editor as well as the owner, and who else may reach the
+  // design is an owner-only decision — `template.setAccess` is the one door
+  // for it, which already enforces that and the verified-email requirement
+  // for going public. A field here would need its own owner-only check
+  // duplicating that action for no reason.
 })
 
 /** Slots arrive in the file's shorthand or object form; normalizing on save
@@ -160,9 +187,10 @@ export const templateList = defineAction<
  *
  * Carries the author's name so the page can say whose design this is, the
  * way a project page does (SOC-4). Who may read it follows the template's
- * own visibility: its author always, a built-in or a shared one anyone, and
- * a private one nobody else — refused identically to a template that does
- * not exist, so the permalink cannot be used to discover what is there.
+ * own access (TMPL-26): its owner always, a built-in or a public one anyone,
+ * a viewer or editor on its people list, or one that draws a lecture the
+ * caller may edit — refused identically to a template that does not exist,
+ * so the permalink cannot be used to discover what is there.
  */
 export const templateGet = defineAction<
   { slug: string },
@@ -174,6 +202,8 @@ export const templateGet = defineAction<
   input: z.object({ slug: z.string().min(1) }),
   execute: async (ctx, input, { template }) => {
     const owner = await UserModel.findById(template.ownerId).catch(() => null)
+    // `template` already carries the caller's own `myRole` (TMPL-26) —
+    // `templateReadableBySlug` resolved it against the caller, not nobody.
     return owner
       ? { ...template, owner: { id: owner.id, displayName: owner.displayName } }
       : template
@@ -268,14 +298,16 @@ export const templateDuplicate = defineAction<
     name: z.string().trim().min(1).max(80).optional(),
   }),
   execute: async (ctx, input, { userId, template: source }) => {
-    // Named against everything the caller can already see, so a copy never
-    // arrives sharing a name with the thing it was copied from.
-    const library = await listTemplatesFor(userId)
+    // Named against the caller's OWN templates only (TMPL-26): a design
+    // shared with them is not theirs to collide names with, so it must not
+    // count here even though `template.list` now shows it alongside their
+    // own.
+    const own = await listTemplatesFor(userId, { includeShared: false })
     const name =
       input.name ??
       copyName(
         source.name,
-        library.map(t => t.name),
+        own.map(t => t.name),
       )
     const doc = await TemplateModel.create({
       ownerId: userId,
@@ -287,13 +319,24 @@ export const templateDuplicate = defineAction<
       theme: source.theme,
       layouts: source.layouts,
       aiInstructions: source.aiInstructions,
-      visibility: 'private',
+      // A copy always starts restricted and unshared, whatever the source's
+      // own access was (TMPL-26) — its people list belongs to the source,
+      // not to a design the caller only just made their own.
+      visibility: 'restricted',
     })
-    return toTemplateDto(doc)
+    return toTemplateDto(doc, userId)
   },
 })
 
-/** Renames, rethemes, or retunes a template the caller authored (TMPL-4). */
+/**
+ * Renames, rethemes, or retunes a design's content — the owner or an editor
+ * (TMPL-26).
+ *
+ * Carries no `visibility` field: who else may reach a design is an owner-only
+ * decision (`template.setAccess`), and this action is reachable by an editor
+ * too, so a field here would need its own owner-only check duplicating that
+ * action for no reason.
+ */
 export const templateUpdate = defineAction<
   {
     templateId: string
@@ -302,13 +345,12 @@ export const templateUpdate = defineAction<
     theme: Record<string, unknown>
     layouts: z.infer<typeof templateBody>['layouts']
     aiInstructions?: string
-    visibility?: 'private' | 'unlisted' | 'public'
   },
   Template,
   TemplateAuthorAccess
 >({
   name: 'template.update',
-  access: authorOf,
+  access: editorOf,
   input: z
     .object({ templateId: z.string().min(1) })
     .extend(templateBody.shape)
@@ -322,16 +364,15 @@ export const templateUpdate = defineAction<
     doc.theme = input.theme
     doc.layouts = normalizeLayouts(input.layouts)
     doc.aiInstructions = input.aiInstructions
-    if (input.visibility) doc.visibility = input.visibility
     await doc.save()
-    return toTemplateDto(doc)
+    return toTemplateDto(doc, ctx.userId)
   },
 })
 
 /**
- * Tombstones a template the caller authored (P-10). A deck already using it
- * keeps its id and falls back the way it would for any unknown template, so
- * deleting one never breaks a lecture that referenced it.
+ * Tombstones a template the caller owns (P-10, TMPL-26). A deck already using
+ * it keeps its id and falls back the way it would for any unknown template,
+ * so deleting one never breaks a lecture that referenced it.
  */
 export const templateDelete = defineAction<
   { templateId: string },
@@ -339,13 +380,169 @@ export const templateDelete = defineAction<
   TemplateAuthorAccess
 >({
   name: 'template.delete',
-  access: authorOf,
+  access: ownerOf,
   input: z.object({ templateId: z.string().min(1) }),
   execute: async (ctx, input, { doc }) => {
     doc.deletedAt = new Date()
     await doc.save()
     return { id: doc._id.toString() }
   },
+})
+
+/** Design general-access change: restricted or public — the owner alone
+ * (TMPL-26), the same rule `deck.setAccess`/`project.setAccess` apply. */
+export const templateSetAccess = defineAction<
+  { templateId: string; visibility: Visibility },
+  Template,
+  TemplateAuthorAccess
+>({
+  name: 'template.setAccess',
+  access: ownerOf,
+  input: z.object({
+    templateId: z.string().min(1),
+    visibility: z.enum(['restricted', 'public']),
+  }),
+  execute: async (ctx, input, { doc }) => {
+    // Listing a design publicly needs a confirmed address (AUTH-3), same
+    // reasoning as deck.setAccess: this reaches the public, not just a
+    // person the owner names.
+    if (input.visibility === 'public' && ctx.userId) {
+      await requireVerifiedEmail(ctx.userId)
+    }
+    doc.visibility = input.visibility
+    await doc.save()
+    return toTemplateDto(doc, ctx.userId)
+  },
+})
+
+/**
+ * Grants a design's people list a viewer or editor (TMPL-26) — the owner
+ * alone, mirroring `deck.share`. An address with no account yet, or one that
+ * has never confirmed itself, is held as a pending invitation (SHARE-3)
+ * until it is proven; `claimShareInvites` (lib/share-invites.ts) is what
+ * turns that into a real grant.
+ */
+export const templateShare = defineAction<
+  { templateId: string; email: string; role: 'viewer' | 'editor' },
+  DeckShare[],
+  TemplateAuthorAccess
+>({
+  name: 'template.share',
+  access: ownerOf,
+  input: z.object({
+    templateId: z.string().min(1),
+    email: z.email(),
+    role: z.enum(['viewer', 'editor']),
+  }),
+  execute: async (ctx, input, { doc }) => {
+    // Confirm your own address before sharing with anyone else — see
+    // deck.share. Waived where the deployment cannot send mail at all.
+    if (ctx.userId) await requireVerifiedEmailWhenMailable(ctx.userId)
+    const email = normalizeEmail(input.email)
+    const user = await UserModel.findOne({ email })
+    if (user && user._id.toString() === doc.ownerId.toString()) {
+      throw new ActionValidationError('template.share', [
+        'email: that user owns this design',
+      ])
+    }
+    // An account that has never confirmed its address is not evidence that
+    // the person behind it is the one holding it (SHARE-3) — held as an
+    // invitation exactly as one to a stranger is, and granted once confirmed.
+    const proven = Boolean(user?.emailVerified)
+    if (user && proven) {
+      const userId = user._id.toString()
+      const list = input.role === 'editor' ? doc.editors : doc.viewers
+      if (!list.includes(userId)) list.push(userId)
+      // One role per person: granting one revokes the other.
+      const other = input.role === 'editor' ? doc.viewers : doc.editors
+      const index = other.indexOf(userId)
+      if (index >= 0) other.splice(index, 1)
+      doc.invites = removeInvite(doc.invites, email)
+    } else {
+      // An address that could never claim it — banned, or a deleted account
+      // whose row still holds the address — is refused rather than invited
+      // into a share it can never reach.
+      if (!(await invitable(email))) {
+        throw new ActionValidationError('template.share', [
+          'email: that address cannot be invited',
+        ])
+      }
+      if (user) {
+        const userId = user._id.toString()
+        doc.viewers = doc.viewers.filter(id => id !== userId)
+        doc.editors = doc.editors.filter(id => id !== userId)
+      }
+      doc.invites = upsertInvite(doc.invites, email, input.role)
+    }
+    await doc.save()
+    await notifyShare(ctx, {
+      to: email,
+      recipientName: user?.displayName,
+      kind: 'template',
+      title: doc.name,
+      path: `/t/${doc.permalinkSlug ?? doc._id.toString()}`,
+      role: input.role,
+      hasAccount: Boolean(user),
+      awaitingConfirmation: Boolean(user) && !proven,
+    })
+    return sharesOfAcl(templateAcl(doc))
+  },
+})
+
+/** Revokes a granted share, or withdraws a pending invitation (TMPL-26) —
+ * the owner alone, mirroring `deck.unshare`. */
+export const templateUnshare = defineAction<
+  {
+    templateId: string
+    userId?: string
+    email?: string
+    role: 'viewer' | 'editor'
+  },
+  DeckShare[],
+  TemplateAuthorAccess
+>({
+  name: 'template.unshare',
+  access: ownerOf,
+  input: z
+    .object({
+      templateId: z.string().min(1),
+      userId: z.string().min(1).optional(),
+      email: z.email().optional(),
+      role: z.enum(['viewer', 'editor']),
+    })
+    // A granted share is revoked by user id and a pending invitation by
+    // address (SHARE-3); one or the other, never both.
+    .refine(
+      input => Boolean(input.userId) !== Boolean(input.email),
+      'give exactly one of userId and email',
+    ),
+  execute: async (ctx, input, { doc }) => {
+    if (input.email) {
+      doc.invites = removeInvite(doc.invites, input.email)
+    } else {
+      const list = input.role === 'editor' ? doc.editors : doc.viewers
+      const index = list.indexOf(input.userId!)
+      if (index >= 0) list.splice(index, 1)
+    }
+    await doc.save()
+    return sharesOfAcl(templateAcl(doc))
+  },
+})
+
+/**
+ * Who a design is shared with (TMPL-26) — the owner alone: unlike a
+ * lecture's `deck.shares`, an editor of a design does not get to see who
+ * else is on its people list, only the owner who put them there.
+ */
+export const templateShares = defineAction<
+  { templateId: string },
+  DeckShare[],
+  TemplateAuthorAccess
+>({
+  name: 'template.shares',
+  access: ownerOf,
+  input: z.object({ templateId: z.string().min(1) }),
+  execute: (ctx, input, { doc }) => sharesOfAcl(templateAcl(doc)),
 })
 
 /**
@@ -542,9 +739,9 @@ export const templateImportFromSlides = defineAction<
       renderMode: built.renderMode,
       theme: built.theme,
       layouts: normalizeLayouts(layouts),
-      visibility: 'private',
+      visibility: 'restricted',
     })
-    return { template: toTemplateDto(doc), report }
+    return { template: toTemplateDto(doc, userId), report }
   },
 })
 
@@ -609,9 +806,9 @@ const storeImportedTemplate = async (
     layouts: normalizeLayouts(repointDecoration(layouts, stored)),
     // An import is the author's to review before anyone else sees it, the
     // same judgement an import from Google Slides makes.
-    visibility: 'private',
+    visibility: 'restricted',
   })
-  return toTemplateDto(doc)
+  return toTemplateDto(doc, userId)
 }
 
 export const templateImport = defineAction<
@@ -686,9 +883,9 @@ export const templateImportFromDrive = defineAction<
           renderMode: built.renderMode,
           theme: built.theme,
           layouts: normalizeLayouts(layouts),
-          visibility: 'private',
+          visibility: 'restricted',
         })
-        return toTemplateDto(doc)
+        return toTemplateDto(doc, userId)
       }
 
       return storeImportedTemplate(
@@ -720,6 +917,10 @@ registerAction(templatePreviewImage)
 registerAction(templateDuplicate)
 registerAction(templateUpdate)
 registerAction(templateDelete)
+registerAction(templateSetAccess)
+registerAction(templateShare)
+registerAction(templateUnshare)
+registerAction(templateShares)
 registerAction(templateExportToDrive)
 registerAction(templateImportFromSlides)
 registerAction(templateImport)

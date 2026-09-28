@@ -300,7 +300,8 @@
       "duplicate": "Could not duplicate that template",
       "load": "Could not load this design",
       "save": "Could not save the template",
-      "delete": "Could not delete the template"
+      "delete": "Could not delete the template",
+      "setAccess": "Could not change who can reach this design"
     },
     "page": {
       "saved": "Saved",
@@ -312,13 +313,11 @@
     "addLayoutChoose": "Choose a type…",
     "removeLayout": "Remove the {name} layout",
     "visibility": {
-      "private": "Only me",
-      "unlisted": "Anyone with the link",
+      "restricted": "Restricted",
       "public": "Listed publicly"
     },
     "visibilityHint": {
-      "private": "Yours alone. Nobody else can find or copy it.",
-      "unlisted": "Anyone you send the link to can copy it.",
+      "restricted": "Only you and anyone you share it with can open it.",
       "public": "Shown in the public template library for anyone to copy."
     },
     "boxAt": "{slot}: {x}% from the left, {y}% down, {w}% wide, {h}% tall",
@@ -540,7 +539,8 @@
         "invalid": "Could not import this template: {details}",
         "failed": "Could not import this template"
       }
-    }
+    },
+    "visibilityOwnerOnly": "Only the design's owner can change who can use it."
   },
   "layout": {
     "change": "Change slide layout",

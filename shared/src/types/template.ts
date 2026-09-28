@@ -3,6 +3,7 @@
  * Layout descriptors double as the AI-facing option set for layout
  * selection (TMPL-6 / GEN-6).
  */
+import type { Visibility } from './deck'
 
 /** The conventional layout types (TMPL-2): a preferred vocabulary every
  * template covers, NOT a closed set — a template may name a layout of its own
@@ -549,7 +550,15 @@ export interface Template {
    * limit the design states is still enforced on whatever comes back.
    */
   aiInstructions?: string
-  visibility: 'private' | 'unlisted' | 'public'
+  /** General access, the same vocabulary a lecture uses (TMPL-26):
+   * `restricted` is the owner and whoever it is shared with, `public` is
+   * listed for anyone to copy. */
+  visibility: Visibility
+  /** The caller's own relationship to this design (TMPL-26): `owner` for its
+   * author, `editor`/`viewer` for someone it is shared with, `null` for a
+   * built-in or a public design nobody added the caller to. Never carries the
+   * people list itself — that comes only from `template.shares`. */
+  myRole: 'owner' | 'editor' | 'viewer' | null
   voteScore: number
   createdAt: string
 }

@@ -126,7 +126,6 @@ interface Draft {
   name: string
   theme: Record<string, unknown>
   layouts: Layout[]
-  visibility: Template['visibility']
   /** Held as a string, never absent, so undo restores an emptied box as
    * empty rather than as untouched. */
   aiInstructions: string
@@ -206,6 +205,7 @@ export default function TemplateEditor({
   template,
   layoutSources,
   onSave,
+  onTemplateChanged,
   onCancel,
   onDirtyChange,
   saveRef,
@@ -222,9 +222,13 @@ export default function TemplateEditor({
     renderMode: TemplateRenderMode
     theme: Record<string, unknown>
     layouts: Layout[]
-    visibility: Template['visibility']
     aiInstructions?: string
   }) => Promise<boolean>
+  /** Fired when general access changes underneath the editor (TMPL-26) —
+   * `TemplateSettings` calls `template.setAccess` on its own, since that is
+   * an owner-only action `template.update`'s draft no longer carries, so the
+   * surface around the editor is what learns of the new value. */
+  onTemplateChanged: (updated: Template) => void
   onCancel: () => void
   /** Reports unsaved work, so the surface around the editor can refuse to
    * throw it away without asking. */
@@ -239,7 +243,6 @@ export default function TemplateEditor({
   const [name, setName] = useState(template.name)
   const [theme, setTheme] = useState<Record<string, unknown>>(template.theme)
   const [layouts, setLayouts] = useState<Layout[]>(template.layouts)
-  const [visibility, setVisibility] = useState(template.visibility)
   // The design's own note to the AI (GEN-11). Held as a string rather than
   // `string | undefined` so the textarea is always controlled; the save turns
   // an empty one back into absent.
@@ -263,15 +266,31 @@ export default function TemplateEditor({
    * is not quite what was sent — enough to keep reading as unsaved work on a
    * surface that stays open afterwards. Which layout is on screen and what
    * undo can reach are left alone: nothing about them changed.
+   *
+   * Compares each content field by reference rather than the whole `template`
+   * object, because `template` also changes when `TemplateSettings` saves
+   * general access on its own (TMPL-26) — the page updates only `visibility`
+   * and `myRole` on its copy, keeping `name`/`theme`/`layouts` the same
+   * references, so that change reaches here as a new `template` prop with
+   * unchanged content and is correctly read as nothing to adopt. Resetting
+   * unconditionally on any new reference would discard whatever unsaved
+   * rename or edit was sitting in the draft the moment access changed.
    */
   const adopted = useRef(template)
   useEffect(() => {
     if (adopted.current === template) return
+    const previous = adopted.current
     adopted.current = template
+    if (
+      previous.name === template.name &&
+      previous.theme === template.theme &&
+      previous.layouts === template.layouts
+    ) {
+      return
+    }
     setName(template.name)
     setTheme(template.theme)
     setLayouts(template.layouts)
-    setVisibility(template.visibility)
   }, [template])
 
   const images = usePreviewImages()
@@ -295,18 +314,16 @@ export default function TemplateEditor({
       name,
       theme,
       layouts,
-      visibility,
       aiInstructions,
       layoutIndex,
       selectedId,
     }),
-    [name, theme, layouts, visibility, aiInstructions, layoutIndex, selectedId],
+    [name, theme, layouts, aiInstructions, layoutIndex, selectedId],
   )
   const restore = useCallback((d: Draft) => {
     setName(d.name)
     setTheme(d.theme)
     setLayouts(d.layouts)
-    setVisibility(d.visibility)
     setAiInstructions(d.aiInstructions)
     setLayoutIndex(d.layoutIndex)
     setSelectedId(d.selectedId)
@@ -626,12 +643,11 @@ export default function TemplateEditor({
    * box as an edit. A template is a few kilobytes, so this is cheap.
    */
   const dirty =
-    JSON.stringify({ name, theme, layouts, visibility, aiInstructions }) !==
+    JSON.stringify({ name, theme, layouts, aiInstructions }) !==
     JSON.stringify({
       name: template.name,
       theme: template.theme,
       layouts: template.layouts,
-      visibility: template.visibility,
       aiInstructions: template.aiInstructions ?? '',
     })
 
@@ -642,13 +658,14 @@ export default function TemplateEditor({
   }, [dirty, onDirtyChange])
 
   // The preview reflects the draft, so a colour change is visible before it
-  // is saved rather than after.
+  // is saved rather than after. General access is not part of the draft
+  // (TMPL-26) — it changes immediately through `TemplateSettings`, so the
+  // preview reads it straight off `template` rather than local state.
   const draft: Template = {
     ...template,
     name,
     theme,
     layouts,
-    visibility,
     aiInstructions: aiInstructions || undefined,
   }
 
@@ -671,7 +688,6 @@ export default function TemplateEditor({
       renderMode: renderModeOf(flattened),
       theme,
       layouts: flattened,
-      visibility,
       // Cleared reads as unset, so an emptied box does not become a blank
       // line in every prompt.
       aiInstructions: aiInstructions.trim() || undefined,
@@ -794,12 +810,14 @@ export default function TemplateEditor({
       </div>
 
       <TemplateSettings
+        templateId={template.id}
         name={name}
-        visibility={visibility}
+        visibility={template.visibility}
+        myRole={template.myRole}
         aiInstructions={aiInstructions}
         theme={theme}
         onName={setName}
-        onVisibility={setVisibility}
+        onVisibilityChanged={onTemplateChanged}
         onAiInstructions={setAiInstructions}
         onTheme={patch => setTheme(prev => ({ ...prev, ...patch }))}
         onRecord={history.record}

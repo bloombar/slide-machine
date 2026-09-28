@@ -192,12 +192,12 @@ describe('template.importFromSlides (TMPL-8)', () => {
     expect(body.report.assetsFailed).toBeUndefined()
   })
 
-  it('arrives private, since an import is a guess the author reviews', async () => {
+  it('arrives restricted, since an import is a guess the author reviews', async () => {
     await act(ada, 'quiz.connectGoogle')
     const { body } = await act(ada, 'template.importFromSlides', {
       presentationId: 'deck-1',
     })
-    expect(body.template.visibility).toBe('private')
+    expect(body.template.visibility).toBe('restricted')
   })
 
   it('is reachable at a permalink of its own', async () => {
