@@ -77,6 +77,19 @@ const renderPage = () =>
     </MemoryRouter>,
   )
 
+/** The same page, opened as `TemplateEditorPage`'s Back would (TMPL-28): with
+ * whatever `location.state` it carried, e.g. `{ sort: 'mine' }`. */
+const renderPageWithState = (state: Record<string, unknown>) =>
+  render(
+    <MemoryRouter initialEntries={[{ pathname: '/app/templates', state }]}>
+      <Routes>
+        <Route path="/app/templates" element={<DesignTemplatesPage />} />
+        <Route path="/t/:slug" element={<Landed />} />
+        <Route path="/u/:userId" element={<p>profile</p>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
 const searchBox = () => screen.getByRole('searchbox')
 
 beforeEach(() => {
@@ -88,6 +101,40 @@ describe('DesignTemplatesPage sorting and search (TMPL-28)', () => {
   it('fetches template.feed with the latest sort by default', async () => {
     mockDispatch.mockResolvedValue({ items: [template()], hasMore: false })
     renderPage()
+    await screen.findByText('Shipped')
+    expect(mockDispatch).toHaveBeenCalledWith('template.feed', {
+      sort: 'latest',
+      offset: 0,
+      limit: 10,
+    })
+  })
+
+  // TMPL-28: `TemplateEditorPage`'s Back sets `location.state.sort` so the
+  // design just left is where the caller lands, rather than this page's own
+  // default.
+  it('opens on "Mine" when navigation carries sort: "mine"', async () => {
+    mockDispatch.mockImplementation(async (_name, input) => {
+      const { sort } = input as { sort: string }
+      return sort === 'mine'
+        ? { items: [mine], hasMore: false }
+        : { items: [template()], hasMore: false }
+    })
+    renderPageWithState({ sort: 'mine' })
+    await screen.findByText('My Style')
+    expect(mockDispatch).toHaveBeenCalledWith('template.feed', {
+      sort: 'mine',
+      offset: 0,
+      limit: 10,
+    })
+    expect(screen.getByRole('button', { name: 'Mine' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('opens on "Latest" when navigation carries no sort, or an unrecognized one', async () => {
+    mockDispatch.mockResolvedValue({ items: [template()], hasMore: false })
+    renderPageWithState({ from: '/app' })
     await screen.findByText('Shipped')
     expect(mockDispatch).toHaveBeenCalledWith('template.feed', {
       sort: 'latest',
@@ -465,5 +512,18 @@ describe('DesignTemplatesPage votes (TMPL-28 round 3)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Latest' }))
 
     expect(upvote()).toHaveTextContent('1')
+  })
+})
+
+describe('DesignTemplatesPage heading and explanation (TMPL-28)', () => {
+  it('explains what a design template is for, under a sentence-case heading', async () => {
+    mockDispatch.mockResolvedValue({ items: [template()], hasMore: false })
+    renderPage()
+    expect(
+      screen.getByRole('heading', { name: 'Design templates' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/each new slide automatically picks/i),
+    ).toBeInTheDocument()
   })
 })

@@ -613,6 +613,47 @@ describe('template.search (TMPL-28)', () => {
     expect(res.body.items[0].id).toBe(high.id)
   })
 
+  // TMPL-28: search also matches the owner's display name, alongside a
+  // template's own name and AI instructions — a third `$or` arm, so a query
+  // that hits neither the name nor the instructions still finds the design
+  // by who made it.
+  it("matches a public template by its creator's display name, in every sort", async () => {
+    const byAda = await makePublicTemplate(ada, 'Untitled One')
+    const high = await makePublicTemplate(ada, 'Untitled Two')
+    await act(bob, 'template.vote', { templateId: high.id, value: 1 })
+    for (const sort of ['latest', 'top'] as const) {
+      const res = await act(bob, 'template.search', { q: 'ada', sort })
+      const ids = res.body.items.map((t: { id: string }) => t.id)
+      expect(ids).toContain(byAda.id)
+      expect(ids).toContain(high.id)
+    }
+  })
+
+  it('matches a creator-name search within "mine", scoped to the caller and any visibility', async () => {
+    const restricted = await act(ada, 'template.duplicate', {
+      templateId: builtinId(),
+      name: 'Ada Private',
+    })
+    const res = await act(ada, 'template.search', { q: 'ada', sort: 'mine' })
+    const ids = res.body.items.map((t: { id: string }) => t.id)
+    expect(ids).toContain(restricted.body.id)
+  })
+
+  // The same leak this file already guards a name match against (below),
+  // checked for a creator-name match too: bob's own query for "ada" must
+  // never surface a design ada owns but never shared or made public.
+  it("never surfaces someone else's restricted template on a creator-name match", async () => {
+    await act(ada, 'template.duplicate', {
+      templateId: builtinId(),
+      name: 'Ada Restricted Only',
+    })
+    for (const sort of ['latest', 'top', 'mine'] as const) {
+      const res = await act(bob, 'template.search', { q: 'ada', sort })
+      const names = res.body.items.map((t: { name: string }) => t.name)
+      expect(names).not.toContain('Ada Restricted Only')
+    }
+  })
+
   it('matches within "mine", scoped to the caller and any visibility', async () => {
     const restricted = await act(ada, 'template.duplicate', {
       templateId: builtinId(),

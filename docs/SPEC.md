@@ -818,15 +818,15 @@ Templates are up- and down-voted as lectures are ([SOC-1](#soc-1-voting)), built
 
 #### TMPL-28 Design Templates page
 
-**Design Templates**, linked from the navigation menu just below Account settings, is a page for browsing and searching templates. It uses the same mechanics as the lecture Discover list ([SOC-2](#soc-2-browse-search--sort)): infinite scroll, search, and a choice of sort.
+**Design Templates**, linked from the navigation menu just below Account settings, is a page for browsing and searching templates. It uses the same mechanics as the lecture Discover list ([SOC-2](#soc-2-browse-search--sort)): infinite scroll, search, and a choice of sort. Under the heading, a short explanation says what a design template is for: every slide is drawn with one of the layouts in the lecture's chosen template, and while speaking live each new slide automatically picks the layout that best fits its content.
 
-- **Latest** (the default) and **Top** list every public template, built-ins included, and rank them as lectures are ranked. **Mine** lists templates the caller owns or has been shared. Search applies within the chosen sort and matches the name and the AI instructions.
+- **Latest** (the default) and **Top** list every public template, built-ins included, and rank them as lectures are ranked. **Mine** lists templates the caller owns or has been shared. Search applies within the chosen sort and matches the title, the creator's name, or the AI instructions.
 - Each template is drawn as in the Design tab: its name, a thumbnail whose layouts can be flipped through, and the action row ([TMPL-27](#tmpl-27-template-voting)). Anyone may duplicate a template. Edit and delete appear only on the caller's own templates.
 - Each card has room for more detail:
   - the creator's name, linking to their profile ([SOC-4](#soc-4-user-profiles)); omitted for built-ins
   - the number of layouts
   - a short description: the opening of the template's AI instructions, cut at a word boundary
-- Opening a template goes to its own page ([TMPL-29](#tmpl-29-a-templates-page-for-readers)).
+- Opening a template goes to its own page ([TMPL-29](#tmpl-29-a-templates-page-for-readers)). Its own Back returns here — to **Mine** when the design left behind is the caller's own (opened or just duplicated into a copy), otherwise to the default (Latest).
 
 #### TMPL-29 A template's page for readers
 

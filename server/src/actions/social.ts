@@ -490,6 +490,22 @@ export const socialSearch = defineAction<
 const publicTemplateFilter = () => ({ visibility: 'public' as const })
 
 /**
+ * Owners whose display name matches a template search's query (TMPL-28): the
+ * same capped substring match `authorCandidates` uses for a lecture search's
+ * author dimension, so a design's creator is a third way in alongside its
+ * name and its AI instructions. Built-ins have no owner and so are never
+ * found this way — only by name or instructions.
+ */
+const templateOwnerCandidates = async (
+  rx: RegExp,
+): Promise<Types.ObjectId[]> => {
+  const owners = await UserModel.find({ displayName: rx })
+    .select('_id')
+    .limit(CANDIDATE_CAP)
+  return owners.map(u => u._id)
+}
+
+/**
  * Templates the caller owns or has been shared (TMPL-28 "Mine"): any
  * visibility, since a design not yet public is still theirs to find. No
  * built-ins — nobody owns, edits or is a viewer of one (TMPL-26).
@@ -598,8 +614,18 @@ const pageOfTemplates = async (
   { offset, limit }: { offset: number; limit: number },
   userId: string,
 ): Promise<TemplatePage> => {
+  // The creator match is a third `$or` arm (TMPL-28), not a second query — a
+  // template whose name or instructions miss but whose owner's display name
+  // hits is still a match, so all three sit in the one `$or` rather than
+  // being combined with an `$and` that would require all three to agree.
   const queryMatch = rx
-    ? { $or: [{ name: rx }, { aiInstructions: rx }] }
+    ? {
+        $or: [
+          { name: rx },
+          { aiInstructions: rx },
+          { ownerId: { $in: await templateOwnerCandidates(rx) } },
+        ],
+      }
     : undefined
 
   if (sort === 'mine') {
@@ -745,10 +771,12 @@ export const templateFeed = defineAction<
 
 /**
  * Searches templates within the caller's chosen sort (TMPL-27/TMPL-28):
- * case-insensitive, matching the name or the AI instructions. Restricted
- * designs never surface here, in any sort, for anyone not on their people
- * list — the same Mongo filter `template.feed` uses is what "top"/"latest"
- * narrow with a query match, and "mine" is already scoped to the caller
+ * case-insensitive, matching the name, the creator's display name, or the AI
+ * instructions. A built-in has no creator, so it matches only by name or
+ * instructions. Restricted designs never surface here, in any sort, for
+ * anyone not on their people list — the same Mongo filter `template.feed`
+ * uses is what "top"/"latest" narrow with a query match, and "mine" is
+ * already scoped to the caller
  * (`scopedTemplateFilter` `$and`s the two together rather than merging them,
  * so the query can never widen "mine" past the caller's own templates).
  *

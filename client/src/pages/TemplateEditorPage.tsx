@@ -84,6 +84,20 @@ export default function TemplateEditorPage() {
    * project's Design tab — else their home screen. */
   const from = (location.state as { from?: string } | null)?.from ?? '/app'
 
+  /**
+   * "Back" to the Design Templates page lands on its "Mine" tab when the
+   * design the caller is leaving is theirs (TMPL-28) — that tab is where a
+   * design just opened or duplicated into a copy actually lives, not
+   * whichever sort the page happened to default to before it was reached.
+   * Passed only when `from` is that page at all; anywhere else (a lecture's
+   * or project's Design tab) is unaffected, and a reader leaving someone
+   * else's design keeps the page's own default (Latest) rather than this.
+   */
+  const backState =
+    from === '/app/templates' && template?.myRole === 'owner'
+      ? { sort: 'mine' }
+      : undefined
+
   useEffect(() => {
     if (!slug) return
     // Wait for session restore: a pasted permalink must carry the author's
@@ -231,7 +245,7 @@ export default function TemplateEditorPage() {
   /** Leaving the page: unsaved work is asked about rather than dropped. */
   const leave = (to: string) => {
     if (dirty) setLeavingTo(to)
-    else void navigate(to)
+    else void navigate(to, backState ? { state: backState } : undefined)
   }
 
   /**
@@ -469,13 +483,13 @@ export default function TemplateEditorPage() {
               }
               const to = leavingTo
               setLeavingTo(null)
-              void navigate(to)
+              void navigate(to, backState ? { state: backState } : undefined)
             })
           }}
           onDiscard={() => {
             const to = leavingTo
             setLeavingTo(null)
-            void navigate(to)
+            void navigate(to, backState ? { state: backState } : undefined)
           }}
           onCancel={() => setLeavingTo(null)}
         />

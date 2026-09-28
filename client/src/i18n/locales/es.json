@@ -671,9 +671,10 @@
   },
   "templatesPage": {
     "heading": "Plantillas de diseño",
+    "explanation": "Una plantilla de diseño es el conjunto de disposiciones con el que se dibujan las diapositivas de una clase — mientras hablas en directo, cada diapositiva nueva elige automáticamente la disposición de tu plantilla que mejor se ajusta a su contenido.",
     "mine": "Mías",
-    "searchLabel": "Buscar plantillas de diseño",
-    "searchPlaceholder": "Buscar plantillas…",
+    "searchLabel": "Buscar por título, creador o instrucciones para la IA",
+    "searchPlaceholder": "Buscar por título, creador o instrucciones…",
     "loadFailed": "No se pudieron cargar las plantillas.",
     "searchFailed": "No se pudo realizar esa búsqueda.",
     "noMatches": "Sin resultados para «{query}».",

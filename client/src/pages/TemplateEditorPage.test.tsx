@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
-import { Link, MemoryRouter, Route, Routes } from 'react-router'
+import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import type { Layout, LayoutNode, Template } from '@slide-machine/shared'
 import TemplateEditorPage from './TemplateEditorPage'
 import { dispatchAction } from '../api/actions'
@@ -109,6 +109,31 @@ const renderPageWithJumpTo = (initialSlug: string, jumpTo: string) =>
       <Link to={jumpTo}>Jump</Link>
       <Routes>
         <Route path="/t/:slug" element={<TemplateEditorPage />} />
+        <Route path="/d/:slug" element={<p>back at the lecture</p>} />
+        <Route path="/app" element={<p>home</p>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+/** Stands in for the Design Templates page, so a test can read what "Back"
+ * told it to sort by (TMPL-28). */
+function Landed() {
+  const location = useLocation()
+  const sort = (location.state as { sort?: string } | null)?.sort
+  return <p>{`landed:${location.pathname} sort:${sort ?? ''}`}</p>
+}
+
+/** The page, opened as if from the Design Templates page (`from`), with that
+ * page's own stand-in mounted at `/app/templates` so "Back" can be observed
+ * landing there with whatever `state.sort` it carried. */
+const renderPageFrom = (from: string) =>
+  render(
+    <MemoryRouter
+      initialEntries={[{ pathname: '/t/my-style-ab12', state: { from } }]}
+    >
+      <Routes>
+        <Route path="/t/:slug" element={<TemplateEditorPage />} />
+        <Route path="/app/templates" element={<Landed />} />
         <Route path="/d/:slug" element={<p>back at the lecture</p>} />
         <Route path="/app" element={<p>home</p>} />
       </Routes>
@@ -909,5 +934,50 @@ describe('TemplateEditorPage (TMPL-4)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
 
     expect(await screen.findByText('back at the lecture')).toBeInTheDocument()
+  })
+
+  // TMPL-28: Back to the Design Templates page lands on its "Mine" tab when
+  // the design being left is the caller's own — that tab is where it lives.
+  describe('Back to the Design Templates page (TMPL-28)', () => {
+    it('passes "Mine" for the caller’s own design', async () => {
+      withTemplate(template({ myRole: 'owner' }))
+      renderPageFrom('/app/templates')
+
+      await screen.findByLabelText('Template name')
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+
+      expect(
+        await screen.findByText('landed:/app/templates sort:mine'),
+      ).toBeInTheDocument()
+    })
+
+    it('keeps the page’s own default for a design the caller does not own', async () => {
+      withTemplate(
+        template({
+          ownerId: 'u2',
+          owner: { id: 'u2', displayName: 'Bram' },
+          visibility: 'public',
+          myRole: null,
+        }),
+      )
+      renderPageFrom('/app/templates')
+
+      await screen.findByTestId('template-preview')
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+
+      expect(
+        await screen.findByText('landed:/app/templates sort:'),
+      ).toBeInTheDocument()
+    })
+
+    it('does not touch the sort when Back goes anywhere else', async () => {
+      withTemplate(template({ myRole: 'owner' }))
+      renderPage()
+
+      await screen.findByLabelText('Template name')
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+
+      expect(await screen.findByText('back at the lecture')).toBeInTheDocument()
+    })
   })
 })

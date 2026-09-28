@@ -1379,7 +1379,7 @@
   review: false
 - id: TMPL-4
   title: Custom templates (create / edit / save)
-  full: "Users can create, edit, save, and name their own templates — defining
+  full: Users can create, edit, save, and name their own templates — defining
     layouts and the positioning of slide content elements (title, body, image,
     caption) on each layout. Custom templates appear in the user's library and
     may be shared/published. A template belongs to its author rather than to any
@@ -1387,8 +1387,8 @@
     alongside a deck's /d/:slug (SHARE-1). That page is where a template is
     edited; the library in a deck's or project's Design settings chooses and
     duplicates, then sends the author there. The permalink is fixed when the
-    template is created and survives renaming. Who may open it follows the
-    template's visibility: its author…"
+    template is created and survives renaming. Who may open it follows the same
+    access a lecture has (TMPL-26)…
   section: §7 Style Template Library
   family: TMPL
   phase: 2
@@ -2412,13 +2412,13 @@
   full: "Design Templates, linked from the navigation menu just below Account
     settings, is a page for browsing and searching templates. It uses the same
     mechanics as the lecture Discover list (SOC-2): infinite scroll, search, and
-    a choice of sort. Latest (the default) and Top list every public template,
-    built-ins included, and rank them as lectures are ranked. Mine lists
-    templates the caller owns or has been shared. Search applies within the
-    chosen sort and matches the name and the AI instructions. Each template is
-    drawn as in the Design tab: its name, a thumbnail whose layouts can be
-    flipped through, and the action row (TMPL-27). Anyone may duplicate a
-    template. Edit and delete appear only on the…"
+    a choice of sort. Under the heading, a short explanation says what a design
+    template is for: every slide is drawn with one of the layouts in the
+    lecture's chosen template, and while speaking live each new slide
+    automatically picks the layout that best fits its content. Latest (the
+    default) and Top list every public template, built-ins included, and rank
+    them as lectures are ranked. Mine lists templates the caller owns or has
+    been shared. Search applies within the chosen…"
   section: §7 Style Template Library
   family: TMPL
   phase: 3
