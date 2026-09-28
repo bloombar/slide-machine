@@ -60,7 +60,8 @@ const template = (over: Partial<Template> = {}): Template => ({
 })
 
 /** Answers template.get with `loaded` and template.list with the library;
- * anything else (the preview images) resolves empty. */
+ * template.shares (the owner's sharing panel, TMPL-26) with an empty people
+ * list; anything else (the preview images) resolves empty. */
 const withTemplate = (loaded: Template | Error, library: Template[] = []) => {
   vi.mocked(dispatchAction).mockImplementation((action: string) => {
     if (action === 'template.get') {
@@ -70,6 +71,7 @@ const withTemplate = (loaded: Template | Error, library: Template[] = []) => {
     }
     if (action === 'template.list') return Promise.resolve(library)
     if (action === 'template.update') return Promise.resolve(loaded)
+    if (action === 'template.shares') return Promise.resolve([])
     return Promise.resolve({ urls: [] })
   })
 }
@@ -128,6 +130,7 @@ describe('TemplateEditorPage (TMPL-4)', () => {
       if (action === 'template.get') return Promise.resolve(template())
       if (action === 'template.list') return Promise.resolve([])
       if (action === 'template.update') return Promise.resolve(saved)
+      if (action === 'template.shares') return Promise.resolve([])
       return Promise.resolve({ urls: [] })
     })
     renderPage()
@@ -151,6 +154,7 @@ describe('TemplateEditorPage (TMPL-4)', () => {
         ownerId: 'u2',
         owner: { id: 'u2', displayName: 'Bram' },
         visibility: 'public',
+        myRole: null,
       }),
     )
     renderPage()
@@ -160,6 +164,43 @@ describe('TemplateEditorPage (TMPL-4)', () => {
     ).toBeInTheDocument()
     expect(screen.queryByLabelText('Template name')).toBeNull()
     // Every layout as a slide: that is what a design is
+    expect(screen.getAllByTestId('template-preview').length).toBe(2)
+  })
+
+  // TMPL-26: an editor gets the same editor its author does — template.update
+  // already accepts either, and the page's own gate is widened to match.
+  it('edits in place for someone shared with as an editor', async () => {
+    withTemplate(
+      template({
+        ownerId: 'u2',
+        owner: { id: 'u2', displayName: 'Bram' },
+        visibility: 'restricted',
+        myRole: 'editor',
+      }),
+    )
+    renderPage()
+
+    expect(await screen.findByLabelText('Template name')).toHaveValue(
+      'My Style',
+    )
+  })
+
+  // A viewer gets the read-only view, same as a stranger would.
+  it('shows the reader view for someone shared with as a viewer', async () => {
+    withTemplate(
+      template({
+        ownerId: 'u2',
+        owner: { id: 'u2', displayName: 'Bram' },
+        visibility: 'restricted',
+        myRole: 'viewer',
+      }),
+    )
+    renderPage()
+
+    expect(
+      await screen.findByRole('heading', { name: 'My Style', level: 1 }),
+    ).toBeInTheDocument()
+    expect(screen.queryByLabelText('Template name')).toBeNull()
     expect(screen.getAllByTestId('template-preview').length).toBe(2)
   })
 
@@ -197,6 +238,7 @@ describe('TemplateEditorPage (TMPL-4)', () => {
     vi.mocked(dispatchAction).mockImplementation((action: string) => {
       if (action === 'template.get') return Promise.resolve(loaded)
       if (action === 'template.list') return Promise.resolve([])
+      if (action === 'template.shares') return Promise.resolve([])
       if (action === 'template.setAccess') {
         return Promise.resolve({ ...loaded, visibility: 'public' })
       }
@@ -207,11 +249,9 @@ describe('TemplateEditorPage (TMPL-4)', () => {
     const name = await screen.findByLabelText('Template name')
     fireEvent.change(name, { target: { value: 'Renamed' } })
 
-    fireEvent.change(screen.getByLabelText('Who can use it'), {
-      target: { value: 'public' },
-    })
+    fireEvent.click(await screen.findByRole('radio', { name: /public/i }))
     await vi.waitFor(() =>
-      expect(screen.getByLabelText('Who can use it')).toHaveValue('public'),
+      expect(screen.getByRole('radio', { name: /public/i })).toBeChecked(),
     )
 
     // Still there, unsaved
@@ -219,6 +259,86 @@ describe('TemplateEditorPage (TMPL-4)', () => {
     // Still counts as unsaved work
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
+  })
+
+  // TMPL-26 round 2: the editor's own form and the owner's sharing panel's
+  // "Add people" form are now siblings, not one nested inside the other —
+  // the nesting broke the "Add" button outright (a click submitted both
+  // forms, natively). Enter in the name field must still reach `save`,
+  // through this form alone.
+  it('saves on Enter in the name field', async () => {
+    const loaded = template()
+    vi.mocked(dispatchAction).mockImplementation((action: string) => {
+      if (action === 'template.get') return Promise.resolve(loaded)
+      if (action === 'template.list') return Promise.resolve([])
+      if (action === 'template.shares') return Promise.resolve([])
+      if (action === 'template.update')
+        return Promise.resolve({ ...loaded, name: 'Renamed' })
+      return Promise.resolve({ urls: [] })
+    })
+    renderPage()
+
+    const name = await screen.findByLabelText('Template name')
+    fireEvent.change(name, { target: { value: 'Renamed' } })
+    // jsdom does not wire a text field's Enter key to its form's implicit
+    // submission (a documented jsdom gap), so the 'submit' event this
+    // editor's own onSubmit handles is raised directly — exactly what a
+    // real Enter keypress in this field would raise.
+    fireEvent.submit(name.closest('form')!)
+
+    await screen.findByTestId('template-saved')
+    expect(dispatchAction).toHaveBeenCalledWith(
+      'template.update',
+      expect.objectContaining({ name: 'Renamed' }),
+    )
+    expect(dispatchAction).not.toHaveBeenCalledWith(
+      'template.share',
+      expect.anything(),
+    )
+  })
+
+  // The mirror case: adding a person calls `template.share` alone, whether
+  // triggered by Enter in the email field or by clicking Add — never the
+  // editor's own save, since the two forms no longer share any DOM nesting
+  // that could let one submission reach the other's handler.
+  it('adding a person calls template.share alone, by Enter or by clicking Add', async () => {
+    const loaded = template()
+    vi.mocked(dispatchAction).mockImplementation((action: string) => {
+      if (action === 'template.get') return Promise.resolve(loaded)
+      if (action === 'template.list') return Promise.resolve([])
+      if (action === 'template.shares') return Promise.resolve([])
+      if (action === 'template.share') return Promise.resolve([])
+      return Promise.resolve({ urls: [] })
+    })
+    renderPage()
+
+    const email = await screen.findByLabelText('Add people by email')
+    fireEvent.change(email, { target: { value: 'byron@example.com' } })
+    fireEvent.submit(email.closest('form')!)
+    await vi.waitFor(() =>
+      expect(dispatchAction).toHaveBeenCalledWith(
+        'template.share',
+        expect.objectContaining({ email: 'byron@example.com' }),
+      ),
+    )
+    expect(dispatchAction).not.toHaveBeenCalledWith(
+      'template.update',
+      expect.anything(),
+    )
+
+    vi.mocked(dispatchAction).mockClear()
+    fireEvent.change(email, { target: { value: 'clara@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await vi.waitFor(() =>
+      expect(dispatchAction).toHaveBeenCalledWith(
+        'template.share',
+        expect.objectContaining({ email: 'clara@example.com' }),
+      ),
+    )
+    expect(dispatchAction).not.toHaveBeenCalledWith(
+      'template.update',
+      expect.anything(),
+    )
   })
 
   it('leaves without asking when nothing is unsaved', async () => {

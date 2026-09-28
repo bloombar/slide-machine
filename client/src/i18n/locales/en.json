@@ -259,6 +259,7 @@
     "exportYaml": "Export template as YAML",
     "exportYamlHint": "Download this template’s style and layouts as a re-importable YAML file.",
     "custom": "Custom",
+    "shared": "Shared",
     "duplicate": "Duplicate",
     "duplicateNamed": "Duplicate {name}",
     "edit": "Edit",
@@ -300,8 +301,7 @@
       "duplicate": "Could not duplicate that template",
       "load": "Could not load this design",
       "save": "Could not save the template",
-      "delete": "Could not delete the template",
-      "setAccess": "Could not change who can reach this design"
+      "delete": "Could not delete the template"
     },
     "page": {
       "saved": "Saved",
@@ -317,8 +317,8 @@
       "public": "Listed publicly"
     },
     "visibilityHint": {
-      "restricted": "Only you and anyone you share it with can open it.",
-      "public": "Shown in the public template library for anyone to copy."
+      "restricted": "Only people you add can open this design.",
+      "public": "Anyone signed in can find, use and copy this design."
     },
     "boxAt": "{slot}: {x}% from the left, {y}% down, {w}% wide, {h}% tall",
     "slotLabel": "What it is called",

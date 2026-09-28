@@ -9,7 +9,9 @@
  * the design is called and whose it is, reading through to their profile the
  * way a project page does (SOC-4).
  *
- * Someone who did not author it — a built-in, or a design shared with them —
+ * Someone shared with as an editor gets the same editor its author does
+ * (TMPL-26): `template.update` already accepts either, so the page does too.
+ * Everyone else — a built-in, a viewer, or a design merely made public —
  * sees the same page without the editor: every layout as a rendered slide,
  * which is what a design is. A private template belonging to someone else is
  * refused exactly as a missing one is, so the URL says nothing about it.
@@ -28,6 +30,7 @@ import { ApiError } from '../api/http'
 import { useAuth } from '../auth/AuthContext'
 import { displayHandle } from '../lib/handle'
 import { templateName } from '../i18n/templateName'
+import AccessSettings from '../components/AccessSettings'
 import TemplateEditor from '../components/template/TemplateEditor'
 import TemplatePreview from '../components/template/TemplatePreview'
 import UnsavedChangesDialog from '../components/UnsavedChangesDialog'
@@ -93,7 +96,14 @@ export default function TemplateEditorPage() {
     }
   }, [])
 
-  const own = !!template && !!user && template.ownerId === user.id
+  // Anyone the design is shared with as an editor gets the editor, not only
+  // its author (TMPL-26) — `template.update` already accepts either, so the
+  // page's own gate is widened to match rather than leaving an editor stuck
+  // on the read-only view their role would otherwise pass.
+  const canEdit =
+    !!template &&
+    !!user &&
+    (template.myRole === 'owner' || template.myRole === 'editor')
 
   /** Writes the draft and stays here — a page is somewhere to keep working,
    * not a dialog to get out of. Resolves false when the save was refused, so
@@ -142,14 +152,15 @@ export default function TemplateEditorPage() {
   )
 
   /**
-   * General access changed underneath the editor (TMPL-26):
-   * `TemplateSettings` already saved it through `template.setAccess`, so this
-   * only adopts `visibility` and `myRole` — never `name`/`theme`/`layouts`,
-   * which stay the exact references `template` already held. An unsaved
-   * rename or edit sitting in the editor's own draft is compared against
-   * those references (`TemplateEditor`'s adopt effect), so replacing them
-   * here — even with values that happen to be unchanged — would read as a
-   * new template to adopt and silently discard the draft.
+   * General access changed through the owner's `AccessSettings` sharing
+   * panel below (TMPL-26) — its own `template.setAccess` call, not a save of
+   * the editor's draft — so this only adopts `visibility` and `myRole`,
+   * never `name`/`theme`/`layouts`, which stay the exact references
+   * `template` already held. An unsaved rename or edit sitting in the
+   * editor's own draft is compared against those references
+   * (`TemplateEditor`'s adopt effect), so replacing them here — even with
+   * values that happen to be unchanged — would read as a new template to
+   * adopt and silently discard the draft.
    */
   const onTemplateChanged = useCallback((updated: Template) => {
     setTemplate(prev =>
@@ -218,7 +229,7 @@ export default function TemplateEditorPage() {
         )}
       </header>
 
-      {own ? (
+      {canEdit ? (
         <>
           {savedNote && (
             <p
@@ -233,13 +244,38 @@ export default function TemplateEditorPage() {
             template={template}
             layoutSources={library}
             onSave={save}
-            onTemplateChanged={onTemplateChanged}
             onDirtyChange={onDirtyChange}
             saveRef={saveRef}
             onCancel={() => leave(from)}
             saving={saving}
             error={error}
           />
+          {/* The owner's sharing panel, beside the editor rather than nested
+              inside it (TMPL-26 round 2): `AccessSettings` renders its own
+              `<form>` for "Add people", and a form inside `TemplateEditor`'s
+              own form broke the "Add" button outright — the click submitted
+              both, natively, dropping the click on the floor. An editor
+              never reaches `template.setAccess`, so they get none of this;
+              `TemplateSettings` shows them a disabled read-out instead. */}
+          {template.myRole === 'owner' && (
+            <AccessSettings
+              entity="template"
+              subject={{
+                id: template.id,
+                name,
+                visibility: template.visibility,
+              }}
+              isOwner
+              onChange={updated => onTemplateChanged(updated as Template)}
+              // template.get requires sign-in, so a design's "public" is
+              // never "anyone on the internet" — the generic lecture/project
+              // wording is wrong here (TMPL-26 round 2).
+              hints={{
+                public: t('template.visibilityHint.public'),
+                restricted: t('template.visibilityHint.restricted'),
+              }}
+            />
+          )}
         </>
       ) : (
         <section>

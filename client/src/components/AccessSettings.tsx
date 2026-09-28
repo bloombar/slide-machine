@@ -18,6 +18,12 @@
  * their project's settings (nothing stored on the lecture); the first
  * change here detaches them (copy-on-write, done server-side), and
  * "Use project settings" re-attaches.
+ *
+ * A design (TMPL-26) drives `template.*` the same way, but has neither
+ * inheritance (a template never follows anything else's access) nor
+ * ownership transfer — `template.transferOwnership` does not exist, so the
+ * "Transfer ownership" option is left off the per-person menu regardless of
+ * `isOwner` when `entity === 'template'`.
  */
 import { useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -45,13 +51,20 @@ export interface AccessSubject {
 }
 
 interface Props {
-  /** Selects the action family (deck.setAccess … / project.setAccess …). */
-  entity: 'deck' | 'project'
+  /** Selects the action family (deck.setAccess … / project.setAccess … /
+   * template.setAccess …). */
+  entity: 'deck' | 'project' | 'template'
   subject: AccessSubject
   /** Only the owner may transfer ownership. */
   isOwner: boolean
   /** Fired with the updated deck/project after any saved change. */
   onChange: (updated: unknown) => void
+  /** Overrides the general-access hint text `access.general.<value>.hint`
+   * normally supplies. Each entity means something different by "public" —
+   * a lecture's hint talks about viewing it with the link, a design's about
+   * finding and copying it (`template.visibilityHint.*`) — so a caller whose
+   * default wording is wrong for its entity supplies its own. */
+  hints?: Partial<Record<Visibility, string>>
 }
 
 export default function AccessSettings({
@@ -59,6 +72,7 @@ export default function AccessSettings({
   subject,
   isOwner,
   onChange,
+  hints,
 }: Props) {
   const { t } = useTranslation()
   const { user } = useAuth()
@@ -291,8 +305,9 @@ export default function AccessSettings({
                   <option value="viewer">{t('access.roles.viewer')}</option>
                   <option value="editor">{t('access.roles.editor')}</option>
                   {/* Ownership cannot pass to someone with no account, and a
-                      pending row is withdrawn rather than revoked. */}
-                  {isOwner && !entry.pending && (
+                      pending row is withdrawn rather than revoked. A design
+                      has no ownership transfer at all (TMPL-26). */}
+                  {isOwner && !entry.pending && entity !== 'template' && (
                     <option value="transfer">{t('access.transfer')}</option>
                   )}
                   <option value="remove">
@@ -330,7 +345,7 @@ export default function AccessSettings({
                     {t(`access.general.${option}.label`)}
                   </span>
                   <span className="block text-xs text-slate-500">
-                    {t(`access.general.${option}.hint`)}
+                    {hints?.[option] ?? t(`access.general.${option}.hint`)}
                   </span>
                 </span>
               </label>

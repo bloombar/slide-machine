@@ -108,7 +108,6 @@ describe('TemplateLibrary (TMPL-1)', () => {
 
   it('offers edit and delete only on templates you authored', () => {
     renderLibrary({
-      userId: 'u1',
       onEdit: vi.fn(),
       onDelete: vi.fn(),
       onDuplicate: vi.fn(),
@@ -122,8 +121,60 @@ describe('TemplateLibrary (TMPL-1)', () => {
   })
 
   it('marks your own templates as custom', () => {
-    renderLibrary({ userId: 'u1' })
+    renderLibrary()
     expect(screen.getByText('Custom')).toBeInTheDocument()
+  })
+
+  // TMPL-26: a design shared with the caller as an editor gets the pencil,
+  // same as one they authored, but never the trash — only the owner deletes.
+  it('offers edit but not delete on a design shared as editor', () => {
+    const editable = template({
+      id: 'shared-1',
+      name: 'Shared With Me',
+      ownerId: 'u2',
+      visibility: 'restricted',
+      myRole: 'editor',
+    })
+    renderLibrary({
+      templates: [template(), editable],
+      onEdit: vi.fn(),
+      onDelete: vi.fn(),
+      onDuplicate: vi.fn(),
+    })
+    expect(screen.getByLabelText('Edit Shared With Me')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Delete Shared With Me')).toBeNull()
+  })
+
+  // A viewer gets neither: template.update would refuse them.
+  it('offers no edit or delete on a design shared as viewer', () => {
+    const readOnly = template({
+      id: 'shared-2',
+      name: 'Viewer Only',
+      ownerId: 'u2',
+      visibility: 'restricted',
+      myRole: 'viewer',
+    })
+    renderLibrary({
+      templates: [template(), readOnly],
+      onEdit: vi.fn(),
+      onDelete: vi.fn(),
+    })
+    expect(screen.queryByLabelText('Edit Viewer Only')).toBeNull()
+    expect(screen.queryByLabelText('Delete Viewer Only')).toBeNull()
+  })
+
+  // Distinct from "Custom": a design is either authored by the caller or
+  // shared with them, never both at once.
+  it('marks a design shared with the caller, rather than authored by them', () => {
+    const editable = template({
+      id: 'shared-1',
+      name: 'Shared With Me',
+      ownerId: 'u2',
+      myRole: 'editor',
+    })
+    renderLibrary({ templates: [template(), editable] })
+    expect(screen.getByText('Shared')).toBeInTheDocument()
+    expect(screen.queryByText('Custom')).toBeNull()
   })
 })
 

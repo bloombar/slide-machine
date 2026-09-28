@@ -55,7 +55,6 @@ const renderEditor = (onSave = vi.fn(), over: Partial<Template> = {}) => {
       template={template(over)}
       layoutSources={[template()]}
       onSave={onSave}
-      onTemplateChanged={vi.fn()}
       onCancel={vi.fn()}
     />,
   )
@@ -707,34 +706,21 @@ describe('template settings', () => {
     expect(saved(onSave).theme.accent).toBe('#00ff00')
   })
 
-  it('changes general access through template.setAccess directly, not through Save (TMPL-26)', async () => {
-    const onTemplateChanged = vi.fn()
-    render(
-      <TemplateEditor
-        template={template()}
-        layoutSources={[template()]}
-        onSave={vi.fn()}
-        onTemplateChanged={onTemplateChanged}
-        onCancel={vi.fn()}
-      />,
-    )
-    vi.mocked(dispatchAction).mockResolvedValueOnce(
-      template({ visibility: 'public' }) as never,
-    )
-    fireEvent.change(screen.getByLabelText('Who can use it'), {
-      target: { value: 'public' },
-    })
-    await vi.waitFor(() => expect(onTemplateChanged).toHaveBeenCalled())
-    expect(dispatchAction).toHaveBeenCalledWith('template.setAccess', {
-      templateId: 'mine-1',
-      visibility: 'public',
-    })
-    expect(onTemplateChanged.mock.calls[0]![0].visibility).toBe('public')
-  })
-
-  it('disables general access for anyone but the owner (TMPL-26)', () => {
+  // TMPL-26 round 2: the owner's full sharing panel (`AccessSettings`) is no
+  // longer nested inside this editor at all — a `<form>` inside this
+  // component's own `<form>` broke its "Add" button outright, so the page
+  // (`TemplateEditorPage`) renders it beside the editor instead. This editor
+  // never shows it, for anyone.
+  it('shows a read-only indicator of general access for anyone but the owner, and never the sharing panel', () => {
     renderEditor(vi.fn(), { myRole: 'editor' })
     expect(screen.getByLabelText('Who can use it')).toBeDisabled()
+    expect(screen.queryByText('People with access')).toBeNull()
+  })
+
+  it('shows no general-access indicator at all for the owner — that lives on the page', () => {
+    renderEditor(vi.fn(), { myRole: 'owner' })
+    expect(screen.queryByLabelText('Who can use it')).toBeNull()
+    expect(screen.queryByText('People with access')).toBeNull()
   })
 
   it('restyles every box that follows a text style, in one edit', () => {
@@ -972,7 +958,6 @@ describe('the design’s instructions for the AI', () => {
         template={template()}
         layoutSources={[template()]}
         onSave={vi.fn()}
-        onTemplateChanged={vi.fn()}
         onCancel={vi.fn()}
         onDirtyChange={onDirtyChange}
       />,

@@ -18,7 +18,6 @@ import { useLocation, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import type { Template } from '@slide-machine/shared'
 import { dispatchAction } from '../../api/actions'
-import { useAuth } from '../../auth/AuthContext'
 import { templateName } from '../../i18n/templateName'
 import ConfirmDialog from '../ConfirmDialog'
 import TemplateLibrary from './TemplateLibrary'
@@ -42,7 +41,6 @@ export default function TemplateDesignPanel({
   onLibraryChanged: () => void
 }) {
   const { t } = useTranslation()
-  const { user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [confirming, setConfirming] = useState<Template | null>(null)
@@ -113,7 +111,6 @@ export default function TemplateDesignPanel({
         templates={templates}
         value={value}
         onChange={onChange}
-        userId={user?.id}
         busyId={busyId}
         onDuplicate={duplicate}
         onEdit={edit}

@@ -205,7 +205,6 @@ export default function TemplateEditor({
   template,
   layoutSources,
   onSave,
-  onTemplateChanged,
   onCancel,
   onDirtyChange,
   saveRef,
@@ -224,11 +223,6 @@ export default function TemplateEditor({
     layouts: Layout[]
     aiInstructions?: string
   }) => Promise<boolean>
-  /** Fired when general access changes underneath the editor (TMPL-26) —
-   * `TemplateSettings` calls `template.setAccess` on its own, since that is
-   * an owner-only action `template.update`'s draft no longer carries, so the
-   * surface around the editor is what learns of the new value. */
-  onTemplateChanged: (updated: Template) => void
   onCancel: () => void
   /** Reports unsaved work, so the surface around the editor can refuse to
    * throw it away without asking. */
@@ -268,13 +262,15 @@ export default function TemplateEditor({
    * undo can reach are left alone: nothing about them changed.
    *
    * Compares each content field by reference rather than the whole `template`
-   * object, because `template` also changes when `TemplateSettings` saves
-   * general access on its own (TMPL-26) — the page updates only `visibility`
-   * and `myRole` on its copy, keeping `name`/`theme`/`layouts` the same
-   * references, so that change reaches here as a new `template` prop with
-   * unchanged content and is correctly read as nothing to adopt. Resetting
-   * unconditionally on any new reference would discard whatever unsaved
-   * rename or edit was sitting in the draft the moment access changed.
+   * object, because `template` also changes when the page's own
+   * `AccessSettings` sharing panel saves general access on its own (TMPL-26,
+   * rendered beside this editor rather than inside it) — the page updates
+   * only `visibility` and `myRole` on its copy, keeping `name`/`theme`/
+   * `layouts` the same references, so that change reaches here as a new
+   * `template` prop with unchanged content and is correctly read as nothing
+   * to adopt. Resetting unconditionally on any new reference would discard
+   * whatever unsaved rename or edit was sitting in the draft the moment
+   * access changed.
    */
   const adopted = useRef(template)
   useEffect(() => {
@@ -810,14 +806,12 @@ export default function TemplateEditor({
       </div>
 
       <TemplateSettings
-        templateId={template.id}
         name={name}
         visibility={template.visibility}
         myRole={template.myRole}
         aiInstructions={aiInstructions}
         theme={theme}
         onName={setName}
-        onVisibilityChanged={onTemplateChanged}
         onAiInstructions={setAiInstructions}
         onTheme={patch => setTheme(prev => ({ ...prev, ...patch }))}
         onRecord={history.record}
