@@ -173,9 +173,9 @@ test('design templates page: browse, vote, mine, search, and manage designs (TMP
     // duplicate-rename-save-publish path `template-library.spec.ts` and
     // `template-sharing.spec.ts` already check in full.
     await openDesignTab(ownerPage, ownerProjectUrl)
+    await ownerPage.getByRole('button', { name: 'Latest', exact: true }).click()
     await ownerPage
-      .getByRole('button', { name: /^Duplicate / })
-      .first()
+      .getByRole('button', { name: 'Duplicate Classic', exact: true })
       .click()
     await expect(ownerPage).toHaveURL(/\/t\//)
     await ownerPage.getByLabel('Template name').fill(publicName)

@@ -72,5 +72,7 @@ export function useCurrentTemplate(templateId: string): UseCurrentTemplate {
     [],
   )
 
-  return { current, setCurrent, patchVote }
+  // No id means nothing applied, not "still loading" — a caller waiting on
+  // `undefined` would otherwise wait forever.
+  return { current: templateId ? current : null, setCurrent, patchVote }
 }

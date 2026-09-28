@@ -11,6 +11,7 @@
  * which is the caller's business, not this panel's.
  */
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router'
 import type {
   Template,
@@ -55,25 +56,33 @@ export default function TemplateDesignPanel({
   // `DeckSettingsModal`'s own `{tab === 'template' && ...}`), not recomputed
   // on every render — a design applied *while* the tab is open should not
   // retroactively jump the sort out from under whatever the caller is
-  // already browsing.
-  const [initialSort] = useState<TemplateFeedSort>(() =>
-    current?.myRole ? 'mine' : 'latest',
-  )
+  // already browsing. Chosen only once `current` has resolved (undefined =
+  // still loading): deciding before that would always pick Latest, and
+  // which tab opened would depend on how fast the fetch was.
+  const { t } = useTranslation()
+  const [initialSort, setInitialSort] = useState<TemplateFeedSort>()
+  if (initialSort === undefined && current !== undefined) {
+    setInitialSort(current?.myRole ? 'mine' : 'latest')
+  }
 
   return (
     <>
       {current && <TemplateDescriptorNotice template={current} />}
-      <TemplateBrowser
-        mode="select"
-        dense
-        initialSort={initialSort}
-        value={value}
-        current={current}
-        onSelect={onSelect}
-        onCurrentVote={onCurrentVote}
-        onCurrentDeleted={onCurrentDeleted}
-        linkState={{ from: location.pathname }}
-      />
+      {initialSort === undefined ? (
+        <p className="text-sm text-slate-500">{t('common.loading')}</p>
+      ) : (
+        <TemplateBrowser
+          mode="select"
+          dense
+          initialSort={initialSort}
+          value={value}
+          current={current}
+          onSelect={onSelect}
+          onCurrentVote={onCurrentVote}
+          onCurrentDeleted={onCurrentDeleted}
+          linkState={{ from: location.pathname }}
+        />
+      )}
       {/* One way in, three sources, opened in a dialog rather than inline
           (TMPL-28): a design arriving from Slides, from a file this app
           wrote earlier, or from Drive is the same event to the browser, so

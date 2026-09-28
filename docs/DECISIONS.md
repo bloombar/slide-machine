@@ -2719,3 +2719,7 @@ unconditional). Search/sort copy is reused verbatim from the page (`templatesPag
 **New e2e check** (`template-sharing.spec.ts`): a third user, never on the design's people list, finds it under Top by
 search while it is briefly public and applies it — proving TMPL-26's "public is reachable by anyone" through the
 shared browser.
+
+### The Design tab chooses its tab once the applied design is known (supervisor, TMPL-28)
+
+The panel used to pick Mine or Latest the moment it mounted. The applied design is fetched, so it was usually still loading then, and the tab depended on how fast that fetch was. It now shows "Loading…" until the design resolves (or is known to be absent), then picks once. E2E specs that duplicate a built-in from a Design tab whose applied design is the author's own now switch to Latest first, and name the design they duplicate (`Duplicate Classic`) rather than taking the first button, since the pinned current design is drawn first.

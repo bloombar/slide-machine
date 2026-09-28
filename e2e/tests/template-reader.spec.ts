@@ -72,9 +72,9 @@ test('a reader sees a public design and a built-in read-only, and duplicates one
   await createProject(ownerPage, projectName)
   await openProjectSettings(ownerPage, projectName)
   await ownerPage.getByRole('tab', { name: 'Design' }).click()
+  await ownerPage.getByRole('button', { name: 'Latest', exact: true }).click()
   await ownerPage
-    .getByRole('button', { name: /^Duplicate / })
-    .first()
+    .getByRole('button', { name: 'Duplicate Classic', exact: true })
     .click()
   await expect(ownerPage).toHaveURL(/\/t\//)
   await ownerPage.getByLabel('Template name').fill(designName)

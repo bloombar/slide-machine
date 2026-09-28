@@ -130,6 +130,44 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('TemplateDesignPanel (TMPL-4/TMPL-28)', () => {
+  it('waits for the applied design before choosing the tab, then opens on Mine for one of the caller’s own', async () => {
+    const ui = (current: Template | null | undefined) => (
+      <MemoryRouter initialEntries={['/d/lecture-1']}>
+        <Routes>
+          <Route
+            path="/d/:slug"
+            element={
+              <TemplateDesignPanel
+                value="mine-1"
+                current={current}
+                onSelect={vi.fn()}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    )
+    const { rerender } = render(ui(undefined))
+    // Still loading: no tab chosen yet, so no feed asked for either
+    expect(screen.getByText('Loading…')).toBeInTheDocument()
+    expect(dispatchAction).not.toHaveBeenCalledWith(
+      'template.feed',
+      expect.anything(),
+    )
+
+    rerender(ui(mine))
+    expect(await screen.findByRole('button', { name: 'Mine' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await waitFor(() =>
+      expect(dispatchAction).toHaveBeenCalledWith(
+        'template.feed',
+        expect.objectContaining({ sort: 'mine' }),
+      ),
+    )
+  })
+
   it('pins the currently applied design above the browser as "Current design"', async () => {
     renderPanel({ current: mine })
     expect(await screen.findByText('Current design')).toBeInTheDocument()

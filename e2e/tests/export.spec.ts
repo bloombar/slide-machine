@@ -136,9 +136,9 @@ test('a formula exports as notation, and a broken one is reported (EXP-7)', asyn
   // A design with a formula box, made the way an author makes one
   await openProjectSettings(page, `Maths${stamp}`)
   await page.getByRole('tab', { name: 'Design' }).click()
+  await page.getByRole('button', { name: 'Latest', exact: true }).click()
   await page
-    .getByRole('button', { name: /^Duplicate / })
-    .first()
+    .getByRole('button', { name: 'Duplicate Classic', exact: true })
     .click()
   await expect(page).toHaveURL(/\/t\//)
   await page.getByRole('tab', { name: /Content/ }).click()

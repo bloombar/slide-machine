@@ -36,8 +36,10 @@ test('template library: duplicate, edit, apply, delete', async ({ page }) => {
   const library = page.getByRole('radiogroup', { name: 'Slide template' })
   await expect(library).toBeVisible()
   const previews = page.getByTestId('template-preview')
-  expect(await previews.count()).toBeGreaterThan(0)
-  const shipped = await previews.count()
+  // The pinned current design draws before the list's first page lands, so
+  // count only once a built-in from that page is on screen.
+  await expect(page.getByRole('radio', { name: /Classic/ })).toBeVisible()
+  expect(await previews.count()).toBeGreaterThan(1)
 
   await test.step('a card pages through its own layouts, in the tab (TMPL-1)', async () => {
     // Only a browser can say the slide itself redrew: jsdom can check which
@@ -65,9 +67,9 @@ test('template library: duplicate, edit, apply, delete', async ({ page }) => {
   // editor, since its name is the first thing anyone changes (TMPL-4). The
   // editor is the copy's own page, at its own permalink — a design belongs to
   // its author, not to the project whose settings were open.
+  await page.getByRole('button', { name: 'Latest', exact: true }).click()
   await page
-    .getByRole('button', { name: /^Duplicate / })
-    .first()
+    .getByRole('button', { name: 'Duplicate Classic', exact: true })
     .click()
   await expect(page).toHaveURL(/\/t\//)
 
@@ -213,7 +215,11 @@ test('template library: duplicate, edit, apply, delete', async ({ page }) => {
 
   // In the library, the copy is there and marked as the user's own
   await expect(library.getByText(templateName)).toBeVisible()
-  expect(await page.getByTestId('template-preview').count()).toBe(shipped + 1)
+  // Exactly one card for it: the pinned current design is never repeated in
+  // the list below it (TMPL-28)
+  await expect(
+    library.getByRole('radio', { name: new RegExp(templateName) }),
+  ).toHaveCount(1)
   await expect(library.getByText('Custom').first()).toBeVisible()
 
   // Applying it to the project sticks across a reload
@@ -272,9 +278,9 @@ test('a layout of the author’s own survives leaving and returning', async ({
 
   await openProjectSettings(page, projectName)
   await page.getByRole('tab', { name: 'Design' }).click()
+  await page.getByRole('button', { name: 'Latest', exact: true }).click()
   await page
-    .getByRole('button', { name: /^Duplicate / })
-    .first()
+    .getByRole('button', { name: 'Duplicate Classic', exact: true })
     .click()
   await page.getByLabel('Template name').fill(own)
 
@@ -343,6 +349,9 @@ test('a lecture uses the design it duplicates or opens for editing', async ({
   }
 
   await openDesign()
+  // The applied design is the author's own, so the tab opens on Mine; the
+  // built-ins are under Latest (TMPL-28)
+  await page.getByRole('button', { name: 'Latest', exact: true }).click()
   await page.getByRole('button', { name: 'Duplicate Classic' }).click()
   await nameAndReturn(first)
   // Saving chose nothing — the duplicate did, when it was made.
@@ -378,9 +387,9 @@ test('arranging boxes freely, with rulers and guides', async ({ page }) => {
 
   await openProjectSettings(page, projectName)
   await page.getByRole('tab', { name: 'Design' }).click()
+  await page.getByRole('button', { name: 'Latest', exact: true }).click()
   await page
-    .getByRole('button', { name: /^Duplicate / })
-    .first()
+    .getByRole('button', { name: 'Duplicate Classic', exact: true })
     .click()
   await page.getByLabel('Template name').fill(own)
   await page.getByRole('tab', { name: 'Content', exact: true }).click()
@@ -476,9 +485,9 @@ test('previewing at capacity follows the limits the template sets', async ({
 
   await openProjectSettings(page, projectName)
   await page.getByRole('tab', { name: 'Design' }).click()
+  await page.getByRole('button', { name: 'Latest', exact: true }).click()
   await page
-    .getByRole('button', { name: /^Duplicate / })
-    .first()
+    .getByRole('button', { name: 'Duplicate Classic', exact: true })
     .click()
   await expect(page).toHaveURL(/\/t\//)
   await page.getByLabel('Template name').fill(own)
@@ -531,9 +540,9 @@ test('a box carries the author’s instruction to the AI (TMPL-10)', async ({
 
   await openProjectSettings(page, projectName)
   await page.getByRole('tab', { name: 'Design' }).click()
+  await page.getByRole('button', { name: 'Latest', exact: true }).click()
   await page
-    .getByRole('button', { name: /^Duplicate / })
-    .first()
+    .getByRole('button', { name: 'Duplicate Classic', exact: true })
     .click()
   await page.getByLabel('Template name').fill(own)
 
@@ -582,9 +591,9 @@ test('a box can hold a formula, and it is edited as LaTeX (EDIT-7)', async ({
 
   await openProjectSettings(page, projectName)
   await page.getByRole('tab', { name: 'Design' }).click()
+  await page.getByRole('button', { name: 'Latest', exact: true }).click()
   await page
-    .getByRole('button', { name: /^Duplicate / })
-    .first()
+    .getByRole('button', { name: 'Duplicate Classic', exact: true })
     .click()
   await page.getByLabel('Template name').fill(own)
 
@@ -621,9 +630,9 @@ test('a code box keeps its indentation through an edit (EDIT-7)', async ({
 
   await openProjectSettings(page, projectName)
   await page.getByRole('tab', { name: 'Design' }).click()
+  await page.getByRole('button', { name: 'Latest', exact: true }).click()
   await page
-    .getByRole('button', { name: /^Duplicate / })
-    .first()
+    .getByRole('button', { name: 'Duplicate Classic', exact: true })
     .click()
   await page.getByLabel('Template name').fill(own)
 

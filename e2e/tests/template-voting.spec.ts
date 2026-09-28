@@ -93,9 +93,9 @@ test('template voting: cast, persist, change, and the owner’s own tally (TMPL-
   const ownerLectureUrl = ownerPage.url()
 
   await openLectureDesignTab(ownerPage)
+  await ownerPage.getByRole('button', { name: 'Latest', exact: true }).click()
   await ownerPage
-    .getByRole('button', { name: /^Duplicate / })
-    .first()
+    .getByRole('button', { name: 'Duplicate Classic', exact: true })
     .click()
   await expect(ownerPage).toHaveURL(/\/t\//)
   await ownerPage.getByLabel('Template name').fill(designName)
