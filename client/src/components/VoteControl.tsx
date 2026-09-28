@@ -128,13 +128,13 @@ export default function VoteControl({
       <button
         key={dir}
         type="button"
-        // Defensive rather than load-bearing today: `TemplateLibrary`'s
-        // vote row sits beside the card's selectable radio, not inside it,
-        // so nothing currently bubbles up to select the card — unlike the
+        // Defensive rather than load-bearing today: `TemplateCard`'s vote
+        // row sits beside the card's selectable radio, not inside it, so
+        // nothing currently bubbles up to select the card — unlike the
         // duplicate/edit/delete icons, which need no guard for the same
         // reason. Kept anyway, since a vote is its own act (TMPL-27) and
         // this control is also dropped into places (a page header) that
-        // are not a `TemplateLibrary` card at all.
+        // are not a `TemplateCard` at all.
         onClick={e => {
           e.stopPropagation()
           void cast(dir)

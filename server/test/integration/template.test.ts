@@ -457,6 +457,52 @@ describe('template.get and permalinks (TMPL-4)', () => {
   })
 })
 
+describe('template.getById (TMPL-28)', () => {
+  const own = async () =>
+    (
+      await act(ada, 'template.duplicate', {
+        templateId: builtinId(),
+        name: 'Mine',
+      })
+    ).body
+
+  it('reads a stored template by its id', async () => {
+    const made = await own()
+    const res = await act(ada, 'template.getById', { templateId: made.id })
+    expect(res.status).toBe(200)
+    expect(res.body.id).toBe(made.id)
+  })
+
+  it('reads a built-in by its id', async () => {
+    const res = await act(ada, 'template.getById', {
+      templateId: builtinId(),
+    })
+    expect(res.status).toBe(200)
+    expect(res.body.id).toBe(builtinId())
+  })
+
+  it("refuses someone else's private design, and a missing one, alike", async () => {
+    const made = await own()
+    const mine = await act(bob, 'template.getById', { templateId: made.id })
+    const missing = await act(bob, 'template.getById', {
+      templateId: 'no-such-design',
+    })
+    expect(mine.status).toBe(403)
+    expect(missing.status).toBe(403)
+  })
+
+  it('lets anyone read a design its owner made public (TMPL-26)', async () => {
+    const made = await own()
+    await act(ada, 'template.setAccess', {
+      templateId: made.id,
+      visibility: 'public',
+    })
+    const res = await act(bob, 'template.getById', { templateId: made.id })
+    expect(res.status).toBe(200)
+    expect(res.body.name).toBe('Mine')
+  })
+})
+
 describe('template.update (TMPL-4)', () => {
   const own = async () =>
     (

@@ -682,7 +682,8 @@
     "noMatches": "Aucun résultat pour « {query} ».",
     "emptyMine": "Aucun modèle pour l’instant.",
     "empty": "Aucun modèle trouvé.",
-    "layoutCount": "{count, plural, one {# disposition} other {# dispositions}}"
+    "layoutCount": "{count, plural, one {# disposition} other {# dispositions}}",
+    "current": "Design actuel"
   },
   "vote": {
     "upNamed": "Voter pour {name}",

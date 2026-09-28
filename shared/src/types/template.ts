@@ -582,8 +582,8 @@ export interface Template {
   /** Last saved (TMPL-27/TMPL-28): drives the "Latest" sort. A built-in has
    * none of its own and carries a fixed placeholder, since it is never
    * ranked against a stored template's date directly — see
-   * `templates/resolve.ts`'s feed paging, which appends built-ins rather
-   * than interleaving them by date. */
+   * the feed paging in `actions/social.ts`, which lists built-ins first
+   * rather than interleaving them by date. */
   updatedAt: string
 }
 

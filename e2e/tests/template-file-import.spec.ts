@@ -41,11 +41,8 @@ test('template round trip: export a design to a file, import it back', async ({
   // Exporting a design lives on its own page (EXP-6) — a built-in is
   // readable, so it exports like any other, and starting from one keeps the
   // round trip about the file rather than about how a template came to
-  // exist. Reached directly by its permalink, not through the Design
-  // templates page: built-ins sort after every stored public design there
-  // and the e2e database persists across runs, so Classic drops off page
-  // one long before this spec ever runs (a built-in's permalink is its id,
-  // template-reader.spec.ts's own `/t/classic`).
+  // exist. Reached directly by its permalink (a built-in's permalink is its
+  // id), which keeps the spec independent of the Design templates page.
   await page.goto('/t/classic')
   await expect(page).toHaveURL(/\/t\//)
   await page.getByRole('button', { name: 'Export this design' }).click()
@@ -80,19 +77,19 @@ test('template round trip: export a design to a file, import it back', async ({
   // does not retry, so a list that has not painted yet reads as zero — which
   // is what made this spec fail under load while passing on its own.
   await expect(previews.first()).toBeVisible()
-  const before = await previews.count()
-  expect(before).toBeGreaterThan(0)
 
   // The three ways a design arrives share one panel, opened here in a dialog
   // over the settings sheet — the tab has one Import button, not three.
   await dialog.getByRole('button', { name: /^Import a design$/i }).click()
   const importDialog = page.getByRole('dialog', { name: 'Import a design' })
   await importDialog.getByLabel(/import a design file/i).setInputFiles(saved!)
-  await expect(previews).toHaveCount(before + 1)
-
-  // And it is a real template rather than a row in a list: chosen straight
-  // away, the way an import exists to be used.
-  await expect(dialog.getByRole('radio', { checked: true })).toBeVisible()
+  // A real template rather than a row in a list: the author's own copy,
+  // chosen straight away, the way an import exists to be used. (Asserted by
+  // what is applied rather than by counting cards, which infinite scroll can
+  // change underneath the test — TMPL-28.)
+  await expect(
+    dialog.getByRole('radio', { checked: true, name: /Custom/ }),
+  ).toBeVisible()
 })
 
 test('a file that is not a template is refused, and says why', async ({
@@ -120,7 +117,6 @@ test('a file that is not a template is refused, and says why', async ({
   // does not retry, so a list that has not painted yet reads as zero — which
   // is what made this spec fail under load while passing on its own.
   await expect(previews.first()).toBeVisible()
-  const before = await previews.count()
 
   await page.getByRole('button', { name: /^Import a design$/i }).click()
   await page.getByLabel(/import a design file/i).setInputFiles({
@@ -132,5 +128,10 @@ test('a file that is not a template is refused, and says why', async ({
 
   await expect(page.getByRole('alert')).toContainText(/could not import/i)
   // Nothing was created: a refused import leaves the library as it was.
-  await expect(previews).toHaveCount(before)
+  // The applied design is untouched, and no design of the author's own was
+  // made
+  await expect(
+    page.getByRole('radio', { checked: true, name: /^Classic$/ }),
+  ).toBeVisible()
+  await expect(page.getByRole('radio', { name: /Custom/ })).toHaveCount(0)
 })

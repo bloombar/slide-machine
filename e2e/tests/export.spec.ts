@@ -96,10 +96,8 @@ test('export a design to Google Slides in Drive (EXP-6)', async ({ page }) => {
   await settingsDialog.getByRole('button', { name: 'Close settings' }).click()
 
   // Export lives on the design's own page (EXP-6), reached directly by its
-  // permalink rather than through the Design templates page: built-ins sort
-  // after every stored public design there and the e2e database persists
-  // across runs, so NYU Elegant drops off page one long before this spec
-  // ever runs (a built-in's permalink is its id).
+  // permalink (a built-in's permalink is its id), which keeps the spec
+  // independent of the Design templates page.
   await page.goto('/t/nyu-elegant')
   await expect(page).toHaveURL(/\/t\//)
 
@@ -136,9 +134,9 @@ test('a formula exports as notation, and a broken one is reported (EXP-7)', asyn
   // A design with a formula box, made the way an author makes one
   await openProjectSettings(page, `Maths${stamp}`)
   await page.getByRole('tab', { name: 'Design' }).click()
+  await page.getByRole('button', { name: 'Latest', exact: true }).click()
   await page
-    .getByRole('button', { name: /^Duplicate / })
-    .first()
+    .getByRole('button', { name: 'Duplicate Classic', exact: true })
     .click()
   await expect(page).toHaveURL(/\/t\//)
   await page.getByRole('tab', { name: /Content/ }).click()

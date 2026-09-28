@@ -682,7 +682,8 @@
     "noMatches": "Sin resultados para «{query}».",
     "emptyMine": "Todavía no hay diseños.",
     "empty": "No se encontraron diseños.",
-    "layoutCount": "{count, plural, one {# diseño} other {# diseños}}"
+    "layoutCount": "{count, plural, one {# diseño} other {# diseños}}",
+    "current": "Diseño actual"
   },
   "vote": {
     "upNamed": "Votar a favor de {name}",

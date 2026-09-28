@@ -46,7 +46,6 @@ import {
   type ProfileVisibility,
   type SafeUser,
   type Template,
-  type VoteResult,
 } from '@slide-machine/shared'
 import { useAuth } from '../auth/AuthContext'
 import { dispatchAction } from '../api/actions'
@@ -64,7 +63,7 @@ import EmailVerificationNotice from '../components/EmailVerificationNotice'
 import ConnectedAssistantsPanel from '../components/ConnectedAssistantsPanel'
 import { getAgentAccessEnabled, getDefaultTemplateId } from '../runtime-config'
 import TemplateDesignPanel from '../components/template/TemplateDesignPanel'
-import { patchTemplateVote } from '../lib/templateVotes'
+import { useCurrentTemplate } from '../components/template/useCurrentTemplate'
 
 /** One settings change, as the account itself holds it: an absent
  * `language`/`locale` means "unchanged", an explicit `undefined` one
@@ -181,10 +180,6 @@ export default function AccountSettingsPage() {
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [edits, setEdits] = useState<ProfileEdits>({})
   const [profileError, setProfileError] = useState<string | null>(null)
-  // The library the Design tab chooses from (TMPL-1). Loaded once for the
-  // page rather than per tab switch, so returning to Design does not blank
-  // the list while it reloads.
-  const [templates, setTemplates] = useState<Template[]>([])
 
   // Bumped after a plan grant changes, to re-read what actually landed —
   // the endpoint answers 204, and the effective tier it produces is the
@@ -210,42 +205,6 @@ export default function AccountSettingsPage() {
 
   const reloadPlan = useCallback(() => setPlanVersion(v => v + 1), [])
 
-  const loadTemplates = useCallback(() => {
-    dispatchAction<Template[]>('template.list')
-      .then(setTemplates)
-      .catch(() => {
-        // Quiet failure: the section simply stays empty
-      })
-  }, [])
-
-  // A vote cast from the Design tab's library (TMPL-27 round 3): patched
-  // into this page's own `templates` state, or it would revert to whatever
-  // `template.list` last returned the moment the Design tab unmounts and
-  // remounts — switching to General and back, say.
-  const onVote = useCallback(
-    (templateId: string, result: VoteResult) =>
-      setTemplates(list => patchTemplateVote(list, templateId, result)),
-    [],
-  )
-
-  useEffect(() => {
-    // Only the owner's own path has a Design tab, so only it needs the
-    // library: asking for it on the admin path would fetch the admin's own
-    // templates for a tab that is not there.
-    if (adminUserId) return
-    let cancelled = false
-    dispatchAction<Template[]>('template.list')
-      .then(list => {
-        if (!cancelled) setTemplates(list)
-      })
-      .catch(() => {
-        // Quiet failure: the section simply stays empty
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [adminUserId])
-
   const user = adminUserId ? target : viewer
   // An admin looking at someone else's settings cannot send their mail
   const isSelf = !adminUserId
@@ -257,6 +216,14 @@ export default function AccountSettingsPage() {
   // actually get, which is the deployment's default — not an empty picker
   // (TMPL-24).
   const accountTemplateId = user?.templateId ?? getDefaultTemplateId()
+  // Only the owner's own path has a Design tab (TMPL-28): fetching the
+  // currently applied design on the admin path would ask for the admin's
+  // own account default for a tab that is not there.
+  const {
+    current: currentTemplate,
+    setCurrent: setCurrentTemplate,
+    patchVote: patchCurrentTemplateVote,
+  } = useCurrentTemplate(adminUserId ? '' : accountTemplateId)
 
   if (userId && userId === viewer?.id) {
     return <Navigate to="/app/settings" replace />
@@ -382,12 +349,16 @@ export default function AccountSettingsPage() {
   }
 
   // The design new projects start from (TMPL-24). Owner-only, like the
-  // assistant connections below: `template.list` and every action behind the
-  // panel are self-scoped, so an admin on someone else's settings would be
-  // choosing from — and saving into — their own library.
-  const setTemplate = (templateId: string) => {
-    dispatchAction<SafeUser>('user.setTemplate', { templateId })
-      .then(updateUser)
+  // assistant connections below: `template.getById`/`user.setTemplate` and
+  // every action behind the panel are self-scoped, so an admin on someone
+  // else's settings would be choosing from — and saving into — their own
+  // account.
+  const selectTemplate = (template: Template) => {
+    dispatchAction<SafeUser>('user.setTemplate', { templateId: template.id })
+      .then(updated => {
+        setCurrentTemplate(template)
+        updateUser(updated)
+      })
       .catch(() => {
         // Quiet failure: the picker stays on the saved template
       })
@@ -663,11 +634,11 @@ export default function AccountSettingsPage() {
                 {t('profile.templateHint')}
               </p>
               <TemplateDesignPanel
-                templates={templates}
                 value={accountTemplateId}
-                onChange={setTemplate}
-                onLibraryChanged={loadTemplates}
-                onVote={onVote}
+                current={currentTemplate}
+                onSelect={selectTemplate}
+                onCurrentVote={patchCurrentTemplateVote}
+                onCurrentDeleted={() => setCurrentTemplate(null)}
               />
             </section>
           )}

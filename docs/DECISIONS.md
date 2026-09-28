@@ -2001,6 +2001,7 @@ to each rather than making the field optional and threading `?? something` throu
 worth comparing, so "latest" just appends the (query-filtered) built-in list after every stored template has
 been paged through — a plain concatenation, tracked by comparing the offset against the stored count. "Top"
 genuinely needs a merge, because a well-liked built-in can outrank a stored template by score.
+*Superseded for "latest" by slice 9 ("Design tab browses like the page"): built-ins now come first, so they are always on page one.*
 
 *(Round 2, see below, replaced the first pass's capped prefetch with an uncapped projection-only rank — the
 first pass's `hasMore` could point at a page that came back empty once the cap was hit.)*
@@ -2667,3 +2668,59 @@ Six real defects surfaced once the specs above actually ran against a named test
 **The `key={template.id}` fix and its test were removed, not kept as "cheap insurance."** Restated plainly this round: the reviewer is right that the test passed with the key deleted, and a passing test that cannot fail for the reason it claims to check is exactly the kind of check flagged elsewhere in this project's own instructions as not evidence. `TemplateEditorPage`'s `loadedSlug !== slug` loading gate already remounts the whole returned tree — `TemplateExportSection` included — on every slug change, before the fresh `template.get` even resolves; there is no reachable path today where `template.id` changes under this same mounted `TemplateExportSection` without that gate having already reset it first. Keeping a key (and a test) whose only job is to guard against a code path that cannot currently occur is decoration, not a guarantee — removed from both `TemplateEditorPage.tsx` and `TemplateEditorPage.test.tsx`. If that loading gate is ever loosened, this is worth revisiting then, against whatever the new reachable path actually is, rather than pre-emptively guarding an unreachable one now.
 
 **e2e**: none run this round, per the coordinator's instruction (unit only). All of the above was proved by (a) running the new/changed tests, (b) reverting each specific fix in isolation and confirming the test(s) it backs fail for the stated reason, then (c) restoring the fix and confirming green again — done for `useDiscover.refresh()`'s guard, `TemplateImportControl`'s `onSubmitStart` wiring, and `DesignTemplatesPage`'s query-clearing, one at a time.
+
+
+## Design tab browses like the page (slice 9)
+
+The Design tab (lecture/project/account settings) now shares `TemplateBrowser` — Latest/Top/Mine, search, infinite
+scroll, duplicate/edit/delete/vote — with the Design Templates page, instead of a thinner `TemplateLibrary` of its own.
+
+**One component, `mode: 'link' | 'select'`.** Everything but "what does choosing a card do" is identical between the
+page and the tab, so forking it would have kept two copies of that machinery in step by hand. `TemplateLibrary` and
+`lib/templateVotes.ts` are deleted; nothing else used either.
+
+**A new server action, `template.getById`.** `template.get` (TMPL-4) reads by permalink slug; a deck/project/account
+stores `templateId` (a document id or a built-in slug), never the slug. Pinning "Current design" needs the object
+behind that id, so this is `template.get`'s access rule and decoration, addressed by id — the same split
+`templateReadable`/`templateReadableBySlug` already draw. Four integration tests mirror `template.get`'s own.
+
+**`useCurrentTemplate`, one hook per caller, not fetched inside the panel.** `DeckSettingsModal`'s
+`TemplateUpdateNotice` needs the same object for a second reason, so each caller owns one fetch and hands `current`/
+`onCurrentVote`/`onCurrentDeleted` down, rather than the panel fetching again. Skips a refetch once the caller already
+holds a matching object (the optimistic case right after `onSelect`); a settled vote patches in place via its own
+`patchVote`, shared by all three callers instead of copied three times.
+
+**`onSelect(template: Template)` replaces `onChange(templateId, template?)`.** A card from `TemplateBrowser` — grid,
+pin, duplicate or import — always already *is* the full object, so the old "hand the object over because the
+caller's list might not have reloaded" case no longer exists. Each caller's `onSelect` only sets its own `current` and
+calls its own change handler *on success*, matching the old "picker stays on the saved design when refused" exactly.
+
+**The pin is deduplicated out of the grid** (`item.id !== current?.id`), sharing one `role="radiogroup"` with it —
+two radios for one value is not a valid group. **Deleting the pinned design** now calls `onCurrentDeleted`, since
+`remove()` only ever touched the discover page and had no way to un-pin a caller-held object on its own. **Selecting a
+grid card** moves focus to the pinned card's own radio once `current` catches up to the choice, since the grid card
+just chosen is the one about to unmount (the dedupe above).
+
+**Built-ins sort first on Latest** (`social.ts`), stored designs after, newest first — otherwise ten or more public
+stored designs bury every built-in off page one, and the tab defaults to Latest. Top is unaffected (already ranks
+built-ins and stored designs together by score).
+
+**Default tab: Mine when the caller already belongs to the applied design's people list** (owner, editor or viewer),
+else Latest. A restricted design (including one just shared with the caller) never appears on Latest/Top regardless —
+those list public designs only — so `template-sharing.spec.ts` needed a `Mine` click at the one place it asserts a
+shared, still-restricted card.
+
+**Vote persistence needs no cross-mount cache at all.** `TemplateBrowser`'s `useDiscover` refetches fresh on every
+mount, and the server already reflects a cast vote by then — only the caller-held pin needs its own patch path.
+
+**Grid density is a `dense` prop, not a second card variant**; both modes now show the same metadata (`showMeta`
+unconditional). Search/sort copy is reused verbatim from the page (`templatesPage.*`); one new key,
+`templatesPage.current` ("Current design"), added to all five locales.
+
+**New e2e check** (`template-sharing.spec.ts`): a third user, never on the design's people list, finds it under Top by
+search while it is briefly public and applies it — proving TMPL-26's "public is reachable by anyone" through the
+shared browser.
+
+### The Design tab chooses its tab once the applied design is known (supervisor, TMPL-28)
+
+The panel used to pick Mine or Latest the moment it mounted. The applied design is fetched, so it was usually still loading then, and the tab depended on how fast that fetch was. It now shows "Loading…" until the design resolves (or is known to be absent), then picks once. E2E specs that duplicate a built-in from a Design tab whose applied design is the author's own now switch to Latest first, and name the design they duplicate (`Duplicate Classic`) rather than taking the first button, since the pinned current design is drawn first.

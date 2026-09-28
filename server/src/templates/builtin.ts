@@ -515,9 +515,9 @@ export const loadBuiltinTemplates = (
       myRole: null,
       voteScore: 0,
       createdAt: '2026-07-01T00:00:00.000Z',
-      // No meaningful "last saved" for a file — the "Latest" feed appends
-      // built-ins after every stored template rather than comparing dates
-      // against this one (TMPL-27/TMPL-28, templates/resolve.ts).
+      // No meaningful "last saved" for a file — the "Latest" feed lists
+      // built-ins ahead of every stored template rather than comparing dates
+      // against this one (TMPL-27/TMPL-28, actions/social.ts).
       updatedAt: '2026-07-01T00:00:00.000Z',
     }
   })

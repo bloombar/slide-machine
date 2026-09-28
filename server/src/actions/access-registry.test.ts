@@ -97,6 +97,7 @@ const ACCESS_INDEX: Record<string, AccessDescriptor> = {
   'template.duplicate': { resource: 'template', level: 'readable' },
   'template.export': { resource: 'template', level: 'readable' },
   'template.get': { resource: 'template', level: 'readable' },
+  'template.getById': { resource: 'template', level: 'readable' },
   // Creating a template from a file the caller supplies: there is no existing
   // resource to be authorized against, only a signed-in owner for the new one.
   'template.import': { resource: 'none', level: 'signedIn' },

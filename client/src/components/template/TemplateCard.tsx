@@ -1,15 +1,14 @@
 /**
  * One template, drawn as a miniature slide with a paged layout run and an
  * icon row (TMPL-1/TMPL-27/TMPL-28): the body every card shares, whether it
- * sits in the Design tab's picker (`TemplateLibrary`, which wraps it in the
- * radiogroup and the selection it needs) or in the full-page library
- * (`/app/templates`, which never selects a card — clicking one opens the
- * design's own page instead).
+ * sits in the Design tab's browser (`TemplateBrowser`'s select mode, which
+ * wraps it in the radiogroup and the selection it needs) or on the Design
+ * Templates page (`TemplateBrowser`'s link mode, which never selects a
+ * card — clicking one opens the design's own page instead).
  *
- * `showMeta` is the one visible difference between the two: the Design
- * Templates page has room for a byline, a layout count and a description
- * below the thumbnail (TMPL-28) that the Design tab's tighter grid does not
- * ask for and must not gain by accident.
+ * `showMeta` renders the byline, layout count and description below the
+ * thumbnail (TMPL-28); both `TemplateBrowser` modes ask for it now that the
+ * Design tab shares the page's own grid, at whichever width fits it.
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -53,12 +52,12 @@ export default function TemplateCard({
   /** Template currently being duplicated or deleted; its actions are held. */
   busyId?: string
   /** Every settled vote (TMPL-27), so a caller holding its own copy of the
-   * template can patch it (`patchTemplateVote`, `lib/templateVotes`) and
+   * template can patch it (e.g. `useDiscover`'s `patch`) and
    * keep the vote past a remount of whatever drew this card. */
   onVote?: (templateId: string, result: VoteResult) => void
   /** Renders the creator, layout count and description below the thumbnail
-   * (TMPL-28) — the Design Templates page's own grid, which has room for
-   * it; omitted (the default) keeps the Design tab's card exactly as it was. */
+   * (TMPL-28). `TemplateBrowser` always asks for it now, in both modes;
+   * defaults to off for any other caller of this card. */
   showMeta?: boolean
 }) {
   const { t } = useTranslation()
@@ -163,8 +162,8 @@ export default function TemplateCard({
         )}
       </div>
 
-      {/* Room for a byline and a description (TMPL-28), on the full library
-          page only. `template.owner` is `null` for a built-in and `undefined`
+      {/* Room for a byline and a description (TMPL-28). `template.owner` is
+          `null` for a built-in and `undefined`
           only when the caller never asked for it — neither carries a name to
           link to, so both are simply skipped rather than one standing in
           for "built-in" and the other for "unknown". Guarded on

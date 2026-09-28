@@ -1,149 +1,95 @@
 /**
- * The Design tab's template section (TMPL-1/TMPL-4): browse the library,
- * choose a template, and manage the ones you authored.
+ * The Design tab's template section (TMPL-1/TMPL-4/TMPL-28): the same
+ * Latest/Top/Mine browser and search the Design Templates page offers
+ * (`TemplateBrowser`'s select mode), plus the pieces only a settings tab
+ * needs — the descriptor-budget notice for whatever is applied, and the
+ * Import control.
  *
- * Shared by the project and lecture settings modals so a template is managed
- * the same way wherever it is chosen — the two differ only in what selecting
- * one applies to, which is the caller's business, not this panel's.
- *
- * Editing happens away from here, on the template's own page (`/t/:slug`): a
- * design belongs to its author, not to the lecture that opened the tab, and
- * it outlives any of them. Duplicating and deleting stay here, beside the
- * library they change. Whatever the author starts working on is applied
- * first, so the lecture they came from is already wearing it when they get
- * back.
+ * Shared by the lecture, project and account settings modals so a design is
+ * chosen and managed the same way wherever it is chosen — the three differ
+ * only in what selecting one applies to and what their own intro text says,
+ * which is the caller's business, not this panel's.
  */
 import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import type { Template, VoteResult } from '@slide-machine/shared'
-import { dispatchAction } from '../../api/actions'
-import { templateName } from '../../i18n/templateName'
-import ConfirmDialog from '../ConfirmDialog'
-import TemplateLibrary from './TemplateLibrary'
+import { useLocation } from 'react-router'
+import type {
+  Template,
+  TemplateFeedSort,
+  VoteResult,
+} from '@slide-machine/shared'
+import TemplateBrowser from './TemplateBrowser'
 import TemplateImportControl from './TemplateImportControl'
 import TemplateDescriptorNotice from './TemplateDescriptorNotice'
 
 export default function TemplateDesignPanel({
-  templates,
   value,
-  onChange,
-  onLibraryChanged,
-  onVote,
+  current,
+  onSelect,
+  onCurrentVote,
+  onCurrentDeleted,
 }: {
-  templates: Template[]
   value: string
-  /** Chooses a template. The template itself comes along when the caller
-   * cannot yet have it — a fresh duplicate is not in `templates` until the
-   * library reloads, and whatever it is applied to should not wait. */
-  onChange: (templateId: string, template?: Template) => void
-  /** Reloads the library after a template is added, changed or removed. */
-  onLibraryChanged: () => void
-  /** Every settled vote from the library below (TMPL-27 round 3), passed
-   * straight through so the caller can patch its own `templates` state —
-   * see `TemplateLibrary`'s own `onVote` doc comment for why. */
-  onVote?: (templateId: string, result: VoteResult) => void
+  /** The design currently applied, however the caller already has it
+   * (`useCurrentTemplate`, by `value`) — `null` once a fetch has settled
+   * with nothing, `undefined` while still in flight. */
+  current: Template | null | undefined
+  /** Chooses a template — a card in the browser, a fresh duplicate, or an
+   * import — and applies it. */
+  onSelect: (template: Template) => void
+  /** A vote cast on the pinned "Current design" card (TMPL-27 round 3),
+   * passed straight through so the caller can patch its own `current` —
+   * see `TemplateBrowser`'s own doc comment for why. */
+  onCurrentVote?: (templateId: string, result: VoteResult) => void
+  /** The pinned "Current design" was itself just deleted (its owner, from
+   * its own action row) — passed straight through so the caller clears its
+   * own `current` rather than going on pinning a design that no longer
+   * exists. */
+  onCurrentDeleted?: () => void
 }) {
-  const { t } = useTranslation()
-  const navigate = useNavigate()
   const location = useLocation()
-  const [confirming, setConfirming] = useState<Template | null>(null)
-  const [busyId, setBusyId] = useState<string | undefined>()
-  const [error, setError] = useState<string | null>(null)
-
-  /** Opens a template's own page, remembering where the author came from so
-   * it can offer the way back. */
-  const open = (template: Template) => {
-    void navigate(`/t/${template.permalinkSlug}`, {
-      state: { from: location.pathname },
-    })
+  // Mine, if the caller already belongs to this design's people list one way
+  // or another (owns it, or was shared it as an editor or viewer) — that is
+  // the library a caller choosing a design is most likely mid-errand in.
+  // Otherwise Latest, same as the Design Templates page. Frozen at mount
+  // (this panel remounts fresh every time its settings tab is opened, see
+  // `DeckSettingsModal`'s own `{tab === 'template' && ...}`), not recomputed
+  // on every render — a design applied *while* the tab is open should not
+  // retroactively jump the sort out from under whatever the caller is
+  // already browsing. Chosen only once `current` has resolved (undefined =
+  // still loading): deciding before that would always pick Latest, and
+  // which tab opened would depend on how fast the fetch was.
+  const { t } = useTranslation()
+  const [initialSort, setInitialSort] = useState<TemplateFeedSort>()
+  if (initialSort === undefined && current !== undefined) {
+    setInitialSort(current?.myRole ? 'mine' : 'latest')
   }
-
-  const duplicate = (template: Template) => {
-    setBusyId(template.id)
-    setError(null)
-    dispatchAction<Template>('template.duplicate', {
-      templateId: template.id,
-    })
-      .then(copy => {
-        onLibraryChanged()
-        // The copy is what the author is now working on, so it is what they
-        // are working on it for: chosen straight away, and every change to it
-        // from here shows where it is applied.
-        onChange(copy.id, copy)
-        // Straight into editing: a copy exists to be changed, and its name is
-        // the first thing anyone will want to change.
-        open(copy)
-      })
-      .catch(() => setError(t('template.errors.duplicate')))
-      .finally(() => setBusyId(undefined))
-  }
-
-  /** Opening a template's settings chooses it too: editing a design is done
-   * to see it in place, and the editor's own preview is not that. */
-  const edit = (template: Template) => {
-    setError(null)
-    if (template.id !== value) onChange(template.id, template)
-    open(template)
-  }
-
-  const remove = (template: Template) => {
-    setBusyId(template.id)
-    setError(null)
-    dispatchAction('template.delete', { templateId: template.id })
-      .then(() => {
-        onLibraryChanged()
-        setConfirming(null)
-      })
-      .catch(() => setError(t('template.errors.delete')))
-      .finally(() => setBusyId(undefined))
-  }
-
-  // The design currently applied here — what the notice measures, the same
-  // one a lecture on this Design tab actually generates with.
-  const current = templates.find(t => t.id === value)
 
   return (
     <>
-      {error && (
-        <p role="alert" className="mb-3 text-sm text-red-600">
-          {error}
-        </p>
-      )}
       {current && <TemplateDescriptorNotice template={current} />}
-      <TemplateLibrary
-        templates={templates}
-        value={value}
-        onChange={onChange}
-        busyId={busyId}
-        onDuplicate={duplicate}
-        onEdit={edit}
-        onDelete={setConfirming}
-        onVote={onVote}
-      />
-      {/* One way in, three sources, opened in a dialog rather than inline
-          (TMPL-28): a design arriving from Slides, from a file this app
-          wrote earlier, or from Drive is the same event to the library, so
-          the tab offers one button rather than three controls. */}
-      <TemplateImportControl
-        onImported={imported => {
-          onLibraryChanged()
-          // Chosen straight away, the way a fresh duplicate is: an import
-          // exists to be used, and seeing it in place is how it gets reviewed.
-          onChange(imported.id, imported)
-        }}
-      />
-      {confirming && (
-        <ConfirmDialog
-          title={t('template.delete.title')}
-          message={t('template.delete.message', {
-            name: templateName(t, confirming),
-          })}
-          confirmLabel={t('common.delete')}
-          onConfirm={() => remove(confirming)}
-          onCancel={() => setConfirming(null)}
+      {initialSort === undefined ? (
+        <p className="text-sm text-slate-500">{t('common.loading')}</p>
+      ) : (
+        <TemplateBrowser
+          mode="select"
+          dense
+          initialSort={initialSort}
+          value={value}
+          current={current}
+          onSelect={onSelect}
+          onCurrentVote={onCurrentVote}
+          onCurrentDeleted={onCurrentDeleted}
+          linkState={{ from: location.pathname }}
         />
       )}
+      {/* One way in, three sources, opened in a dialog rather than inline
+          (TMPL-28): a design arriving from Slides, from a file this app
+          wrote earlier, or from Drive is the same event to the browser, so
+          the tab offers one button rather than three controls. Applied
+          straight away, the way a fresh duplicate is: an import exists to be
+          used, and seeing it in place is how it gets reviewed. */}
+      <TemplateImportControl onImported={onSelect} />
     </>
   )
 }

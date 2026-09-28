@@ -394,33 +394,44 @@ describe('ProjectPage', () => {
 
   it('sets the project default template from the Design tab', async () => {
     let sent: unknown
+    const templates = [
+      {
+        id: 'classic',
+        permalinkSlug: 'classic',
+        name: 'Classic',
+        theme: {},
+        layouts: [],
+        visibility: 'public',
+        myRole: null,
+        voteScore: 0,
+        ownerId: 'system',
+        createdAt: '',
+      },
+      {
+        id: 'midnight',
+        permalinkSlug: 'midnight',
+        name: 'Midnight',
+        theme: {},
+        layouts: [],
+        visibility: 'public',
+        myRole: null,
+        voteScore: 0,
+        ownerId: 'system',
+        createdAt: '',
+      },
+    ]
     mockFetchRoutes({
       ...baseRoutes,
       '/api/actions/seedAsset.list': () => ({ status: 200, body: [] }),
-      '/api/actions/template.list': () => ({
+      '/api/actions/template.getById': init => {
+        const { templateId } = JSON.parse(String(init?.body)) as {
+          templateId: string
+        }
+        return { status: 200, body: templates.find(t => t.id === templateId) }
+      },
+      '/api/actions/template.feed': () => ({
         status: 200,
-        body: [
-          {
-            id: 'classic',
-            name: 'Classic',
-            theme: {},
-            layouts: [],
-            visibility: 'public',
-            voteScore: 0,
-            ownerId: 'system',
-            createdAt: '',
-          },
-          {
-            id: 'midnight',
-            name: 'Midnight',
-            theme: {},
-            layouts: [],
-            visibility: 'public',
-            voteScore: 0,
-            ownerId: 'system',
-            createdAt: '',
-          },
-        ],
+        body: { items: templates, hasMore: false },
       }),
       '/api/actions/project.switchTemplate': init => {
         sent = JSON.parse(String(init?.body))
