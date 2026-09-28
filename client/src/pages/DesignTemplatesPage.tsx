@@ -35,6 +35,7 @@ import {
   type DiscoverSource,
 } from '../components/discover/useDiscover'
 import TemplateCard from '../components/template/TemplateCard'
+import TemplateImportControl from '../components/template/TemplateImportControl'
 
 /** `template.feed` and `template.search` both answer `TemplatePage`
  * (`{items, hasMore}`) — the feed side of `useDiscover` already reads
@@ -200,7 +201,13 @@ export default function DesignTemplatesPage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-6 sm:py-8">
-      <h1 className="text-2xl font-bold">{t('templatesPage.heading')}</h1>
+      {/* Import behaves exactly as it does on the Design tab (TMPL-28): the
+          same shared control, opening in a dialog rather than a settings
+          form this page does not have. */}
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">{t('templatesPage.heading')}</h1>
+        <TemplateImportControl onImported={open} />
+      </div>
       {/* What a design template is for (TMPL-28): plain enough that a first-time
           visitor knows why a page of these exists before browsing them. */}
       <p className="mt-2 mb-4 text-sm text-slate-600">

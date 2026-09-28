@@ -67,6 +67,8 @@ export interface ImportSource {
 export default function TemplateImport({
   onImported,
   otherSources,
+  alwaysOpen = false,
+  onRequestClose,
 }: {
   /** The new template, so the caller can select it and reload the library. */
   onImported: (template: Template) => void
@@ -80,9 +82,20 @@ export default function TemplateImport({
    * panel, and the tab has one button for it.
    */
   otherSources?: React.ReactNode
+  /**
+   * Skips the collapsed button state (TMPL-28/TMPL-29): `TemplateImportControl`
+   * already opens this inside a dialog for the same reason a collapsed
+   * button exists elsewhere — staying out of the way until asked for — so
+   * there is nothing left here to collapse to.
+   */
+  alwaysOpen?: boolean
+  /** Closes whatever opened this when `alwaysOpen`, since there is no local
+   * collapsed state for Cancel to fall back to. */
+  onRequestClose?: () => void
 }) {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
+  const [openState, setOpenState] = useState(false)
+  const open = alwaysOpen || openState
   /** The file chosen in Google's picker, waiting to be imported. */
   const [picked, setPicked] = useState<PickedDriveItem | null>(null)
   const [picking, setPicking] = useState(false)
@@ -188,7 +201,7 @@ export default function TemplateImport({
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => setOpenState(true)}
         className="mt-4 inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
       >
         <Upload className="h-4 w-4" aria-hidden="true" />
@@ -233,7 +246,8 @@ export default function TemplateImport({
         <button
           type="button"
           onClick={() => {
-            setOpen(false)
+            if (alwaysOpen) onRequestClose?.()
+            else setOpenState(false)
             setError(null)
             setReport(null)
             setPicked(null)

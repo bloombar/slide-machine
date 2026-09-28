@@ -85,18 +85,28 @@ test('export a design to Google Slides in Drive (EXP-6)', async ({ page }) => {
   await expect(page).toHaveURL(/\/d\//)
   await page.getByRole('button', { name: 'Start lecture' }).click()
 
+  // Drive-only, so it needs a connected account first — the lecture
+  // settings' Export tab is where connecting lives, unrelated to where a
+  // design's own export now does.
   await page.getByRole('button', { name: 'Lecture settings' }).click()
-  const dialog = page.getByRole('dialog', { name: 'Lecture settings' })
-  await dialog.getByRole('tab', { name: 'Design' }).click()
+  const settingsDialog = page.getByRole('dialog', { name: 'Lecture settings' })
+  await settingsDialog.getByRole('tab', { name: 'Export' }).click()
+  await settingsDialog.getByRole('radio', { name: /Google Slides/ }).check()
+  await settingsDialog.getByRole('button', { name: 'Connect Google' }).click()
+  await settingsDialog.getByRole('button', { name: 'Close settings' }).click()
 
-  // Drive-only, so it needs a connected account first — the Export tab is
-  // where connecting lives.
-  await dialog.getByRole('tab', { name: 'Export' }).click()
-  await dialog.getByRole('radio', { name: /Google Slides/ }).check()
-  await dialog.getByRole('button', { name: 'Connect Google' }).click()
-  await dialog.getByRole('tab', { name: 'Design' }).click()
+  // Export lives on the design's own page (EXP-6), reached as a plain link
+  // from the Design templates page.
+  await page.goto('/app/templates')
+  await page
+    .getByRole('link', { name: /nyu elegant/i })
+    .first()
+    .click()
+  await expect(page).toHaveURL(/\/t\//)
 
-  await dialog.getByRole('button', { name: 'As Google Slides' }).click()
+  await page.getByRole('button', { name: 'Export this design' }).click()
+  const exportDialog = page.getByRole('dialog', { name: 'Export this design' })
+  await exportDialog.getByRole('button', { name: 'As Google Slides' }).click()
 
   const picker = page.getByRole('dialog', { name: 'Choose from Google Drive' })
   await expect(picker).toBeVisible()
@@ -104,7 +114,9 @@ test('export a design to Google Slides in Drive (EXP-6)', async ({ page }) => {
   await picker.getByRole('button', { name: 'Save here' }).click()
 
   // The design is in Drive, and opens in Slides rather than as a file
-  const link = dialog.locator('a[href*="docs.google.com/presentation"]').first()
+  const link = exportDialog
+    .locator('a[href*="docs.google.com/presentation"]')
+    .first()
   await expect(link).toBeVisible()
   await expect(link).toHaveText(/open in google slides/i)
 })

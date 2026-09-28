@@ -349,17 +349,14 @@ describe('AccountSettingsPage', () => {
     )
   })
 
-  it('offers the design’s exports beside the picker', async () => {
-    // The same three destinations the lecture and project Design tabs offer,
-    // so a design is exported the same way wherever it is chosen.
+  it('no longer offers exports beside the picker (EXP-6: it moved to the design’s own page)', async () => {
     renderSettings({}, '/app/settings?tab=design')
 
-    expect(await screen.findByText('Export this design')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'As YAML' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'As PowerPoint' })).toBeVisible()
+    await screen.findByText(/Import a design/i)
+    expect(screen.queryByText('Export this design')).not.toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: 'As Google Slides' }),
-    ).toBeVisible()
+      screen.queryByRole('button', { name: 'As YAML' }),
+    ).not.toBeInTheDocument()
   })
 
   it('toggles profile visibility', async () => {

@@ -10,6 +10,7 @@ import {
   fireEvent,
   cleanup,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import type { Template } from '@slide-machine/shared'
@@ -537,6 +538,75 @@ describe('DesignTemplatesPage votes (TMPL-28 round 3)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Latest' }))
 
     expect(upvote()).toHaveTextContent('1')
+  })
+})
+
+describe('DesignTemplatesPage import (TMPL-28)', () => {
+  // The page has no settings form of its own to unfold an import panel
+  // inside, so the same shared control the Design tab uses opens it in a
+  // dialog instead — never inline on the page.
+  it('offers Import a design in the header row, opening a dialog rather than inline options', async () => {
+    mockDispatch.mockResolvedValue({ items: [template()], hasMore: false })
+    renderPage()
+    await screen.findByText('Shipped')
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Choose from Google Drive' }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /^Import a design$/i }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toBeInTheDocument()
+    expect(
+      within(dialog).getByRole('button', { name: 'Choose from Google Drive' }),
+    ).toBeVisible()
+  })
+
+  // After a successful import, the page does what the Design tab does,
+  // adapted to a page rather than a picker: it opens the new design's own
+  // page, remembering this page as where "Back" returns to.
+  it('opens an imported design’s own page, remembering this page as "from"', async () => {
+    mockDispatch.mockImplementation(async (name: string) => {
+      if (name === 'template.feed')
+        return { items: [template()], hasMore: false }
+      if (name === 'drive.importables')
+        return {
+          folders: [],
+          files: [
+            {
+              id: 'p1',
+              name: 'Photosynthesis',
+              mimeType: 'application/vnd.google-apps.presentation',
+            },
+          ],
+        }
+      if (name === 'template.importFromSlides')
+        return {
+          template: { id: 'imp-1', permalinkSlug: 'imported-ab12' },
+          report: { slidesRead: 1, layoutsCreated: 1, approximated: 0 },
+        }
+      throw new Error(`unexpected action ${name}`)
+    })
+    renderPage()
+    await screen.findByText('Shipped')
+
+    fireEvent.click(screen.getByRole('button', { name: /^Import a design$/i }))
+    const dialog = screen.getByRole('dialog')
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Choose from Google Drive' }),
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: /photosynthesis/i }),
+    )
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Import design' }),
+    )
+
+    expect(
+      await screen.findByText('landed:/t/imported-ab12 from:/app/templates'),
+    ).toBeInTheDocument()
   })
 })
 

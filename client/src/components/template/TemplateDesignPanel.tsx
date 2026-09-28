@@ -21,8 +21,7 @@ import { dispatchAction } from '../../api/actions'
 import { templateName } from '../../i18n/templateName'
 import ConfirmDialog from '../ConfirmDialog'
 import TemplateLibrary from './TemplateLibrary'
-import TemplateImport from './TemplateImport'
-import TemplateFileImport from './TemplateFileImport'
+import TemplateImportControl from './TemplateImportControl'
 import TemplateDescriptorNotice from './TemplateDescriptorNotice'
 
 export default function TemplateDesignPanel({
@@ -122,24 +121,17 @@ export default function TemplateDesignPanel({
         onDelete={setConfirming}
         onVote={onVote}
       />
-      {/* One way in, three sources. A design arriving from Slides, from a file
-          this app wrote earlier, or from Drive is the same event to the
-          library, so the tab offers one button rather than three controls. */}
-      <TemplateImport
+      {/* One way in, three sources, opened in a dialog rather than inline
+          (TMPL-28): a design arriving from Slides, from a file this app
+          wrote earlier, or from Drive is the same event to the library, so
+          the tab offers one button rather than three controls. */}
+      <TemplateImportControl
         onImported={imported => {
           onLibraryChanged()
           // Chosen straight away, the way a fresh duplicate is: an import
           // exists to be used, and seeing it in place is how it gets reviewed.
           onChange(imported.id, imported)
         }}
-        otherSources={
-          <TemplateFileImport
-            onImported={imported => {
-              onLibraryChanged()
-              onChange(imported.id, imported)
-            }}
-          />
-        }
       />
       {confirming && (
         <ConfirmDialog

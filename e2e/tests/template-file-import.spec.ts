@@ -38,8 +38,30 @@ test('template round trip: export a design to a file, import it back', async ({
   // (TMPL-24).
   await chooseAccountDesign(page, /classic/i)
 
-  // Exporting a design lives in a lecture's settings, so the round trip runs
-  // from there — which is also where an instructor would actually be.
+  // Exporting a design lives on its own page (EXP-6), reached here as a
+  // plain link from the Design templates page — a built-in is readable, so
+  // it exports like any other, and starting from one keeps the round trip
+  // about the file rather than about how a template came to exist.
+  await page.goto('/app/templates')
+  await page
+    .getByRole('link', { name: /classic/i })
+    .first()
+    .click()
+  await expect(page).toHaveURL(/\/t\//)
+  await page.getByRole('button', { name: 'Export this design' }).click()
+  const exportDialog = page.getByRole('dialog', { name: 'Export this design' })
+  const downloadPromise = page.waitForEvent('download')
+  await exportDialog.getByRole('button', { name: 'As YAML' }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toMatch(/\.template\.yaml$/)
+  const saved = await download.path()
+  // The file stands on its own: it says what it is, so the importer can tell
+  // it from a deck export.
+  expect(readFileSync(saved!, 'utf8')).toMatch(/kind: template/)
+
+  // Import that same file back, from a lecture's own Design tab this time —
+  // the same shared import control, opening in a dialog rather than inline
+  // (TMPL-28).
   await createProject(page, projectName)
   await page
     .getByRole('button', { name: `Start a new lecture in ${projectName}` })
@@ -59,22 +81,11 @@ test('template round trip: export a design to a file, import it back', async ({
   const before = await previews.count()
   expect(before).toBeGreaterThan(0)
 
-  // Export the design that is already selected. A built-in is readable, so it
-  // exports like any other — and starting from one keeps the round trip about
-  // the file rather than about how a template came to exist.
-  const downloadPromise = page.waitForEvent('download')
-  await dialog.getByRole('button', { name: 'As YAML' }).click()
-  const download = await downloadPromise
-  expect(download.suggestedFilename()).toMatch(/\.template\.yaml$/)
-  const saved = await download.path()
-  // The file stands on its own: it says what it is, so the importer can tell
-  // it from a deck export.
-  expect(readFileSync(saved, 'utf8')).toMatch(/kind: template/)
-
-  // Import that same file back. The three ways a design arrives share one
-  // panel, so it is opened first — the tab has one Import button, not three.
+  // The three ways a design arrives share one panel, opened here in a dialog
+  // over the settings sheet — the tab has one Import button, not three.
   await dialog.getByRole('button', { name: /^Import a design$/i }).click()
-  await dialog.getByLabel(/import a design file/i).setInputFiles(saved)
+  const importDialog = page.getByRole('dialog', { name: 'Import a design' })
+  await importDialog.getByLabel(/import a design file/i).setInputFiles(saved!)
   await expect(previews).toHaveCount(before + 1)
 
   // And it is a real template rather than a row in a list: chosen straight

@@ -29,13 +29,6 @@ test('the account default design cascades to new projects and lectures', async (
     page.getByRole('radio', { name: /nyu elegant/i }),
   ).toHaveAttribute('aria-checked', 'true')
 
-  // The design is exportable from here, the same three destinations the
-  // lecture and project Design tabs offer.
-  await expect(page.getByRole('button', { name: 'As YAML' })).toBeVisible()
-  await expect(
-    page.getByRole('button', { name: 'As PowerPoint' }),
-  ).toBeVisible()
-
   // A project made before the choice keeps the default it was given, and
   // says so from its own Design tab. createProject leaves the browser on the
   // new project's page, where its kebab is.

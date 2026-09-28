@@ -8,7 +8,13 @@
  * work asks first.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  within,
+} from '@testing-library/react'
 import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import type { Layout, LayoutNode, Template } from '@slide-machine/shared'
 import TemplateEditorPage from './TemplateEditorPage'
@@ -1057,6 +1063,73 @@ describe('TemplateEditorPage (TMPL-4)', () => {
       expect(
         await screen.findByText('landed:/app/templates sort:mine'),
       ).toBeInTheDocument()
+    })
+  })
+
+  // Export moved here from the Design tabs (EXP-6): the design's own page is
+  // where its owner, an editor, or a reader visiting it already are.
+  describe('export (EXP-6)', () => {
+    it('offers Export this design to the owner, sitting before the vote where Duplicate would be', async () => {
+      withTemplate(template({ myRole: 'owner' }))
+      renderPage()
+
+      await screen.findByLabelText('Template name')
+      const buttons = screen.getAllByRole('button')
+      const exportIndex = buttons.findIndex(
+        b => b.textContent === 'Export this design',
+      )
+      expect(exportIndex).toBeGreaterThanOrEqual(0)
+      expect(screen.queryByRole('button', { name: 'Duplicate' })).toBeNull()
+    })
+
+    it('offers Export this design to an editor, sitting before the vote where Duplicate would be', async () => {
+      withTemplate(template({ myRole: 'editor' }))
+      renderPage()
+
+      await screen.findByLabelText('Template name')
+      expect(
+        screen.getByRole('button', { name: 'Export this design' }),
+      ).toBeVisible()
+      expect(screen.queryByRole('button', { name: 'Duplicate' })).toBeNull()
+    })
+
+    it('offers Export this design to a reader, sitting before Duplicate', async () => {
+      withTemplate(template({ myRole: null }))
+      renderPage()
+
+      await screen.findByText('My Style')
+      const buttons = screen.getAllByRole('button')
+      const exportIndex = buttons.findIndex(
+        b => b.textContent === 'Export this design',
+      )
+      const duplicateIndex = buttons.findIndex(
+        b => b.textContent === 'Duplicate',
+      )
+      expect(exportIndex).toBeGreaterThanOrEqual(0)
+      expect(duplicateIndex).toBeGreaterThan(exportIndex)
+    })
+
+    it('opens a dialog with the three export destinations', async () => {
+      withTemplate(template({ myRole: 'owner' }))
+      renderPage()
+
+      await screen.findByLabelText('Template name')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Export this design' }),
+      )
+
+      const dialog = screen.getByRole('dialog')
+      expect(
+        within(dialog).getByRole('button', { name: 'As YAML' }),
+      ).toBeVisible()
+      expect(
+        within(dialog).getByRole('button', { name: 'As PowerPoint' }),
+      ).toBeVisible()
+      expect(
+        within(dialog).getByRole('button', { name: 'As Google Slides' }),
+      ).toBeVisible()
     })
   })
 })
