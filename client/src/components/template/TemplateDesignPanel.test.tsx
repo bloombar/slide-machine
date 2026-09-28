@@ -130,6 +130,13 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('TemplateDesignPanel (TMPL-4/TMPL-28)', () => {
+  it('opens on Latest when no design is applied', async () => {
+    renderPanel({ current: null, value: '' })
+    expect(
+      await screen.findByRole('button', { name: 'Latest' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+  })
+
   it('waits for the applied design before choosing the tab, then opens on Mine for one of the caller’s own', async () => {
     const ui = (current: Template | null | undefined) => (
       <MemoryRouter initialEntries={['/d/lecture-1']}>

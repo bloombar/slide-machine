@@ -38,7 +38,7 @@ test('template library: duplicate, edit, apply, delete', async ({ page }) => {
   const previews = page.getByTestId('template-preview')
   // The pinned current design draws before the list's first page lands, so
   // count only once a built-in from that page is on screen.
-  await expect(page.getByRole('radio', { name: /Classic/ })).toBeVisible()
+  await expect(page.getByRole('radio', { name: /Midnight/ })).toBeVisible()
   expect(await previews.count()).toBeGreaterThan(1)
 
   await test.step('a card pages through its own layouts, in the tab (TMPL-1)', async () => {

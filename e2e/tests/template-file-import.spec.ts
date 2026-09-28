@@ -41,11 +41,8 @@ test('template round trip: export a design to a file, import it back', async ({
   // Exporting a design lives on its own page (EXP-6) — a built-in is
   // readable, so it exports like any other, and starting from one keeps the
   // round trip about the file rather than about how a template came to
-  // exist. Reached directly by its permalink, not through the Design
-  // templates page: built-ins sort after every stored public design there
-  // and the e2e database persists across runs, so Classic drops off page
-  // one long before this spec ever runs (a built-in's permalink is its id,
-  // template-reader.spec.ts's own `/t/classic`).
+  // exist. Reached directly by its permalink (a built-in's permalink is its
+  // id), which keeps the spec independent of the Design templates page.
   await page.goto('/t/classic')
   await expect(page).toHaveURL(/\/t\//)
   await page.getByRole('button', { name: 'Export this design' }).click()
@@ -76,11 +73,20 @@ test('template round trip: export a design to a file, import it back', async ({
   await dialog.getByRole('tab', { name: 'Design' }).click()
 
   const previews = dialog.getByTestId('template-preview')
+
+  // Cards, not previews: a card is on screen as soon as its page lands,
+
+  // while its preview paints later (TMPL-28).
+
+  const cards = dialog.getByRole('radio')
   // Waited for rather than counted straight away: `count()` samples once and
   // does not retry, so a list that has not painted yet reads as zero — which
   // is what made this spec fail under load while passing on its own.
   await expect(previews.first()).toBeVisible()
-  const before = await previews.count()
+  // The pinned current design draws before the list's first page lands;
+  // count once a built-in from that page is on screen (TMPL-28).
+  await expect(page.getByRole('radio', { name: /Midnight/ })).toBeVisible()
+  const before = await cards.count()
   expect(before).toBeGreaterThan(0)
 
   // The three ways a design arrives share one panel, opened here in a dialog
@@ -88,7 +94,7 @@ test('template round trip: export a design to a file, import it back', async ({
   await dialog.getByRole('button', { name: /^Import a design$/i }).click()
   const importDialog = page.getByRole('dialog', { name: 'Import a design' })
   await importDialog.getByLabel(/import a design file/i).setInputFiles(saved!)
-  await expect(previews).toHaveCount(before + 1)
+  await expect(cards).toHaveCount(before + 1)
 
   // And it is a real template rather than a row in a list: chosen straight
   // away, the way an import exists to be used.
@@ -116,11 +122,20 @@ test('a file that is not a template is refused, and says why', async ({
   await page.getByRole('tab', { name: 'Design' }).click()
 
   const previews = page.getByTestId('template-preview')
+
+  // Cards, not previews: a card is on screen as soon as its page lands,
+
+  // while its preview paints later (TMPL-28).
+
+  const cards = page.getByRole('radio')
   // Waited for rather than counted straight away: `count()` samples once and
   // does not retry, so a list that has not painted yet reads as zero — which
   // is what made this spec fail under load while passing on its own.
   await expect(previews.first()).toBeVisible()
-  const before = await previews.count()
+  // The pinned current design draws before the list's first page lands;
+  // count once a built-in from that page is on screen (TMPL-28).
+  await expect(page.getByRole('radio', { name: /Midnight/ })).toBeVisible()
+  const before = await cards.count()
 
   await page.getByRole('button', { name: /^Import a design$/i }).click()
   await page.getByLabel(/import a design file/i).setInputFiles({
@@ -132,5 +147,5 @@ test('a file that is not a template is refused, and says why', async ({
 
   await expect(page.getByRole('alert')).toContainText(/could not import/i)
   // Nothing was created: a refused import leaves the library as it was.
-  await expect(previews).toHaveCount(before)
+  await expect(cards).toHaveCount(before)
 })

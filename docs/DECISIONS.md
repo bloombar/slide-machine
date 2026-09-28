@@ -2001,6 +2001,7 @@ to each rather than making the field optional and threading `?? something` throu
 worth comparing, so "latest" just appends the (query-filtered) built-in list after every stored template has
 been paged through — a plain concatenation, tracked by comparing the offset against the stored count. "Top"
 genuinely needs a merge, because a well-liked built-in can outrank a stored template by score.
+*Superseded for "latest" by slice 9 ("Design tab browses like the page"): built-ins now come first, so they are always on page one.*
 
 *(Round 2, see below, replaced the first pass's capped prefetch with an uncapped projection-only rank — the
 first pass's `hasMore` could point at a page that came back empty once the cap was hit.)*

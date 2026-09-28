@@ -62,9 +62,12 @@ describe('useCurrentTemplate (TMPL-28)', () => {
     expect(dispatchAction).not.toHaveBeenCalled()
   })
 
-  it('does not fetch when there is no id at all', () => {
-    renderHook(() => useCurrentTemplate(''))
+  it('does not fetch when there is no id at all, and reports nothing applied', () => {
+    const { result } = renderHook(() => useCurrentTemplate(''))
     expect(dispatchAction).not.toHaveBeenCalled()
+    // null, not undefined: undefined means "still loading" to the panel,
+    // which would then wait forever
+    expect(result.current.current).toBeNull()
   })
 
   it('patches the vote on the current design without touching anything else', async () => {

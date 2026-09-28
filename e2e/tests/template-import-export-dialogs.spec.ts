@@ -33,10 +33,8 @@ test('import a design from the Design templates page dialog, then export it from
   await expect(page).toHaveURL(/\/app$/)
 
   // A file to import: exported from a built-in, reached directly by its
-  // permalink rather than through the Design templates page — built-ins
-  // sort after every stored public design there and the e2e database
-  // persists across runs, so Classic drops off page one long before this
-  // spec ever runs (a built-in's permalink is its id).
+  // permalink (a built-in's permalink is its id), which keeps the spec
+  // independent of the Design templates page.
   await page.goto('/t/classic')
   await expect(page).toHaveURL(/\/t\//)
 
