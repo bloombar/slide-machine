@@ -296,7 +296,7 @@ The instructor can drive the preflight honing ([PREP-2](#prep-2-instructor-revie
 
 #### TMPL-1 Template library & preview
 
-A browsable **template library** lets users preview and select slide-style templates. Each template defines a visual theme (colors, typography, spacing) plus a set of **layouts**.
+A browsable **template library** lets users preview and select slide-style templates. Each template defines a visual theme (colors, typography, spacing) plus a set of **layouts**. This is the Design tab in lecture, project and account settings, offering the same Latest/Top/Mine browser and search as the Design templates page ([TMPL-28](#tmpl-28-design-templates-page)) — one design library, browsed the same way wherever it is chosen.
 
 #### TMPL-2 Conventional layout types
 
@@ -828,6 +828,7 @@ Templates are up- and down-voted as lectures are ([SOC-1](#soc-1-voting)), built
   - the number of layouts
   - a short description: the opening of the template's AI instructions, cut at a word boundary
 - Opening a template goes to its own page ([TMPL-29](#tmpl-29-a-templates-page-for-readers)). Its own Back returns here — to **Mine** when the design left behind is the caller's own (opened or just duplicated into a copy), otherwise to the default (Latest).
+- **The Design tab** — in lecture, project and account settings ([TMPL-1](#tmpl-1-template-library--preview), [TMPL-24](#tmpl-24-an-accounts-default-design)) — offers this same Latest/Top/Mine browser and search, not a thinner library of its own. It differs only in how a card is chosen: instead of opening the design's own page, a card is a radio, and choosing it applies that design to the lecture, project or account. The design currently applied is pinned above the browser as **"Current design"**, using its card, since the chosen tab or sort might not otherwise show it. The tab defaults to **Latest**, the same as the page.
 
 #### TMPL-29 A template's page for readers
 

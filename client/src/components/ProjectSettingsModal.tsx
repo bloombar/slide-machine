@@ -15,19 +15,12 @@
  * the exception — uploading files into another user's project is content
  * authoring, not a settings edit, so that section stays with its owner.
  */
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from 'react'
+import { useRef, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
-import type { Project, Template, VoteResult } from '@slide-machine/shared'
+import type { Project } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import { projectTitle, untitledProject } from '../lib/project'
-import { patchTemplateVote } from '../lib/templateVotes'
 import SeedNotesEditor from './SeedNotesEditor'
 import SeedMaterial from './SeedMaterial'
 import AdminEditNotice from './AdminEditNotice'
@@ -39,6 +32,7 @@ import LanguageSelect from './LanguageSelect'
 import VoiceSelect from './VoiceSelect'
 import { getTtsEnabled } from '../runtime-config'
 import TemplateDesignPanel from './template/TemplateDesignPanel'
+import { useCurrentTemplate } from './template/useCurrentTemplate'
 
 /** The tabs in order; each id also keys its label under
  * `deck.settings.tabs.<id>` — the same names the lecture settings use. */
@@ -75,39 +69,9 @@ export default function ProjectSettingsModal({
   const { t } = useTranslation()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [tab, setTab] = useState<TabId>(initialTab)
-  const [templates, setTemplates] = useState<Template[]>([])
-
-  const loadTemplates = useCallback(() => {
-    dispatchAction<Template[]>('template.list')
-      .then(setTemplates)
-      .catch(() => {
-        // Quiet failure: the section simply stays empty
-      })
-  }, [])
-
-  // A vote cast from the Design tab's library (TMPL-27 round 3): patched
-  // into this modal's own `templates` state, or it would revert to whatever
-  // `template.list` last returned the moment the Design tab unmounts and
-  // remounts — switching tabs, or closing and reopening this modal.
-  const onVote = useCallback(
-    (templateId: string, result: VoteResult) =>
-      setTemplates(list => patchTemplateVote(list, templateId, result)),
-    [],
+  const [currentTemplate, setCurrentTemplate] = useCurrentTemplate(
+    project.templateId,
   )
-
-  useEffect(() => {
-    let cancelled = false
-    dispatchAction<Template[]>('template.list')
-      .then(list => {
-        if (!cancelled) setTemplates(list)
-      })
-      .catch(() => {
-        // Quiet failure: the section simply stays empty
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
   const closeRef = useRef<HTMLButtonElement>(null)
   const tabRefs = useRef(new Map<TabId, HTMLButtonElement>())
 
@@ -225,20 +189,35 @@ export default function ProjectSettingsModal({
             {t('project.settings.templateHint')}
           </p>
           <TemplateDesignPanel
-            templates={templates}
             value={project.templateId}
-            onLibraryChanged={loadTemplates}
-            onChange={templateId => {
+            current={currentTemplate}
+            onCurrentVote={(templateId, result) =>
+              setCurrentTemplate(t =>
+                t && t.id === templateId
+                  ? {
+                      ...t,
+                      votes: {
+                        up: result.up,
+                        down: result.down,
+                        myVote: result.myVote,
+                      },
+                    }
+                  : t,
+              )
+            }
+            onSelect={template => {
               dispatchAction<Project>('project.switchTemplate', {
                 projectId: project.id,
-                templateId,
+                templateId: template.id,
               })
-                .then(onProjectChange)
+                .then(updated => {
+                  setCurrentTemplate(template)
+                  onProjectChange(updated)
+                })
                 .catch(() => {
                   // Quiet failure: the picker stays on the saved value
                 })
             }}
-            onVote={onVote}
           />
         </section>
       )}

@@ -101,9 +101,12 @@ test('template sharing: viewer, then editor, then unshared (TMPL-26)', async ({
   await expect(ownerPage.getByText(guest.name, { exact: true })).toBeVisible()
 
   // The guest now sees it, badged "Shared" rather than "Custom" — they did
-  // not author it.
+  // not author it. A shared, restricted design is never on Latest/Top (those
+  // list public designs only, TMPL-28); "Mine" is where it lives, alongside
+  // anything the guest owns.
   await guestPage.reload()
   await openGuestDesignTab()
+  await guestPage.getByRole('button', { name: 'Mine' }).click()
   const guestCard = guestPage
     .getByRole('radio', { name: new RegExp(designName) })
     .locator('..')
@@ -144,6 +147,41 @@ test('template sharing: viewer, then editor, then unshared (TMPL-26)', async ({
   // general-access radios, not a save of the draft.
   await ownerPage.getByRole('radio', { name: /public/i }).click()
   await expect(ownerPage.getByRole('radio', { name: /public/i })).toBeChecked()
+
+  // While it is public, a third user — never on its people list — finds it
+  // under Top with a search and applies it to their own lecture's Design tab
+  // (TMPL-28/TMPL-26): a public design is reachable by anyone, not only by
+  // whoever it was explicitly shared with, and the same browser that lists
+  // it lets them choose it.
+  await test.step('a third user applies the owner’s public design, found by search under Top', async () => {
+    const onlooker = {
+      email: `tmplonlooker-${stamp}@example.com`,
+      name: 'Bystander',
+    }
+    const onlookerPage = await newUserPage(browser, onlooker)
+    const onlookerProject = `TmplOnlooker${stamp}`
+    await createProject(onlookerPage, onlookerProject)
+    await onlookerPage
+      .getByRole('button', {
+        name: `Start a new lecture in ${onlookerProject}`,
+      })
+      .click()
+    await expect(onlookerPage).toHaveURL(/\/d\//)
+    await onlookerPage.getByRole('button', { name: 'Start lecture' }).click()
+    await onlookerPage.getByRole('button', { name: 'Lecture settings' }).click()
+    await onlookerPage.getByRole('tab', { name: 'Design' }).click()
+
+    const currentName = `${designName} v2`
+    await onlookerPage.getByRole('button', { name: 'Top' }).click()
+    await onlookerPage.getByRole('searchbox').fill(currentName)
+    const found = onlookerPage.getByRole('radio', {
+      name: new RegExp(currentName),
+    })
+    await expect(found).toBeVisible()
+    await found.click()
+    await expect(found).toHaveAttribute('aria-checked', 'true')
+  })
+
   await ownerPage.getByRole('radio', { name: /restricted/i }).click()
   await expect(
     ownerPage.getByRole('radio', { name: /restricted/i }),

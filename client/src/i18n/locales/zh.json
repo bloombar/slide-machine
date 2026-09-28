@@ -682,7 +682,8 @@
     "noMatches": "没有与“{query}”匹配的结果。",
     "emptyMine": "还没有设计。",
     "empty": "未找到设计。",
-    "layoutCount": "{count, plural, other {# 个版式}}"
+    "layoutCount": "{count, plural, other {# 个版式}}",
+    "current": "当前设计"
   },
   "vote": {
     "upNamed": "为{name}投赞成票",

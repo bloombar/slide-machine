@@ -1371,7 +1371,10 @@
   title: Template library & preview
   full: A browsable template library lets users preview and select slide-style
     templates. Each template defines a visual theme (colors, typography,
-    spacing) plus a set of layouts.
+    spacing) plus a set of layouts. This is the Design tab in lecture, project
+    and account settings, offering the same Latest/Top/Mine browser and search
+    as the Design templates page (TMPL-28) — one design library, browsed the
+    same way wherever it is chosen.
   section: §7 Style Template Library
   family: TMPL
   phase: 2

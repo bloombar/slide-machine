@@ -224,32 +224,44 @@ describe('ProjectSettingsModal — project title', () => {
   })
 })
 
-describe('ProjectSettingsModal — Design tab', () => {
+describe('ProjectSettingsModal — Design tab browses like the Design templates page (TMPL-28)', () => {
   /** Two built-ins, so "chosen" is distinguishable from "the only one". */
-  const templates = [
-    {
-      id: 'classic',
-      permalinkSlug: 'classic',
-      ownerId: 'system',
-      name: 'Classic',
-      theme: { background: '#ffffff', text: '#000000', accent: '#123456' },
-      layouts: [],
-      visibility: 'public',
-      voteScore: 0,
-      createdAt: '2026-01-01T00:00:00.000Z',
-    },
-    {
-      id: 'seminar',
-      permalinkSlug: 'seminar',
-      ownerId: 'system',
-      name: 'Seminar',
-      theme: { background: '#ffffff', text: '#000000', accent: '#654321' },
-      layouts: [],
-      visibility: 'public',
-      voteScore: 0,
-      createdAt: '2026-01-01T00:00:00.000Z',
-    },
-  ]
+  const classic = {
+    id: 'classic',
+    permalinkSlug: 'classic',
+    ownerId: 'system',
+    name: 'Classic',
+    theme: { background: '#ffffff', text: '#000000', accent: '#123456' },
+    layouts: [],
+    visibility: 'public',
+    myRole: null,
+    voteScore: 0,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  }
+  const seminar = {
+    ...classic,
+    id: 'seminar',
+    permalinkSlug: 'seminar',
+    name: 'Seminar',
+  }
+
+  const byId = (init?: RequestInit) => {
+    const { templateId } = JSON.parse(String(init?.body)) as {
+      templateId: string
+    }
+    return {
+      status: 200,
+      body: [classic, seminar].find(t => t.id === templateId),
+    }
+  }
+
+  const baseRoutes = {
+    '/api/actions/template.getById': byId,
+    '/api/actions/template.feed': () => ({
+      status: 200,
+      body: { items: [seminar], hasMore: false },
+    }),
+  }
 
   const openDesign = (over: Partial<Project> = {}) => {
     const result = renderModal(over)
@@ -257,21 +269,32 @@ describe('ProjectSettingsModal — Design tab', () => {
     return result
   }
 
-  it('shows the project’s template as the chosen one', async () => {
-    mockFetchRoutes({
-      '/api/actions/template.list': () => ({ status: 200, body: templates }),
-    })
+  it('offers Latest, Top, Mine and search, like the Design templates page', async () => {
+    mockFetchRoutes(baseRoutes)
     openDesign()
 
-    expect(
-      await screen.findByRole('radio', { name: /Classic/ }),
-    ).toHaveAttribute('aria-checked', 'true')
+    await screen.findByRole('radiogroup')
+    expect(screen.getByRole('button', { name: 'Latest' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Top' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Mine' })).toBeInTheDocument()
+    expect(screen.getByRole('searchbox')).toBeInTheDocument()
+  })
+
+  it('pins the project’s template above the browser as "Current design"', async () => {
+    mockFetchRoutes(baseRoutes)
+    openDesign()
+
+    expect(await screen.findByText('Current design')).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /Classic/ })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
   })
 
   it('saves a switch through project.switchTemplate', async () => {
     const switched = { ...baseProject, templateId: 'seminar' }
     const { fetchMock } = mockFetchRoutes({
-      '/api/actions/template.list': () => ({ status: 200, body: templates }),
+      ...baseRoutes,
       '/api/actions/project.switchTemplate': () => ({
         status: 200,
         body: switched,
@@ -293,9 +316,7 @@ describe('ProjectSettingsModal — Design tab', () => {
   // Export moved to the design's own page (EXP-6): the tab no longer
   // renders it inline.
   it('no longer offers exports inline — that moved to the design’s own page', async () => {
-    mockFetchRoutes({
-      '/api/actions/template.list': () => ({ status: 200, body: templates }),
-    })
+    mockFetchRoutes(baseRoutes)
     openDesign()
 
     await screen.findByText(/Import a design/i)
@@ -306,9 +327,7 @@ describe('ProjectSettingsModal — Design tab', () => {
   })
 
   it('moves along the tab strip with the arrow keys', () => {
-    mockFetchRoutes({
-      '/api/actions/template.list': () => ({ status: 200, body: [] }),
-    })
+    mockFetchRoutes(baseRoutes)
     renderModal()
 
     const general = screen.getByRole('tab', { name: 'General' })

@@ -682,7 +682,8 @@
     "noMatches": "Нет совпадений по запросу «{query}».",
     "emptyMine": "Пока нет дизайнов.",
     "empty": "Дизайны не найдены.",
-    "layoutCount": "{count, plural, one {# макет} few {# макета} other {# макетов}}"
+    "layoutCount": "{count, plural, one {# макет} few {# макета} other {# макетов}}",
+    "current": "Текущий дизайн"
   },
   "vote": {
     "upNamed": "Голосовать за {name}",

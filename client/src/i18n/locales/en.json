@@ -682,7 +682,8 @@
     "noMatches": "No matches for “{query}”.",
     "emptyMine": "No designs yet.",
     "empty": "No designs found.",
-    "layoutCount": "{count, plural, one {# layout} other {# layouts}}"
+    "layoutCount": "{count, plural, one {# layout} other {# layouts}}",
+    "current": "Current design"
   },
   "vote": {
     "upNamed": "Upvote {name}",

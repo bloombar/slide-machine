@@ -2366,12 +2366,24 @@ describe('DeckViewerPage settings modal', () => {
         status: 200,
         body: { ...deckView, canEdit: true },
       }),
-      '/api/actions/template.list': () => ({
+      '/api/actions/template.getById': init => {
+        const { templateId } = JSON.parse(String(init?.body)) as {
+          templateId: string
+        }
+        return {
+          status: 200,
+          body: [
+            deckView.template,
+            { ...deckView.template, id: 'midnight', name: 'Midnight' },
+          ].find(t => t.id === templateId),
+        }
+      },
+      '/api/actions/template.feed': () => ({
         status: 200,
-        body: [
-          deckView.template,
-          { ...deckView.template, id: 'midnight', name: 'Midnight' },
-        ],
+        body: {
+          items: [{ ...deckView.template, id: 'midnight', name: 'Midnight' }],
+          hasMore: false,
+        },
       }),
       '/api/actions/deck.switchTemplate': () => ({
         status: 200,
@@ -3002,7 +3014,6 @@ describe('DeckViewerPage settings modal', () => {
   /** Routes for the Design tab where the user has a template of their own;
    * the library gains the copy once one has been made. */
   const withOwnTemplateRoutes = (switched: { body?: unknown }) => {
-    let duplicated = false
     mockFetchRoutes({
       '/api/auth/refresh': () => ({
         status: 200,
@@ -3012,16 +3023,20 @@ describe('DeckViewerPage settings modal', () => {
         status: 200,
         body: { ...deckView, canEdit: true },
       }),
-      '/api/actions/template.list': () => ({
-        status: 200,
-        body: duplicated
-          ? [deckView.template, own, copy]
-          : [deckView.template, own],
-      }),
-      '/api/actions/template.duplicate': () => {
-        duplicated = true
-        return { status: 200, body: copy }
+      '/api/actions/template.getById': init => {
+        const { templateId } = JSON.parse(String(init?.body)) as {
+          templateId: string
+        }
+        return {
+          status: 200,
+          body: [deckView.template, own, copy].find(t => t.id === templateId),
+        }
       },
+      '/api/actions/template.feed': () => ({
+        status: 200,
+        body: { items: [own], hasMore: false },
+      }),
+      '/api/actions/template.duplicate': () => ({ status: 200, body: copy }),
       '/api/actions/deck.switchTemplate': init => {
         switched.body = JSON.parse(String(init?.body))
         const { templateId } = switched.body as { templateId: string }

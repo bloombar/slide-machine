@@ -216,6 +216,31 @@ export const templateGet = defineAction<
 })
 
 /**
+ * One template by its id, rather than its permalink (TMPL-28).
+ *
+ * A deck, project or account pins a design by `templateId` — a stored
+ * template's document id, or a built-in's slug — never by the readable
+ * permalink `template.get` addresses one with. The Design tab pins the
+ * currently applied design above its browser (TMPL-28) and only ever has
+ * that id to hand, so it needs this rather than `template.get`. Same access
+ * and same decorated shape either way; only which field names the template
+ * differs.
+ */
+export const templateGetById = defineAction<
+  { templateId: string },
+  Template,
+  TemplateAccess
+>({
+  name: 'template.getById',
+  access: readableById,
+  input: z.object({ templateId: z.string().min(1) }),
+  execute: async (ctx, input, { template }) => {
+    const [decorated] = await decorateTemplates([template], ctx.userId)
+    return decorated!
+  },
+})
+
+/**
  * How long a template's generation menu is against the recommended budget,
  * and whether it is over (TMPL-25).
  *
@@ -916,6 +941,7 @@ export const templateImportFromDrive = defineAction<
 
 registerAction(templateList)
 registerAction(templateGet)
+registerAction(templateGetById)
 registerAction(templateDescriptorStatus)
 registerAction(templateExport)
 registerAction(templatePreviewImage)

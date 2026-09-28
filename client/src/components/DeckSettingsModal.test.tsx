@@ -39,6 +39,7 @@ const renderModal = (
 ) => {
   const onReformatted = vi.fn()
   const onDeckChange = vi.fn()
+  const onTemplateChange = vi.fn()
   render(
     <MemoryRouter>
       <DeckSettingsModal
@@ -48,14 +49,14 @@ const renderModal = (
         viewerIsAdmin={opts.viewerIsAdmin}
         slidesHaveDrawings={opts.slidesHaveDrawings}
         onClose={vi.fn()}
-        onTemplateChange={vi.fn()}
+        onTemplateChange={onTemplateChange}
         onDeckChange={onDeckChange}
         onDeleted={vi.fn()}
         onReformatted={onReformatted}
       />
     </MemoryRouter>,
   )
-  return { onReformatted, onDeckChange }
+  return { onReformatted, onDeckChange, onTemplateChange }
 }
 
 afterEach(cleanup)
@@ -957,5 +958,186 @@ describe('DeckSettingsModal — new-slide overrides (GEN-8)', () => {
     )
     await waitFor(() => expect(onDeckChange).toHaveBeenCalled())
     expect(sent).toEqual({ deckId: 'd1', header: false })
+  })
+})
+
+describe('DeckSettingsModal — Design tab browses like the Design templates page (TMPL-28)', () => {
+  const classic = {
+    id: 'classic',
+    permalinkSlug: 'classic',
+    ownerId: 'system',
+    name: 'Classic',
+    theme: { background: '#ffffff', text: '#000000', accent: '#123456' },
+    layouts: [],
+    visibility: 'public',
+    myRole: null,
+    voteScore: 0,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  }
+  const seminar = {
+    ...classic,
+    id: 'seminar',
+    permalinkSlug: 'seminar',
+    name: 'Seminar',
+  }
+
+  const byId = (init?: RequestInit) => {
+    const { templateId } = JSON.parse(String(init?.body)) as {
+      templateId: string
+    }
+    return {
+      status: 200,
+      body: [classic, seminar].find(t => t.id === templateId),
+    }
+  }
+
+  const openDesign = (over: Partial<Deck> = {}) => {
+    const result = renderModal(over)
+    fireEvent.click(screen.getByRole('tab', { name: 'Design' }))
+    return result
+  }
+
+  it('offers Latest, Top, Mine and search, like the Design templates page', async () => {
+    mockFetchRoutes({
+      '/api/actions/template.getById': byId,
+      '/api/actions/template.feed': () => ({
+        status: 200,
+        body: { items: [seminar], hasMore: false },
+      }),
+      '/api/actions/deck.templateUpdateStatus': () => ({
+        status: 200,
+        body: { available: false, impact: [], affectedSlides: 0 },
+      }),
+    })
+    openDesign()
+
+    await screen.findByRole('radiogroup')
+    expect(screen.getByRole('button', { name: 'Latest' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Top' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Mine' })).toBeInTheDocument()
+    expect(screen.getByRole('searchbox')).toBeInTheDocument()
+  })
+
+  it('pins the applied design above the browser as "Current design"', async () => {
+    mockFetchRoutes({
+      '/api/actions/template.getById': byId,
+      '/api/actions/template.feed': () => ({
+        status: 200,
+        body: { items: [seminar], hasMore: false },
+      }),
+      '/api/actions/deck.templateUpdateStatus': () => ({
+        status: 200,
+        body: { available: false, impact: [], affectedSlides: 0 },
+      }),
+    })
+    openDesign()
+
+    expect(await screen.findByText('Current design')).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /Classic/ })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+  })
+
+  it('applies a card chosen from the browser through deck.switchTemplate', async () => {
+    let sent: unknown
+    mockFetchRoutes({
+      '/api/actions/template.getById': byId,
+      '/api/actions/template.feed': () => ({
+        status: 200,
+        body: { items: [seminar], hasMore: false },
+      }),
+      '/api/actions/deck.templateUpdateStatus': () => ({
+        status: 200,
+        body: { available: false, impact: [], affectedSlides: 0 },
+      }),
+      '/api/actions/deck.switchTemplate': init => {
+        sent = JSON.parse(String(init?.body))
+        return { status: 200, body: { ...baseDeck, templateId: 'seminar' } }
+      },
+    })
+    const { onTemplateChange } = openDesign()
+
+    fireEvent.click(await screen.findByRole('radio', { name: /Seminar/ }))
+
+    await waitFor(() =>
+      expect(onTemplateChange).toHaveBeenCalledWith(
+        { ...baseDeck, templateId: 'seminar' },
+        seminar,
+      ),
+    )
+    expect(sent).toEqual({ deckId: 'd1', templateId: 'seminar' })
+  })
+
+  it('refetches when the sort tab is switched', async () => {
+    const { fetchMock } = mockFetchRoutes({
+      '/api/actions/template.getById': byId,
+      '/api/actions/template.feed': () => ({
+        status: 200,
+        body: { items: [seminar], hasMore: false },
+      }),
+      '/api/actions/deck.templateUpdateStatus': () => ({
+        status: 200,
+        body: { available: false, impact: [], affectedSlides: 0 },
+      }),
+    })
+    openDesign()
+    await screen.findByRole('button', { name: 'Latest' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Top' }))
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('template.feed'),
+        expect.objectContaining({
+          body: expect.stringContaining('"sort":"top"') as string,
+        }),
+      ),
+    )
+  })
+
+  // TMPL-27 round 3, carried into the shared browser: casting a vote survives
+  // a remount of the Design tab (switching away and back), because the
+  // browser refetches fresh from the server rather than replaying a stale
+  // client-side cache — the vote already landed there when it was cast.
+  it('keeps a cast vote through a remount of the Design tab', async () => {
+    let votes = { up: 0, down: 0, myVote: 0 }
+    mockFetchRoutes({
+      '/api/actions/template.getById': byId,
+      '/api/actions/template.feed': () => ({
+        status: 200,
+        body: {
+          items: [{ ...seminar, votes }],
+          hasMore: false,
+        },
+      }),
+      '/api/actions/deck.templateUpdateStatus': () => ({
+        status: 200,
+        body: { available: false, impact: [], affectedSlides: 0 },
+      }),
+      '/api/actions/template.vote': () => {
+        votes = { up: 1, down: 0, myVote: 1 }
+        return { status: 200, body: votes }
+      },
+    })
+    openDesign()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Upvote Seminar' }),
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Upvote Seminar' }),
+      ).toHaveTextContent('1'),
+    )
+
+    // Away to General, and back to Design — the tabpanel, and the browser
+    // inside it, unmount and remount.
+    fireEvent.click(screen.getByRole('tab', { name: 'General' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Design' }))
+
+    expect(
+      await screen.findByRole('button', { name: 'Upvote Seminar' }),
+    ).toHaveTextContent('1')
   })
 })

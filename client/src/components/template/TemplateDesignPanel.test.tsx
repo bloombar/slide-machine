@@ -1,10 +1,12 @@
 /**
- * Unit tests for the Design tab's template panel (TMPL-1/TMPL-4).
+ * Unit tests for the Design tab's template panel (TMPL-1/TMPL-4/TMPL-28).
  *
- * The panel's own job is what happens around the library: duplicating makes a
- * copy, and either duplicating or opening a template's settings sends the
+ * The panel's own job is what happens around the browser: duplicating makes
+ * a copy, either duplicating or opening a template's settings sends the
  * author to that template's own page — having first applied it, since an
- * author works on a design to see it where it is used.
+ * author works on a design to see it where it is used — and the currently
+ * applied design shows a descriptor-budget notice and is pinned above the
+ * browser as "Current design".
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
@@ -82,10 +84,24 @@ function Landed() {
   return <p>{`landed:${location.pathname} from:${from ?? ''}`}</p>
 }
 
+/** Every fetch the panel and its browser can make, defaulted to a quiet
+ * "one design, nothing else on the feed" library so a test only overrides
+ * what it cares about. */
+const defaultDispatch = (over: Partial<Template> = {}) =>
+  vi.fn(async (action: string, input?: unknown) => {
+    if (action === 'template.getById')
+      return template({ id: (input as { templateId: string }).templateId })
+    if (action === 'template.descriptorStatus')
+      return { length: 0, max: 5000, overBudget: false }
+    if (action === 'template.feed' || action === 'template.search')
+      return { items: [template(over)], hasMore: false }
+    throw new Error(`unexpected action ${action}`)
+  })
+
 const renderPanel = (
   props: Partial<Parameters<typeof TemplateDesignPanel>[0]> = {},
 ) => {
-  const onChange = vi.fn()
+  const onSelect = vi.fn()
   render(
     <MemoryRouter initialEntries={['/d/lecture-1']}>
       <Routes>
@@ -93,10 +109,9 @@ const renderPanel = (
           path="/d/:slug"
           element={
             <TemplateDesignPanel
-              templates={[template(), mine]}
               value="built-1"
-              onChange={onChange}
-              onLibraryChanged={vi.fn()}
+              current={template()}
+              onSelect={onSelect}
               {...props}
             />
           }
@@ -105,79 +120,113 @@ const renderPanel = (
       </Routes>
     </MemoryRouter>,
   )
-  return onChange
+  return onSelect
 }
 
 beforeEach(() => {
   vi.mocked(dispatchAction).mockReset()
-  // The panel's own descriptor-budget notice (TMPL-25) calls this on mount
-  // for whichever template is applied; a harmless default keeps the panel's
-  // own tests about what the panel itself does, not about that notice.
-  vi.mocked(dispatchAction).mockResolvedValue({
-    length: 0,
-    max: 5000,
-    overBudget: false,
-  })
+  vi.mocked(dispatchAction).mockImplementation(defaultDispatch())
 })
 afterEach(cleanup)
 
-describe('TemplateDesignPanel (TMPL-4)', () => {
+describe('TemplateDesignPanel (TMPL-4/TMPL-28)', () => {
+  it('pins the currently applied design above the browser as "Current design"', async () => {
+    renderPanel({ current: mine })
+    expect(await screen.findByText('Current design')).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /My Style/ })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+  })
+
+  it('offers Latest, Top and Mine, like the Design templates page', async () => {
+    renderPanel()
+    await screen.findByRole('radiogroup')
+    expect(screen.getByRole('button', { name: 'Latest' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Top' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Mine' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('searchbox', {
+        name: /search by title, creator, or ai instructions/i,
+      }),
+    ).toBeInTheDocument()
+  })
+
   it('applies a duplicate as soon as it exists, and opens its page', async () => {
-    vi.mocked(dispatchAction).mockResolvedValue(copy)
-    const onChange = renderPanel()
+    vi.mocked(dispatchAction).mockImplementation(
+      vi.fn(async (action: string, input?: unknown) => {
+        if (action === 'template.duplicate') return copy
+        return defaultDispatch()(action, input)
+      }),
+    )
+    const onSelect = renderPanel()
 
-    fireEvent.click(screen.getByLabelText('Duplicate Shipped'))
+    fireEvent.click(await screen.findByLabelText('Duplicate Shipped'))
 
-    // The copy is handed over with the id: the caller cannot look it up in a
-    // library that has not reloaded yet.
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith('copy-1', copy))
-    // Its own page, by permalink, knowing where to send the author back to.
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith(copy))
     expect(
       await screen.findByText('landed:/t/shipped-2-cd34 from:/d/lecture-1'),
     ).toBeInTheDocument()
   })
 
   it('applies nothing when the duplicate is refused', async () => {
-    vi.mocked(dispatchAction).mockImplementation(action =>
-      action === 'template.duplicate'
-        ? Promise.reject(new Error('nope'))
-        : Promise.resolve({ urls: [] }),
+    vi.mocked(dispatchAction).mockImplementation(
+      vi.fn(async (action: string, input?: unknown) => {
+        if (action === 'template.duplicate')
+          return Promise.reject(new Error('nope'))
+        return defaultDispatch()(action, input)
+      }),
     )
-    const onChange = renderPanel()
+    const onSelect = renderPanel()
 
-    fireEvent.click(screen.getByLabelText('Duplicate Shipped'))
+    fireEvent.click(await screen.findByLabelText('Duplicate Shipped'))
 
     expect(await screen.findByRole('alert')).toBeInTheDocument()
-    expect(onChange).not.toHaveBeenCalled()
+    expect(onSelect).not.toHaveBeenCalled()
     expect(screen.queryByText(/^landed:/)).toBeNull()
   })
 
-  it('applies the template whose settings are opened, and opens its page', () => {
-    const onChange = renderPanel()
+  it('applies the template whose settings are opened, and opens its page', async () => {
+    vi.mocked(dispatchAction).mockImplementation(
+      vi.fn(async (action: string, input?: unknown) => {
+        if (action === 'template.feed' || action === 'template.search')
+          return { items: [mine], hasMore: false }
+        return defaultDispatch()(action, input)
+      }),
+    )
+    const onSelect = renderPanel()
 
-    fireEvent.click(screen.getByLabelText('Edit My Style'))
+    fireEvent.click(await screen.findByLabelText('Edit My Style'))
 
-    expect(onChange).toHaveBeenCalledWith('mine-1', mine)
+    expect(onSelect).toHaveBeenCalledWith(mine)
     expect(
-      screen.getByText('landed:/t/my-style-ab12 from:/d/lecture-1'),
+      await screen.findByText('landed:/t/my-style-ab12 from:/d/lecture-1'),
     ).toBeInTheDocument()
   })
 
-  it('does not re-apply the template already in use', () => {
-    const onChange = renderPanel({ value: 'mine-1' })
+  it('does not re-apply the template already in use', async () => {
+    vi.mocked(dispatchAction).mockImplementation(
+      vi.fn(async (action: string, input?: unknown) => {
+        if (action === 'template.feed' || action === 'template.search')
+          return { items: [mine], hasMore: false }
+        return defaultDispatch()(action, input)
+      }),
+    )
+    const onSelect = renderPanel({ value: 'mine-1', current: mine })
 
-    fireEvent.click(screen.getByLabelText('Edit My Style'))
+    fireEvent.click(await screen.findByLabelText('Edit My Style'))
 
-    expect(onChange).not.toHaveBeenCalled()
+    expect(onSelect).not.toHaveBeenCalled()
     expect(
-      screen.getByText('landed:/t/my-style-ab12 from:/d/lecture-1'),
+      await screen.findByText('landed:/t/my-style-ab12 from:/d/lecture-1'),
     ).toBeInTheDocument()
   })
 
   // TMPL-28: import used to unfold inline beneath the library; it now opens
   // in a dialog, the same shared control the Design templates page uses.
-  it('opens Import a design in a dialog, not inline', () => {
+  it('opens Import a design in a dialog, not inline', async () => {
     renderPanel()
+    await screen.findByRole('radiogroup')
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(

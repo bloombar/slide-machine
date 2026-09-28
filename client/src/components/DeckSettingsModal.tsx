@@ -13,7 +13,7 @@
  * material, running a refine over the owner's slides, and the Quiz and
  * Export tabs, which act through the admin's own Google account.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { Trans, useTranslation } from 'react-i18next'
 import { ChevronRight, X } from 'lucide-react'
@@ -31,11 +31,10 @@ import {
   type RefineJobSummary,
   type SlideRefineParts,
   type Template,
-  type VoteResult,
 } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
-import { patchTemplateVote } from '../lib/templateVotes'
 import TemplateDesignPanel from './template/TemplateDesignPanel'
+import { useCurrentTemplate } from './template/useCurrentTemplate'
 import TemplateUpdateNotice from './template/TemplateUpdateNotice'
 import AccessSettings from './AccessSettings'
 import QuizPanel from './QuizPanel'
@@ -137,7 +136,9 @@ export default function DeckSettingsModal({
   onReformatted,
 }: Props) {
   const { t } = useTranslation()
-  const [templates, setTemplates] = useState<Template[]>([])
+  const [currentTemplate, setCurrentTemplate] = useCurrentTemplate(
+    deck.templateId,
+  )
   // An admin sees a shorter tab list, so a deep link into one of the
   // hidden tabs lands on General instead.
   const tabs = adminOverride
@@ -337,49 +338,19 @@ export default function DeckSettingsModal({
   const closeRef = useRef<HTMLButtonElement>(null)
   const tabRefs = useRef(new Map<TabId, HTMLButtonElement>())
 
-  const loadTemplates = useCallback(() => {
-    dispatchAction<Template[]>('template.list')
-      .then(setTemplates)
-      .catch(() => {
-        // Quiet failure: the section simply stays empty
-      })
-  }, [])
-
-  // A vote cast from the Design tab's library (TMPL-27 round 3): patched
-  // into this modal's own `templates` state, or it would revert to whatever
-  // `template.list` last returned the moment the Design tab unmounts and
-  // remounts — switching tabs, or closing and reopening this modal.
-  const onVote = useCallback(
-    (templateId: string, result: VoteResult) =>
-      setTemplates(list => patchTemplateVote(list, templateId, result)),
-    [],
-  )
-
-  useEffect(() => {
-    let cancelled = false
-    dispatchAction<Template[]>('template.list')
-      .then(list => {
-        if (!cancelled) setTemplates(list)
-      })
-      .catch(() => {
-        // Quiet failure: the section simply stays empty
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const switchTemplate = (templateId: string, known?: Template) => {
-    dispatchAction<Deck>('deck.switchTemplate', { deckId: deck.id, templateId })
+  // Chooses a template — a card in the Design tab's browser, a fresh
+  // duplicate, or an import — and applies it (TMPL-28). The object is
+  // handed straight over (`onSelect` always carries it, unlike the old
+  // `template.list`-backed picker, which sometimes had to be told), so
+  // there is nothing here to look up.
+  const selectTemplate = (template: Template) => {
+    dispatchAction<Deck>('deck.switchTemplate', {
+      deckId: deck.id,
+      templateId: template.id,
+    })
       .then(updated => {
-        // A template just made by duplicating is not in the list yet, so the
-        // panel hands it over; the slides should not wait for a reload to
-        // show what the lecture is now using.
-        const template =
-          known?.id === updated.templateId
-            ? known
-            : templates.find(t => t.id === updated.templateId)
-        if (template) onTemplateChange(updated, template)
+        setCurrentTemplate(template)
+        onTemplateChange(updated, template)
       })
       .catch(() => {
         // Quiet failure: the picker stays on the saved template
@@ -942,16 +913,30 @@ export default function DeckSettingsModal({
           <TemplateUpdateNotice
             deckId={deck.id}
             onApplied={updated => {
-              const template = templates.find(t => t.id === updated.templateId)
-              if (template) onTemplateChange(updated, template)
+              // Applying a pinned update never changes which design is
+              // applied, only which version of it (TMPL-11) — the object
+              // already fetched for the panel below is still the right one.
+              if (currentTemplate) onTemplateChange(updated, currentTemplate)
             }}
           />
           <TemplateDesignPanel
-            templates={templates}
             value={deck.templateId}
-            onChange={switchTemplate}
-            onLibraryChanged={loadTemplates}
-            onVote={onVote}
+            current={currentTemplate}
+            onSelect={selectTemplate}
+            onCurrentVote={(templateId, result) =>
+              setCurrentTemplate(t =>
+                t && t.id === templateId
+                  ? {
+                      ...t,
+                      votes: {
+                        up: result.up,
+                        down: result.down,
+                        myVote: result.myVote,
+                      },
+                    }
+                  : t,
+              )
+            }
           />
         </section>
       )}

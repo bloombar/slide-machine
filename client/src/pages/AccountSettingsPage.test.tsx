@@ -71,6 +71,14 @@ const templates = [
   },
 ]
 
+/** `template.getById`, answered from the same two designs (TMPL-28). */
+const byId = (init?: RequestInit) => {
+  const { templateId } = JSON.parse(String(init?.body)) as {
+    templateId: string
+  }
+  return { status: 200, body: templates.find(t => t.id === templateId) }
+}
+
 // The deployment's default is the server's answer, read at boot from
 // /api/config. Stubbed rather than fetched, so the tab's "nothing chosen yet"
 // case has something to show.
@@ -93,7 +101,11 @@ const renderSettings = (
     '/api/auth/logout': () => ({ status: 204 }),
     '/api/actions/user.usage': () => ({ status: 200, body: emptyUsage }),
     '/api/actions/billing.summary': () => ({ status: 200, body: freeBilling }),
-    '/api/actions/template.list': () => ({ status: 200, body: templates }),
+    '/api/actions/template.getById': byId,
+    '/api/actions/template.feed': () => ({
+      status: 200,
+      body: { items: templates, hasMore: false },
+    }),
     ...routes,
   })
   render(
@@ -280,10 +292,9 @@ describe('AccountSettingsPage', () => {
     expect(
       await screen.findByRole('radio', { name: /NYU Elegant/ }),
     ).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByRole('radio', { name: /Seminar/ })).toHaveAttribute(
-      'aria-checked',
-      'false',
-    )
+    expect(
+      await screen.findByRole('radio', { name: /Seminar/ }),
+    ).toHaveAttribute('aria-checked', 'false')
   })
 
   it('shows the account’s own choice once it has one', async () => {
@@ -292,7 +303,11 @@ describe('AccountSettingsPage', () => {
         status: 200,
         body: { user: user({ templateId: 'seminar' }), accessToken: 't' },
       }),
-      '/api/actions/template.list': () => ({ status: 200, body: templates }),
+      '/api/actions/template.getById': byId,
+      '/api/actions/template.feed': () => ({
+        status: 200,
+        body: { items: templates, hasMore: false },
+      }),
     })
     render(
       <MemoryRouter initialEntries={['/app/settings?tab=design']}>
@@ -714,8 +729,8 @@ describe('AccountSettingsPage as an admin (ADMIN-5)', () => {
       .map(([, init]) => String(init?.body))
 
   it('keeps Design off an admin’s view of someone else’s account', async () => {
-    // template.list and user.setTemplate are self-scoped: an admin would be
-    // shown their own library and would save into their own account.
+    // template.getById and user.setTemplate are self-scoped: an admin would
+    // be shown their own design and would save into their own account.
     await renderAsAdmin()
     expect(await screen.findByText('grace@example.com')).toBeVisible()
     expect(screen.queryByRole('tab', { name: 'Design' })).toBeNull()
