@@ -46,6 +46,7 @@ import {
   type ProfileVisibility,
   type SafeUser,
   type Template,
+  type VoteResult,
 } from '@slide-machine/shared'
 import { useAuth } from '../auth/AuthContext'
 import { dispatchAction } from '../api/actions'
@@ -64,6 +65,7 @@ import ConnectedAssistantsPanel from '../components/ConnectedAssistantsPanel'
 import { getAgentAccessEnabled, getDefaultTemplateId } from '../runtime-config'
 import TemplateDesignPanel from '../components/template/TemplateDesignPanel'
 import TemplateExportSection from '../components/template/TemplateExportSection'
+import { patchTemplateVote } from '../lib/templateVotes'
 
 /** One settings change, as the account itself holds it: an absent
  * `language`/`locale` means "unchanged", an explicit `undefined` one
@@ -216,6 +218,16 @@ export default function AccountSettingsPage() {
         // Quiet failure: the section simply stays empty
       })
   }, [])
+
+  // A vote cast from the Design tab's library (TMPL-27 round 3): patched
+  // into this page's own `templates` state, or it would revert to whatever
+  // `template.list` last returned the moment the Design tab unmounts and
+  // remounts — switching to General and back, say.
+  const onVote = useCallback(
+    (templateId: string, result: VoteResult) =>
+      setTemplates(list => patchTemplateVote(list, templateId, result)),
+    [],
+  )
 
   useEffect(() => {
     // Only the owner's own path has a Design tab, so only it needs the
@@ -404,8 +416,14 @@ export default function AccountSettingsPage() {
   }
 
   // Bare root: AppShell's <main> already supplies the page margins every
-  // other page inherits. The inner column is narrowed for form legibility,
-  // the same way the home page narrows its lecture list.
+  // other page inherits, the same max-w-5xl every other page settles into
+  // (TMPL-27) — this page no longer narrows itself further. The Design
+  // tab's card grid wants that width. Every other tab still reads better
+  // narrower — a `<label>` and its value a thousand pixels apart, a bio
+  // textarea stretched edge to edge — so each of General, Privacy,
+  // Connected AI assistants and Plan carries its own `max-w-2xl` on its own
+  // tabpanel, rather than on this wrapper the Design tab would also
+  // inherit.
   return (
     <div>
       {/* Signing out lives only in the shell's hamburger menu now, so it is
@@ -426,7 +444,7 @@ export default function AccountSettingsPage() {
       )}
 
       {user && (
-        <div className="mt-6 max-w-2xl">
+        <div className="mt-6">
           {/* Two tabs, because the questions are different: General is what
               this account *is*, Plan is what it may spend. Mixing them meant
               scrolling past a bio to find out why a lecture stopped
@@ -478,7 +496,12 @@ export default function AccountSettingsPage() {
               role="tabpanel"
               id="settings-panel-general"
               aria-labelledby="settings-tab-general"
-              className="flex flex-col gap-8"
+              // Narrowed on the tabpanel rather than on the page (TMPL-27):
+              // a display name field or a bio textarea stretched to the
+              // page's full width reads worse than the same field a
+              // lecture or project settings sheet already shows at this
+              // width. Design, below, is the one tab that wants the room.
+              className="flex max-w-2xl flex-col gap-8"
             >
               <Section title={t('profile.accountSection')}>
                 <p className="text-sm text-slate-600">{user.email}</p>
@@ -645,6 +668,7 @@ export default function AccountSettingsPage() {
                 value={accountTemplateId}
                 onChange={setTemplate}
                 onLibraryChanged={loadTemplates}
+                onVote={onVote}
               />
               <TemplateExportSection templateId={accountTemplateId} />
             </section>
@@ -655,7 +679,7 @@ export default function AccountSettingsPage() {
               role="tabpanel"
               id="settings-panel-privacy"
               aria-labelledby="settings-tab-privacy"
-              className="flex flex-col gap-8"
+              className="flex max-w-2xl flex-col gap-8"
             >
               <Section
                 title={t('profile.privacySection')}
@@ -679,7 +703,7 @@ export default function AccountSettingsPage() {
               role="tabpanel"
               id="settings-panel-assistants"
               aria-labelledby="settings-tab-assistants"
-              className="flex flex-col gap-8"
+              className="flex max-w-2xl flex-col gap-8"
             >
               <p className="text-sm text-slate-600">
                 {t('profile.assistantsIntro')}{' '}
@@ -712,7 +736,7 @@ export default function AccountSettingsPage() {
               role="tabpanel"
               id="settings-panel-plan"
               aria-labelledby="settings-tab-plan"
-              className="flex flex-col gap-8"
+              className="flex max-w-2xl flex-col gap-8"
             >
               <Section title={t('profile.planSection')}>
                 {/* What the account is on, and one way to change it. The

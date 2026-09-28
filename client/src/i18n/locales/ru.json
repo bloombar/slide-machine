@@ -668,6 +668,10 @@
     "votesBreakdown": "{up} за · {down} против",
     "unknownOwner": "Неизвестно"
   },
+  "vote": {
+    "upNamed": "Голосовать за {name}",
+    "downNamed": "Голосовать против {name}"
+  },
   "plan": {
     "tier": {
       "free": "Бесплатный",

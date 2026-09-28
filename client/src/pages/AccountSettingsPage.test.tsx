@@ -134,6 +134,25 @@ describe('AccountSettingsPage', () => {
     expect(await screen.findByText('Free')).toBeVisible()
   })
 
+  // TMPL-27: the page reads at the same width as the rest of the app
+  // (AppShell's own max-w-5xl `<main>`), not the narrower column this page
+  // used to apply on top of it. Each tab narrows its own tabpanel instead
+  // where a narrower read is wanted — General's form fields here — except
+  // Design, whose card grid wants the full width.
+  it('no longer narrows the whole page to max-w-2xl, only General’s own tabpanel', async () => {
+    renderSettings()
+    const email = await screen.findByText('ada@example.com')
+    expect(email.closest('.max-w-2xl')).not.toBeNull()
+    // The tab strip sits above every tabpanel, so it must not itself be
+    // inside any tab's own max-w-2xl.
+    const tabstrip = screen.getByRole('tablist')
+    expect(tabstrip.closest('.max-w-2xl')).toBeNull()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Design' }))
+    const design = await screen.findByRole('tabpanel')
+    expect(design).not.toHaveClass('max-w-2xl')
+  })
+
   it('opens the tab named in the URL', async () => {
     // The billing provider sends the browser back here after checkout
     // (BILL-2); landing on General would hide what the user just paid for.

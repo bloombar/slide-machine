@@ -21,10 +21,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft } from 'lucide-react'
-import type {
-  Layout,
-  Template,
-  TemplateRenderMode,
+import {
+  steppableLayouts,
+  templateDescription,
+  type Layout,
+  type Template,
+  type TemplateRenderMode,
 } from '@slide-machine/shared'
 import { dispatchAction } from '../api/actions'
 import { ApiError } from '../api/http'
@@ -35,6 +37,8 @@ import AccessSettings from '../components/AccessSettings'
 import TemplateEditor from '../components/template/TemplateEditor'
 import TemplateReaderView from '../components/template/TemplateReaderView'
 import UnsavedChangesDialog from '../components/UnsavedChangesDialog'
+import VoteControl from '../components/VoteControl'
+import VoteCount from '../components/discover/VoteCount'
 
 export default function TemplateEditorPage() {
   const { slug } = useParams<{ slug: string }>()
@@ -155,11 +159,29 @@ export default function TemplateEditorPage() {
         })
           .then(saved => {
             // The saved template becomes what the editor compares against, so
-            // the draft it holds is no longer unsaved work. Only template.get
-            // names the author, so saving must not drop the byline with it.
+            // the draft it holds is no longer unsaved work. `template.update`
+            // returns a bare `toTemplateDto`, not the batch-loaded
+            // `decorateTemplates` `template.get`/`.list` use — so it carries
+            // neither the author (`owner`) nor the vote tally (`votes`)
+            // (TMPL-27 round 2). Saving must not drop either from what the
+            // page already knew: `owner` never changes on a save, and a vote
+            // is independent of the draft `template.update` writes, so both
+            // simply carry forward from `prev`.
+            //
+            // `layoutCount`/`description` are different (round 3): both are
+            // *derived from* the draft just saved — a layout added or
+            // removed, or `aiInstructions` reworded — so carrying the old
+            // values forward would go stale the instant either changed.
+            // Recomputed here with the same shared helpers the server's own
+            // `decorateTemplates` uses, so the card these feed (TMPL-28)
+            // shows this save's own layouts and instructions immediately,
+            // rather than waiting on the next `template.get`/`.list`.
             setTemplate(prev => ({
               ...saved,
               owner: saved.owner ?? prev?.owner,
+              votes: saved.votes ?? prev?.votes,
+              layoutCount: steppableLayouts(saved.layouts).length,
+              description: templateDescription(saved.aiInstructions),
             }))
             setSavedNote(true)
             return true
@@ -301,11 +323,13 @@ export default function TemplateEditorPage() {
               </p>
             )}
           </div>
-          {/* A reader's own actions, at the right of the header row. The
-              vote control (TMPL-27) belongs here too, right-most of the
-              two — this slot is left for it rather than built now. */}
-          {!canEdit && (
-            <div className="flex shrink-0 items-center gap-2">
+          {/* The header row's own actions, at the right. A reader's
+              Duplicate sits left of the vote (TMPL-27); an editor gets no
+              Duplicate here (`TemplateDesignPanel`'s library already offers
+              it), only the vote. The owner sees the tally everyone else's
+              vote feeds, not buttons to vote on their own work. */}
+          <div className="flex shrink-0 items-center gap-2">
+            {!canEdit && (
               <button
                 type="button"
                 onClick={duplicate}
@@ -314,9 +338,45 @@ export default function TemplateEditorPage() {
               >
                 {t('template.duplicate')}
               </button>
-              {/* TMPL-27: the vote control lands here in a later slice. */}
-            </div>
-          )}
+            )}
+            {template.myRole === 'owner' ? (
+              <VoteCount
+                up={template.votes?.up ?? 0}
+                down={template.votes?.down ?? 0}
+              />
+            ) : (
+              <VoteControl
+                target={{ kind: 'template', id: template.id }}
+                name={name}
+                up={template.votes?.up ?? 0}
+                down={template.votes?.down ?? 0}
+                myVote={template.votes?.myVote ?? 0}
+                onChange={res => {
+                  // The design this vote was cast on, captured from this
+                  // render rather than read back off state later (TMPL-27
+                  // round 3): a reader's Duplicate, or any other navigation
+                  // to a different `/t/:slug`, keeps this same page
+                  // component mounted and swaps `template` for a different
+                  // design entirely — a response arriving after that swap
+                  // must not write this vote's tally into whatever design
+                  // is now current.
+                  const votedId = template.id
+                  setTemplate(prev =>
+                    prev && prev.id === votedId
+                      ? {
+                          ...prev,
+                          votes: {
+                            up: res.up,
+                            down: res.down,
+                            myVote: res.myVote,
+                          },
+                        }
+                      : prev,
+                  )
+                }}
+              />
+            )}
+          </div>
         </div>
       </header>
       {duplicateError && (

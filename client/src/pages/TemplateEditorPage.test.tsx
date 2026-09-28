@@ -198,6 +198,31 @@ describe('TemplateEditorPage (TMPL-4)', () => {
     expect(screen.queryByText('back at the lecture')).toBeNull()
   })
 
+  // TMPL-27 round 2: `template.update` returns a bare `toTemplateDto`, with
+  // none of `decorateTemplates`' batch-loaded fields — `template.get`'s own
+  // `votes` must survive a save the same way `owner` already does, or the
+  // owner's tally would drop to 0 the moment they saved anything.
+  it('keeps the vote tally across a save, which `template.update` does not return', async () => {
+    const loaded = template({ votes: { up: 3, down: 1, myVote: 0 } })
+    const saved = template({ name: 'Renamed', votes: undefined })
+    vi.mocked(dispatchAction).mockImplementation((action: string) => {
+      if (action === 'template.get') return Promise.resolve(loaded)
+      if (action === 'template.list') return Promise.resolve([])
+      if (action === 'template.update') return Promise.resolve(saved)
+      if (action === 'template.shares') return Promise.resolve([])
+      return Promise.resolve({ urls: [] })
+    })
+    renderPage()
+
+    expect(await screen.findByText('4 votes')).toBeInTheDocument()
+    const name = await screen.findByLabelText('Template name')
+    fireEvent.change(name, { target: { value: 'Renamed' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await screen.findByTestId('template-saved')
+    expect(screen.getByText('4 votes')).toBeInTheDocument()
+  })
+
   it('shows a design belonging to someone else rather than editing it', async () => {
     withTemplate(
       template({
@@ -443,6 +468,201 @@ describe('TemplateEditorPage (TMPL-4)', () => {
 
     await screen.findByLabelText('Template name')
     expect(screen.queryByRole('button', { name: 'Duplicate' })).toBeNull()
+  })
+
+  // TMPL-27: the vote lands in the header slot readers and editors both
+  // see; the owner sees the tally that vote feeds instead of buttons.
+  it('shows a vote control to a reader, not a tally', async () => {
+    withTemplate(
+      template({
+        ownerId: 'u2',
+        owner: { id: 'u2', displayName: 'Bram' },
+        visibility: 'public',
+        myRole: null,
+        votes: { up: 3, down: 1, myVote: 0 },
+      }),
+    )
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'My Style', level: 1 })
+    expect(
+      screen.getByRole('button', { name: 'Upvote My Style' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('4 votes')).toBeNull()
+  })
+
+  it('shows a vote control to an editor, not only the owner', async () => {
+    withTemplate(
+      template({
+        ownerId: 'u2',
+        owner: { id: 'u2', displayName: 'Bram' },
+        visibility: 'restricted',
+        myRole: 'editor',
+        votes: { up: 2, down: 0, myVote: 0 },
+      }),
+    )
+    renderPage()
+
+    await screen.findByLabelText('Template name')
+    expect(
+      screen.getByRole('button', { name: 'Upvote My Style' }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows a tally, not buttons, to the design’s own owner', async () => {
+    withTemplate(template({ votes: { up: 3, down: 1, myVote: 0 } }))
+    renderPage()
+
+    await screen.findByLabelText('Template name')
+    expect(screen.getByText('4 votes')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Upvote My Style' })).toBeNull()
+  })
+
+  it('casts a vote from the design’s own page', async () => {
+    const loaded = template({
+      ownerId: 'u2',
+      owner: { id: 'u2', displayName: 'Bram' },
+      visibility: 'public',
+      myRole: null,
+      votes: { up: 0, down: 0, myVote: 0 },
+    })
+    vi.mocked(dispatchAction).mockImplementation((action: string) => {
+      if (action === 'template.get') return Promise.resolve(loaded)
+      if (action === 'template.list') return Promise.resolve([])
+      if (action === 'template.shares') return Promise.resolve([])
+      if (action === 'template.vote') {
+        return Promise.resolve({ up: 1, down: 0, voteScore: 1, myVote: 1 })
+      }
+      return Promise.resolve({ urls: [] })
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'My Style', level: 1 })
+    const up = screen.getByRole('button', { name: 'Upvote My Style' })
+    fireEvent.click(up)
+
+    await vi.waitFor(() => expect(up).toHaveAttribute('aria-pressed', 'true'))
+  })
+
+  // TMPL-27 round 3: this page stays mounted across a `/t/:slug` change
+  // (moving from one design to another), so a vote's own response can
+  // arrive after the page has already swapped `template` for a different
+  // design entirely — that response must not land on whatever design is on
+  // screen when it finally settles.
+  it('does not let a stale vote response write into the design now on screen', async () => {
+    const designA = template({
+      id: 'design-a',
+      permalinkSlug: 'design-a',
+      ownerId: 'u2',
+      owner: { id: 'u2', displayName: 'Bram' },
+      myRole: null,
+      visibility: 'public',
+      name: 'Design A',
+      votes: { up: 0, down: 0, myVote: 0 },
+    })
+    const designB = template({
+      id: 'design-b',
+      permalinkSlug: 'design-b',
+      ownerId: 'u3',
+      owner: { id: 'u3', displayName: 'Chen' },
+      myRole: null,
+      visibility: 'public',
+      name: 'Design B',
+      votes: { up: 5, down: 2, myVote: 0 },
+    })
+    const voteResponse = deferred<{
+      up: number
+      down: number
+      voteScore: number
+      myVote: 1 | -1 | 0
+    }>()
+    vi.mocked(dispatchAction).mockImplementation(
+      (action: string, payload?: unknown) => {
+        if (action === 'template.get') {
+          const slug = (payload as { slug?: string } | undefined)?.slug
+          return Promise.resolve(slug === 'design-b' ? designB : designA)
+        }
+        if (action === 'template.list') return Promise.resolve([])
+        if (action === 'template.shares') return Promise.resolve([])
+        if (action === 'template.vote') return voteResponse.promise
+        return Promise.resolve({ urls: [] })
+      },
+    )
+    renderPageWithJumpTo('design-a', '/t/design-b')
+
+    await screen.findByRole('heading', { name: 'Design A', level: 1 })
+    fireEvent.click(screen.getByRole('button', { name: 'Upvote Design A' }))
+
+    // Design B, before A's vote settles.
+    fireEvent.click(screen.getByRole('link', { name: 'Jump' }))
+    await screen.findByRole('heading', { name: 'Design B', level: 1 })
+    const upB = screen.getByRole('button', { name: 'Upvote Design B' })
+    expect(upB).toHaveTextContent('5')
+
+    // A's response finally arrives, long after the page moved on. Settling
+    // it takes several steps — the response's own `.then`, the `setState`
+    // it triggers, this page's re-render, and (if the guard below were
+    // missing) `VoteControl`'s own prop-adopting effect reacting to the now
+    // -contaminated props — none of them run inside an `act()`-wrapped
+    // event, so a single tick is not enough to see the settled DOM: an
+    // assertion checked too early would read the *old*, still-correct
+    // text and pass without ever observing what the chain settles on.
+    voteResponse.resolve({ up: 1, down: 0, voteScore: 1, myVote: 1 })
+    for (let i = 0; i < 10; i++) {
+      await new Promise(resolve => setTimeout(resolve, 0))
+    }
+    // Still Design B's own count and vote state — not A's.
+    expect(
+      screen.getByRole('button', { name: 'Upvote Design B' }),
+    ).toHaveTextContent('5')
+    expect(
+      screen.getByRole('button', { name: 'Upvote Design B' }),
+    ).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  // TMPL-27 round 3: an editor's vote is their own act, independent of the
+  // draft they are editing — saving that draft must not lose it.
+  it('keeps an editor’s own cast vote across a save', async () => {
+    const loaded = template({
+      ownerId: 'u2',
+      owner: { id: 'u2', displayName: 'Bram' },
+      visibility: 'restricted',
+      myRole: 'editor',
+      votes: { up: 2, down: 0, myVote: 0 },
+    })
+    // `template.update`'s own response, a bare `toTemplateDto` with no
+    // `votes` field at all — the same shape the server really returns.
+    const saved = template({
+      name: 'Renamed',
+      myRole: 'editor',
+      votes: undefined,
+    })
+    vi.mocked(dispatchAction).mockImplementation((action: string) => {
+      if (action === 'template.get') return Promise.resolve(loaded)
+      if (action === 'template.list') return Promise.resolve([])
+      if (action === 'template.shares') return Promise.resolve([])
+      if (action === 'template.update') return Promise.resolve(saved)
+      if (action === 'template.vote') {
+        return Promise.resolve({ up: 3, down: 0, voteScore: 3, myVote: 1 })
+      }
+      return Promise.resolve({ urls: [] })
+    })
+    renderPage()
+
+    await screen.findByLabelText('Template name')
+    const up = screen.getByRole('button', { name: 'Upvote My Style' })
+    fireEvent.click(up)
+    await vi.waitFor(() => expect(up).toHaveAttribute('aria-pressed', 'true'))
+    expect(up).toHaveTextContent('3')
+
+    const name = screen.getByLabelText('Template name')
+    fireEvent.change(name, { target: { value: 'Renamed' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await screen.findByTestId('template-saved')
+    const upAfterSave = screen.getByRole('button', { name: 'Upvote Renamed' })
+    expect(upAfterSave).toHaveAttribute('aria-pressed', 'true')
+    expect(upAfterSave).toHaveTextContent('3')
   })
 
   // `TemplateReaderView` is keyed on `template.id`, so moving from one

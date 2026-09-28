@@ -2536,7 +2536,8 @@ export default function DeckViewerPage() {
       {status === 'authenticated' && !isOwner && (
         <div className="mb-4 flex justify-end">
           <VoteControl
-            deckId={view.deck.id}
+            target={{ kind: 'deck', id: view.deck.id }}
+            name={view.deck.title}
             up={view.voteUp}
             down={view.voteDown}
             myVote={view.myVote}

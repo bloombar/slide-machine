@@ -668,6 +668,10 @@
     "votesBreakdown": "{up} up · {down} down",
     "unknownOwner": "Unknown"
   },
+  "vote": {
+    "upNamed": "Upvote {name}",
+    "downNamed": "Downvote {name}"
+  },
   "plan": {
     "tier": {
       "free": "Free",

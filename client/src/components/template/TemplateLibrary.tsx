@@ -17,13 +17,27 @@
  * be paged through its own layouts in place — seeing what a design does with
  * a list or a two-column slide should not mean leaving the Design tab for the
  * editor, which is read-only for anything you did not author.
+ *
+ * Every card also carries a vote (TMPL-27), right-most in the icon row: a
+ * built-in or someone else's design gets the up/down buttons, and the
+ * caller's own gets a read-only tally instead, the same trade a lecture's
+ * viewer makes for its owner. `VoteControl` keeps the cast vote itself
+ * across a stale re-render on its own (it only re-adopts `template.votes`
+ * once nothing is in flight), but this component still reports every
+ * settled vote up through `onVote` (round 3) — this list is only ever a
+ * snapshot the caller fetched, and a caller that keeps its own `templates`
+ * state needs to hear about the vote too, or it reverts the moment the
+ * Design tab that drew this card unmounts and remounts (a tab switch, a
+ * settings modal reopened) and the caller re-renders this same stale prop.
  */
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ChevronRight, Copy, Pencil, Trash2 } from 'lucide-react'
-import type { Layout, Template } from '@slide-machine/shared'
+import type { Layout, Template, VoteResult } from '@slide-machine/shared'
 import { steppableLayouts } from '@slide-machine/shared'
 import { templateName } from '../../i18n/templateName'
+import VoteControl from '../VoteControl'
+import VoteCount from '../discover/VoteCount'
 import PreviewCard from './PreviewCard'
 
 /** What a layout is called, matching the editor's rail. */
@@ -37,6 +51,7 @@ export default function TemplateLibrary({
   onDuplicate,
   onEdit,
   onDelete,
+  onVote,
   busyId,
 }: {
   templates: Template[]
@@ -45,6 +60,10 @@ export default function TemplateLibrary({
   onDuplicate?: (template: Template) => void
   onEdit?: (template: Template) => void
   onDelete?: (template: Template) => void
+  /** Every settled vote (TMPL-27 round 3), so a caller holding its own copy
+   * of `templates` can patch it (`patchTemplateVote`, `lib/templateVotes`)
+   * and keep the vote past a remount of whatever drew this card. */
+  onVote?: (templateId: string, result: VoteResult) => void
   /** Template currently being duplicated or deleted; its actions are held. */
   busyId?: string
 }) {
@@ -70,6 +89,7 @@ export default function TemplateLibrary({
           template.myRole === 'editor' || template.myRole === 'viewer'
         const selected = value === template.id
         const name = templateName(t, template)
+        const votes = template.votes ?? { up: 0, down: 0, myVote: 0 }
         const steppable = steppableLayouts(template.layouts)
         // Starts at the design's first layout, so paging reads as a run
         // through the template in the order it declares them rather than
@@ -84,7 +104,15 @@ export default function TemplateLibrary({
           }))
         const pageable = steppable.length > 1
         return (
-          <div key={template.id} className="flex flex-col gap-1.5">
+          <div
+            key={template.id}
+            // A stable hook to scope a test (or a future feature) to this
+            // one card, rather than to `PreviewCard`'s own radio — the vote
+            // row below is that radio's sibling, not its descendant, so
+            // `.closest('[role="radio"]')`-style lookups miss it entirely.
+            data-template-card={template.id}
+            className="flex flex-col gap-1.5"
+          >
             {/* The arrows sit over the end of the name row rather than in it:
                 the row is inside the radio, and a button cannot hold another
                 button. Same arrangement as the editor rail's delete icon. */}
@@ -156,47 +184,74 @@ export default function TemplateLibrary({
               )}
             </div>
 
-            {(onDuplicate ||
-              (canEdit && onEdit) ||
-              (canDelete && onDelete)) && (
-              <div className="flex items-center gap-1 px-1">
-                {onDuplicate && (
-                  <button
-                    type="button"
-                    onClick={() => onDuplicate(template)}
-                    disabled={busyId === template.id}
-                    aria-label={t('template.duplicateNamed', { name })}
-                    title={t('template.duplicate')}
-                    className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
-                  >
-                    <Copy className="h-3.5 w-3.5" aria-hidden />
-                  </button>
-                )}
-                {canEdit && onEdit && (
-                  <button
-                    type="button"
-                    onClick={() => onEdit(template)}
-                    aria-label={t('template.editNamed', { name })}
-                    title={t('template.edit')}
-                    className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-900"
-                  >
-                    <Pencil className="h-3.5 w-3.5" aria-hidden />
-                  </button>
-                )}
-                {canDelete && onDelete && (
-                  <button
-                    type="button"
-                    onClick={() => onDelete(template)}
-                    disabled={busyId === template.id}
-                    aria-label={t('template.deleteNamed', { name })}
-                    title={t('common.delete')}
-                    className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                  </button>
-                )}
-              </div>
-            )}
+            {/* The row always renders now (TMPL-27): every card carries a
+                vote control or, for the caller's own, a read-only tally, at
+                its right-hand end, even when none of duplicate/edit/delete
+                apply. `flex-wrap` lets the vote drop to its own line at a
+                narrow width (the Design tab's 2-column grid can get down to
+                ~150px a card) rather than overflow the row; `ml-auto` still
+                pushes it to the right whichever line it lands on. */}
+            <div className="flex flex-wrap items-center gap-1 px-1">
+              {onDuplicate && (
+                <button
+                  type="button"
+                  onClick={() => onDuplicate(template)}
+                  disabled={busyId === template.id}
+                  aria-label={t('template.duplicateNamed', { name })}
+                  title={t('template.duplicate')}
+                  className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
+                >
+                  <Copy className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              )}
+              {canEdit && onEdit && (
+                <button
+                  type="button"
+                  onClick={() => onEdit(template)}
+                  aria-label={t('template.editNamed', { name })}
+                  title={t('template.edit')}
+                  className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-900"
+                >
+                  <Pencil className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              )}
+              {canDelete && onDelete && (
+                <button
+                  type="button"
+                  onClick={() => onDelete(template)}
+                  disabled={busyId === template.id}
+                  aria-label={t('template.deleteNamed', { name })}
+                  title={t('common.delete')}
+                  className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              )}
+              {/* Right-most in the row, pushed clear of the icons before
+                    it (TMPL-27). The caller's own template shows the tally
+                    everyone else sees on a lecture they own, rather than
+                    buttons to vote on their own work; anything else,
+                    built-ins included, is voteable. */}
+              {template.myRole === 'owner' ? (
+                <VoteCount
+                  up={votes.up}
+                  down={votes.down}
+                  size="compact"
+                  className="ml-auto"
+                />
+              ) : (
+                <VoteControl
+                  target={{ kind: 'template', id: template.id }}
+                  name={name}
+                  up={votes.up}
+                  down={votes.down}
+                  myVote={votes.myVote}
+                  size="compact"
+                  className="ml-auto"
+                  onChange={res => onVote?.(template.id, res)}
+                />
+              )}
+            </div>
           </div>
         )
       })}
