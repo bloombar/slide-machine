@@ -525,10 +525,12 @@ export interface Template {
    * permalink has. A built-in's slug is its id; a stored one gets a readable
    * slug when it is made, and keeps it however often it is renamed. */
   permalinkSlug: string
-  /** Who authored it, for a byline that links to their profile (SOC-4).
-   * Only template.get fills this in — the library shows no bylines, and a
-   * list would need a user lookup per row for nothing. */
-  owner?: { id: string; displayName: string }
+  /** Who authored it, for a byline that links to their profile (SOC-4); `null`
+   * for a built-in. Batch-loaded wherever a signed-in caller browses
+   * templates — `template.list`, `template.get`, `template.feed`/`.search`
+   * (TMPL-27/TMPL-28) — and absent otherwise (generation, export-time
+   * structural reads, where nobody is browsing a card). */
+  owner?: { id: string; displayName: string } | null
   name: string
   /** Absent means `components`: the hand-tuned layout components. */
   renderMode?: TemplateRenderMode
@@ -559,8 +561,30 @@ export interface Template {
    * built-in or a public design nobody added the caller to. Never carries the
    * people list itself — that comes only from `template.shares`. */
   myRole: 'owner' | 'editor' | 'viewer' | null
+  /** Net vote score (TMPL-27): denormalized on a stored template's own
+   * document, tallied live from `VoteModel` for a built-in, which has no
+   * field of its own to hold one — see `decorateTemplates`. */
   voteScore: number
+  /** Up/down counts and the caller's own vote (TMPL-27), batch-loaded
+   * alongside `owner` above and for the same set of actions; absent under
+   * the same conditions. */
+  votes?: { up: number; down: number; myVote: 1 | -1 | 0 }
+  /** The layouts a reader can step through (TMPL-28) — `steppableLayouts`
+   * excludes the reserved whiteboard, which cannot be given boxes. Batch-
+   * loaded alongside `owner`. */
+  layoutCount?: number
+  /** The opening of `aiInstructions` (TMPL-28), cut to
+   * `TEMPLATE_DESCRIPTION_CHARS` at a word boundary — see
+   * `templateDescription`. `''` when there are no instructions; batch-loaded
+   * alongside `owner`. */
+  description?: string
   createdAt: string
+  /** Last saved (TMPL-27/TMPL-28): drives the "Latest" sort. A built-in has
+   * none of its own and carries a fixed placeholder, since it is never
+   * ranked against a stored template's date directly — see
+   * `templates/resolve.ts`'s feed paging, which appends built-ins rather
+   * than interleaving them by date. */
+  updatedAt: string
 }
 
 /**

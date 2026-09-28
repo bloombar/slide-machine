@@ -90,8 +90,10 @@ export const FORBIDDEN_ACTIONS: readonly string[] = [
   'session.phrase',
   // A research-study field, set by administrators (EVAL-3).
   'deck.setStudyLabel',
-  // A public vote cast in the account's name (SOC).
+  // A public vote cast in the account's name (SOC), for either kind of
+  // browsable content (TMPL-27).
   'deck.vote',
+  'template.vote',
 ]
 
 /** Whether an action is off limits to the agent tool surface. */

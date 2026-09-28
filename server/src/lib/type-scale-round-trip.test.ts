@@ -130,6 +130,7 @@ const imported = () => {
     myRole: null,
     voteScore: 0,
     createdAt: '2026-08-22T00:00:00.000Z',
+    updatedAt: '2026-08-22T00:00:00.000Z',
   }
 }
 

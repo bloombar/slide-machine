@@ -11,8 +11,14 @@
  * a document id, so the two cannot collide.
  */
 import { Types } from 'mongoose'
-import type { Template } from '@slide-machine/shared'
+import {
+  steppableLayouts,
+  templateDescription,
+  type Template,
+} from '@slide-machine/shared'
 import { TemplateModel, toTemplateDto } from '../models/template'
+import { UserModel } from '../models/user'
+import { VoteModel } from '../models/vote'
 import {
   defaultTemplateId,
   getBuiltinTemplate,
@@ -118,3 +124,92 @@ export const resolveTemplateForRead = async (
 /** True when the id names a built-in, which nobody may edit or delete. */
 export const isBuiltinTemplate = (id: string): boolean =>
   getBuiltinTemplate(id) !== undefined
+
+/**
+ * Card metadata for a page of templates (TMPL-27/TMPL-28), batch-loaded so a
+ * list of N templates costs one owner lookup and one vote lookup rather than
+ * N of each: the creator's display name (`null` for a built-in), the layouts
+ * a reader can step through, a short description cut from the AI
+ * instructions, the net vote score, and the caller's own vote.
+ *
+ * A stored template's vote target is its document id; a built-in's is its
+ * slug (TMPL-27) — it has no document of its own to denormalize a score
+ * onto, so its tally is read from `VoteModel` here rather than from a stored
+ * field, the same as everything else in this function.
+ *
+ * The tally and the caller's own vote come from ONE aggregate that groups by
+ * target inside the database: up, down and the caller's own value per
+ * template, in one round trip. Counting there rather than loading the rows
+ * keeps the cost tied to the page size, not to how many votes a popular
+ * design has collected — this is the path every list, get and feed action
+ * reaches on every call.
+ *
+ * Shared by `template.list`, `template.get` and the feed/search actions
+ * (`social.ts`) so all four read the same shape.
+ */
+export const decorateTemplates = async (
+  templates: Template[],
+  userId?: string,
+): Promise<Template[]> => {
+  if (templates.length === 0) return []
+  const ownerIds = [
+    ...new Set(templates.map(t => t.ownerId).filter(id => id !== 'system')),
+  ]
+  const targetIds = templates.map(t =>
+    isBuiltinTemplate(t.id) ? t.id : new Types.ObjectId(t.id),
+  )
+  const voter = userId ? new Types.ObjectId(userId) : null
+  const [owners, tallies] = await Promise.all([
+    ownerIds.length
+      ? UserModel.find({ _id: { $in: ownerIds } })
+          .select('displayName')
+          .lean()
+      : Promise.resolve([]),
+    // One row per template, counted in the database: the work grows with the
+    // page, not with how many votes a popular design has collected.
+    VoteModel.aggregate<{
+      _id: Types.ObjectId | string
+      up: number
+      down: number
+      mine: 1 | -1 | null
+    }>([
+      { $match: { targetType: 'template', targetId: { $in: targetIds } } },
+      {
+        $group: {
+          _id: '$targetId',
+          up: { $sum: { $cond: [{ $eq: ['$value', 1] }, 1, 0] } },
+          down: { $sum: { $cond: [{ $eq: ['$value', -1] }, 1, 0] } },
+          mine: {
+            $max: { $cond: [{ $eq: ['$userId', voter] }, '$value', null] },
+          },
+        },
+      },
+    ]),
+  ])
+  const ownerById = new Map(owners.map(u => [u._id.toString(), u.displayName]))
+  const tallyById = new Map<
+    string,
+    { up: number; down: number; myVote: 1 | -1 | 0 }
+  >(templates.map(t => [t.id, { up: 0, down: 0, myVote: 0 }]))
+  for (const row of tallies) {
+    const tally = tallyById.get(row._id.toString())
+    if (!tally) continue
+    tally.up = row.up
+    tally.down = row.down
+    tally.myVote = row.mine ?? 0
+  }
+  return templates.map(t => {
+    const { up, down, myVote } = tallyById.get(t.id)!
+    return {
+      ...t,
+      owner:
+        t.ownerId === 'system'
+          ? null
+          : { id: t.ownerId, displayName: ownerById.get(t.ownerId) ?? '' },
+      voteScore: up - down,
+      votes: { up, down, myVote },
+      layoutCount: steppableLayouts(t.layouts).length,
+      description: templateDescription(t.aiInstructions),
+    }
+  })
+}

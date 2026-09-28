@@ -93,6 +93,17 @@ const templateSchema = new Schema<TemplateDb>(
 
 templateSchema.plugin(softDeletePlugin)
 
+// Support for the browsable feed (TMPL-27/TMPL-28): "Latest" and "Top" both
+// filter on visibility first, then sort on one of these two fields, so each
+// gets its own compound index rather than sharing one.
+templateSchema.index({ visibility: 1, updatedAt: -1 })
+templateSchema.index({ visibility: 1, voteScore: -1 })
+// "Mine" matches whichever of these arrays holds the caller, regardless of
+// visibility — a separate index per array, since Mongo cannot use one
+// multikey index to answer an `$or` across two different array fields.
+templateSchema.index({ viewers: 1 })
+templateSchema.index({ editors: 1 })
+
 export const TemplateModel = model<TemplateDb>('Template', templateSchema)
 
 /** Maps a document's stored visibility onto the current two-value
@@ -167,4 +178,8 @@ export const toTemplateDto = (
   myRole: templateRoleFor(doc, userId),
   voteScore: doc.voteScore,
   createdAt: doc.createdAt.toISOString(),
+  // Drives the "Latest" sort (TMPL-27/TMPL-28); `decorateTemplates` is where
+  // `owner`/`votes`/`layoutCount`/`description` get batch-filled in, since
+  // those need lookups this function has no reason to make on every call.
+  updatedAt: doc.updatedAt.toISOString(),
 })

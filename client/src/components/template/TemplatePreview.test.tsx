@@ -49,6 +49,7 @@ const template = (layouts: Layout[]): Template => ({
   myRole: 'owner',
   voteScore: 0,
   createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
 })
 
 const pool = Array.from({ length: 8 }, (_, i) => `http://img/${i}.jpg`)

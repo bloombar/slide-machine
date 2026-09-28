@@ -53,7 +53,7 @@ import {
 } from '../templates/builtin'
 import { readDriveFileTextLive, driveFileMetaLive } from '../lib/drive-file'
 import { readDriveSourceLive } from '../import/read-pptx'
-import { listTemplatesFor } from '../templates/resolve'
+import { decorateTemplates, listTemplatesFor } from '../templates/resolve'
 import { permalinkSlug } from '../lib/slug'
 import { templateToYaml } from '../lib/template-yaml'
 import { templateToPptx, templatePictures } from '../lib/template-pptx'
@@ -179,18 +179,25 @@ export const templateList = defineAction<
   name: 'template.list',
   access: signedIn(),
   input: z.object({}),
-  execute: async ctx => listTemplatesFor(ctx.userId),
+  // Card metadata (TMPL-27/TMPL-28) is batch-loaded for the whole library in
+  // one pass, so the library grid costs one owner lookup and one vote lookup
+  // rather than one of each per template.
+  execute: async ctx =>
+    decorateTemplates(await listTemplatesFor(ctx.userId), ctx.userId),
 })
 
 /**
  * One template by its permalink (TMPL-4), for the page it is edited on.
  *
  * Carries the author's name so the page can say whose design this is, the
- * way a project page does (SOC-4). Who may read it follows the template's
- * own access (TMPL-26): its owner always, a built-in or a public one anyone,
- * a viewer or editor on its people list, or one that draws a lecture the
- * caller may edit — refused identically to a template that does not exist,
- * so the permalink cannot be used to discover what is there.
+ * way a project page does (SOC-4), plus the same card metadata a listing
+ * shows (TMPL-27/TMPL-28) — votes, layout count, description — so the
+ * template's own page needs no second request for any of it. Who may read
+ * it follows the template's own access (TMPL-26): its owner always, a
+ * built-in or a public one anyone, a viewer or editor on its people list, or
+ * one that draws a lecture the caller may edit — refused identically to a
+ * template that does not exist, so the permalink cannot be used to discover
+ * what is there.
  */
 export const templateGet = defineAction<
   { slug: string },
@@ -201,12 +208,10 @@ export const templateGet = defineAction<
   access: templateReadableBySlug((input: { slug: string }) => input.slug),
   input: z.object({ slug: z.string().min(1) }),
   execute: async (ctx, input, { template }) => {
-    const owner = await UserModel.findById(template.ownerId).catch(() => null)
     // `template` already carries the caller's own `myRole` (TMPL-26) —
     // `templateReadableBySlug` resolved it against the caller, not nobody.
-    return owner
-      ? { ...template, owner: { id: owner.id, displayName: owner.displayName } }
-      : template
+    const [decorated] = await decorateTemplates([template], ctx.userId)
+    return decorated!
   },
 })
 

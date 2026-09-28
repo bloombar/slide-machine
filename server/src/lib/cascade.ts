@@ -14,7 +14,8 @@
  * deleted so a deleted account is signed out immediately; the admin action log
  * is never touched — it is the audit trail.
  */
-import type { HydratedDocument, Types } from 'mongoose'
+import { Types } from 'mongoose'
+import type { HydratedDocument } from 'mongoose'
 import { ProjectModel } from '../models/project'
 import { DeckModel, type DeckDb } from '../models/deck'
 import { SlideModel } from '../models/slide'
@@ -228,16 +229,23 @@ const purgeDeckContents = async (
   deckIds: (string | Types.ObjectId)[],
 ): Promise<void> => {
   if (deckIds.length === 0) return
-  const by = { deckId: { $in: deckIds } }
+  // Normalized once, up front: `VoteModel.targetId` is `Mixed` (TMPL-27) and
+  // does not auto-cast a plain string the way a real `ObjectId`-typed field
+  // does, so a raw string id in `VoteModel.deleteMany`'s `$in` below would
+  // silently match nothing and leave that deck's votes behind. Every other
+  // model here has a real `ObjectId`-typed `deckId`, which casts a string
+  // fine either way, so normalizing here costs nothing for them.
+  const ids = deckIds.map(id => new Types.ObjectId(id))
+  const by = { deckId: { $in: ids } }
   const opts = { withDeleted: true }
   const [assets, decks] = await Promise.all([
     SeedAssetModel.find(by).setOptions(opts),
-    DeckModel.find({ _id: { $in: deckIds } }).setOptions(opts),
+    DeckModel.find({ _id: { $in: ids } }).setOptions(opts),
   ])
   // Narration is shared between lectures that say the same words, so it is the
   // reference index — not this cascade — that decides which files may go
   // (P-11). What comes back is only what no surviving lecture still plays.
-  const orphanedNarration = await releaseTtsObjects(deckIds)
+  const orphanedNarration = await releaseTtsObjects(ids)
   await deleteStorageKeys([
     ...assets.flatMap(a => (a.storageKey ? [a.storageKey] : [])),
     ...decks.flatMap(d => (d.recordings ?? []).map(r => r.audioKey)),
@@ -253,7 +261,7 @@ const purgeDeckContents = async (
     TranscriptSegmentModel.deleteMany(by),
     RefineJobModel.deleteMany(by),
     // Votes on the purged decks (SOC-1) — nothing to restore, so drop them.
-    VoteModel.deleteMany({ targetType: 'deck', targetId: { $in: deckIds } }),
+    VoteModel.deleteMany({ targetType: 'deck', targetId: { $in: ids } }),
     SlideTranslationModel.deleteMany(by),
   ])
 }

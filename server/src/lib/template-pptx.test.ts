@@ -96,6 +96,7 @@ const template = (over: Partial<Template> = {}): Template =>
     myRole: null,
     voteScore: 0,
     createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
     ...over,
   }) as Template
 
@@ -434,6 +435,7 @@ describe('a layout that was measured rather than authored', () => {
     myRole: null,
     voteScore: 0,
     createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
   }
 
   it('draws the box where the deck put it, not where a default would', async () => {
