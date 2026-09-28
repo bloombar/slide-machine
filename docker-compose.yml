@@ -14,6 +14,10 @@ services:
     env_file:
       - server/.env
     environment:
+      # server/.env sets NODE_ENV=development for `npm run dev`, which would
+      # override the image's production setting — and Express only serves the
+      # built SPA in production, leaving / a 404.
+      NODE_ENV: production
       # server/.env points at a host mongod (with auth); reach the compose
       # mongo service by name instead (it runs without auth).
       MONGODB_URI: mongodb://mongo:27017/slide-machine
