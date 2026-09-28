@@ -66,12 +66,19 @@ export interface ImportSource {
 
 export default function TemplateImport({
   onImported,
+  onSubmitStart,
   otherSources,
   alwaysOpen = false,
   onRequestClose,
 }: {
   /** The new template, so the caller can select it and reload the library. */
   onImported: (template: Template) => void
+  /** A new attempt is starting — before it is known to succeed or fail —
+   * for a caller tracking something about the *previous* attempt that a new
+   * one makes stale (`TemplateImportControl`'s own "Open design" action,
+   * which must not go on pointing at whatever the last successful import
+   * produced once a different presentation is being tried). */
+  onSubmitStart?: () => void
   /**
    * The other ways a design arrives — a template file, or one kept in Drive
    * (EXP-3) — shown inside this panel rather than beside it.
@@ -123,6 +130,7 @@ export default function TemplateImport({
   const submit = (event: React.FormEvent) => {
     event.preventDefault()
     if (!source || busy) return
+    onSubmitStart?.()
     setBusy(true)
     setError(null)
     setReport(null)

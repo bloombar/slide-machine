@@ -220,6 +220,16 @@ export function useDiscover<
   // one is in flight the caller sees null and can show a loading state.
   const current = page && page.sort === sort && page.q === q ? page : null
 
+  // The sort and query `refresh()` should check its own answer against when
+  // it lands — kept current every render rather than only at the moment
+  // `refresh()` is called, since the caller may switch sort *after* calling
+  // it and before its answer arrives (see `refresh`'s own comment for why a
+  // closed-over `sort`/`q` alone is not enough).
+  const latest = useRef({ sort, q })
+  useEffect(() => {
+    latest.current = { sort, q }
+  }, [sort, q])
+
   // How many `remove()` calls have landed *since the current `loadMore()`
   // fetch started* — reset when each one starts, and read only when it
   // answers, to tell whether that answer crossed a delete.
@@ -287,12 +297,41 @@ export function useDiscover<
   }, [])
 
   const refresh = useCallback(() => {
-    fetchPage(source, sort, q, 0)
+    // A `loadMore()` already in flight is answering the sort/query this
+    // refresh is *also* about to refetch from scratch — treated exactly
+    // like a `remove()` racing it (see `removedDuringLoad`'s own comment):
+    // that in-flight page can no longer be trusted to append onto whatever
+    // page one comes back with here, so its own arrival is discarded rather
+    // than appended.
+    removedDuringLoad.current += 1
+    const requestedSort = sort
+    const requestedQ = q
+    // Checked against `latest` when the answer lands, not only captured
+    // here: the caller can switch sort or search *after* calling `refresh()`
+    // and before its answer arrives (an import landing on Mine, followed by
+    // a quick tab switch to Latest) — without this, a refresh for a sort
+    // nobody is looking at any more would still overwrite `page` with an
+    // answer for it, making `current` (which only matches the *now*-current
+    // sort/query) go null and the screen read as stuck loading, or flag an
+    // error under a sort this request was never about.
+    fetchPage(source, requestedSort, requestedQ, 0)
       .then(res => {
-        setPage({ sort, q, ...res })
+        if (
+          latest.current.sort !== requestedSort ||
+          latest.current.q !== requestedQ
+        )
+          return
+        setPage({ sort: requestedSort, q: requestedQ, ...res })
         setError(false)
       })
-      .catch(() => setError(true))
+      .catch(() => {
+        if (
+          latest.current.sort !== requestedSort ||
+          latest.current.q !== requestedQ
+        )
+          return
+        setError(true)
+      })
   }, [source, sort, q])
 
   return {

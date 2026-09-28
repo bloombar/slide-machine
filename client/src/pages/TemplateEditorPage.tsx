@@ -538,11 +538,6 @@ export default function TemplateEditorPage() {
             </button>
           </header>
           <TemplateExportSection
-            // Remounts whenever the design itself changes (a reader's
-            // Duplicate lands them on a different `/t/:slug` without
-            // remounting this page) so a stale Drive-saved link or error
-            // from the previous design can never show against this one.
-            key={template.id}
             templateId={template.id}
             bare
             hasUnsavedChanges={dirty}

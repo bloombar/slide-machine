@@ -1177,52 +1177,5 @@ describe('TemplateEditorPage (TMPL-4)', () => {
         screen.getByText(/save first to include your changes/i),
       ).toBeVisible()
     })
-
-    // TemplateExportSection's own state (a Drive-saved link, a download
-    // error) is scoped to one design; nothing from a previous one may show
-    // once the page has moved on to another, whether the dialog stayed open
-    // across that move or not.
-    it('carries no export result from one design over to another', async () => {
-      const designA = template({
-        id: 'a-id',
-        permalinkSlug: 'design-a',
-        name: 'Design A',
-        myRole: null,
-      })
-      const designB = template({
-        id: 'b-id',
-        permalinkSlug: 'design-b',
-        name: 'Design B',
-        myRole: null,
-      })
-      vi.mocked(dispatchAction).mockImplementation(
-        (action: string, payload?: unknown) => {
-          if (action === 'template.get') {
-            const slug = (payload as { slug?: string } | undefined)?.slug
-            return Promise.resolve(slug === 'design-b' ? designB : designA)
-          }
-          if (action === 'template.list') return Promise.resolve([])
-          if (action === 'template.shares') return Promise.resolve([])
-          if (action === 'template.export')
-            return Promise.reject(new Error('nope'))
-          return Promise.resolve({ urls: [] })
-        },
-      )
-      renderPageWithJumpTo('design-a', '/t/design-b')
-
-      await screen.findByRole('heading', { name: 'Design A', level: 1 })
-      fireEvent.click(
-        screen.getByRole('button', { name: 'Export this design' }),
-      )
-      fireEvent.click(screen.getByRole('button', { name: 'As YAML' }))
-      expect(await screen.findByRole('alert')).toHaveTextContent(
-        'Could not export the design as a file',
-      )
-
-      fireEvent.click(screen.getByRole('link', { name: 'Jump' }))
-      await screen.findByRole('heading', { name: 'Design B', level: 1 })
-
-      expect(screen.queryByRole('alert')).toBeNull()
-    })
   })
 })

@@ -42,9 +42,10 @@ export default function TemplateImportControl({
   const location = useLocation()
   const [open, setOpen] = useState(false)
   // The design an import just produced, kept only for the "Open design"
-  // action below — cleared whenever the dialog (re)opens, so a stale one
-  // from a previous visit can never show before this one has imported
-  // anything of its own.
+  // action below — cleared whenever the dialog (re)opens, and again the
+  // instant a further import attempt starts without the dialog ever having
+  // closed (`handleSubmitStart` below), so a stale one from an earlier
+  // success can never show beside a second attempt's own report or error.
   const [imported, setImported] = useState<Template | null>(null)
 
   const openDialog = () => {
@@ -56,6 +57,12 @@ export default function TemplateImportControl({
     setImported(template)
     onImported(template)
   }
+
+  // A new attempt makes the last one's "Open design" stale, whether this one
+  // succeeds or fails — cleared here rather than only on the next dialog
+  // open, so a second import tried without closing the dialog in between
+  // never shows an error beside a button that still opens the *first* one.
+  const handleSubmitStart = () => setImported(null)
 
   return (
     <>
@@ -88,7 +95,13 @@ export default function TemplateImportControl({
             alwaysOpen
             onRequestClose={() => setOpen(false)}
             onImported={handleImported}
-            otherSources={<TemplateFileImport onImported={handleImported} />}
+            onSubmitStart={handleSubmitStart}
+            otherSources={
+              <TemplateFileImport
+                onImported={handleImported}
+                onSubmitStart={handleSubmitStart}
+              />
+            }
           />
           {imported && (
             <div className="mt-4 flex justify-end">

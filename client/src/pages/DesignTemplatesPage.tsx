@@ -207,17 +207,24 @@ export default function DesignTemplatesPage() {
           rather than navigating away underneath it. There is nothing here
           to apply the import to the way the Design tab's picker does, so
           the page switches to Mine instead — where the new design actually
-          lives — and refreshes it, since a sort already on Mine has nothing
-          of its own to react to a design merely being added to it. An
-          "Open design" action in the dialog itself is the way from here to
-          the new design's own page, the same one the Design tab's copy gets
-          from `TemplateImportControl`. */}
+          lives — and clears any search, which would otherwise go on hiding
+          a design that does not happen to match it (round 2). Switching
+          sort or clearing the query, whichever actually changes, already
+          makes the page-one effect refetch on its own; `refresh()` only
+          covers the one case neither does — already on Mine with no search
+          active, where nothing about this action changes either input the
+          effect watches. An "Open design" action in the dialog itself is
+          the way from here to the new design's own page, the same one the
+          Design tab's copy gets from `TemplateImportControl`. */}
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">{t('templatesPage.heading')}</h1>
         <TemplateImportControl
           onImported={() => {
-            if (discover.sort === 'mine') discover.refresh()
-            else discover.setSort('mine')
+            const alreadyMineNoQuery =
+              discover.sort === 'mine' && discover.query.trim() === ''
+            discover.setSort('mine')
+            discover.setQuery('')
+            if (alreadyMineNoQuery) discover.refresh()
           }}
         />
       </div>
