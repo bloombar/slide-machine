@@ -53,7 +53,7 @@ export default function TemplateCard({
   /** Template currently being duplicated or deleted; its actions are held. */
   busyId?: string
   /** Every settled vote (TMPL-27), so a caller holding its own copy of the
-   * template can patch it (`patchTemplateVote`, `lib/templateVotes`) and
+   * template can patch it (e.g. `useDiscover`'s `patch`) and
    * keep the vote past a remount of whatever drew this card. */
   onVote?: (templateId: string, result: VoteResult) => void
   /** Renders the creator, layout count and description below the thumbnail
