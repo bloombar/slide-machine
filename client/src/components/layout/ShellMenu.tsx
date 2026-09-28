@@ -296,6 +296,15 @@ export default function ShellMenu() {
           >
             {t('nav.accountSettings')}
           </Link>
+          {/* Every design template the caller can browse (TMPL-28) */}
+          <Link
+            to="/app/templates"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className={item}
+          >
+            {t('nav.designTemplates')}
+          </Link>
           {/* The static pages sit between the account links and the way into
               the admin console, which fences itself off again below them. */}
           <StaticMenuItems

@@ -85,6 +85,26 @@ describe('ShellMenu', () => {
     expect(labels.slice(0, 3)).toEqual(['Home', 'Profile', 'Account settings'])
   })
 
+  // TMPL-28: every design template on a page of its own, one entry below
+  // Account settings.
+  it('links to Design Templates, right after Account settings', async () => {
+    renderMenu(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    const link = await screen.findByRole('menuitem', {
+      name: 'Design Templates',
+    })
+    expect(link).toHaveAttribute('href', '/app/templates')
+    const labels = screen
+      .getAllByRole('menuitem')
+      .map(el => el.textContent?.trim())
+    expect(labels.slice(0, 4)).toEqual([
+      'Home',
+      'Profile',
+      'Account settings',
+      'Design Templates',
+    ])
+  })
+
   it('offers Log in instead of Profile/Account settings/Log out when signed out', () => {
     renderMenu(false)
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
@@ -115,6 +135,7 @@ describe('ShellMenu', () => {
       'Home',
       'Profile',
       'Account settings',
+      'Design Templates',
       'About us',
       'Send feedback',
       'Privacy policy',

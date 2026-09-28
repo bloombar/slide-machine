@@ -20,15 +20,28 @@ interface Props {
    * would overstate that (TMPL-11).
    */
   tone?: 'danger' | 'neutral'
+  /** Disables both buttons while the action it triggers is still in flight
+   * (TMPL-28): confirm, so a slow request cannot be fired twice by an
+   * impatient second click; cancel too, and Escape/backdrop with it, since
+   * `onConfirm` and `onCancel` here both drive the same caller state (an
+   * in-flight delete, say) and letting Cancel run concurrently with it
+   * would race the two against each other for no reason a reader would
+   * ever want. */
+  busy?: boolean
   onConfirm: () => void
   onCancel: () => void
 }
+
+/** A stable no-op for `Modal`'s `onClose` while busy: a fresh function each
+ * render would re-run `Modal`'s effect, and with it its focus handling. */
+const IGNORE_CLOSE = () => {}
 
 export default function ConfirmDialog({
   title,
   message,
   confirmLabel,
   tone = 'danger',
+  busy = false,
   onConfirm,
   onCancel,
 }: Props) {
@@ -40,7 +53,7 @@ export default function ConfirmDialog({
       role="alertdialog"
       ariaLabel={title}
       size="sm"
-      onClose={onCancel}
+      onClose={busy ? IGNORE_CLOSE : onCancel}
       initialFocusRef={cancelRef}
     >
       <h3 className="text-lg font-bold">{title}</h3>
@@ -50,13 +63,15 @@ export default function ConfirmDialog({
         <button
           ref={cancelRef}
           onClick={onCancel}
-          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          disabled={busy}
+          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
         >
           {t('common.cancel')}
         </button>
         <button
           onClick={onConfirm}
-          className={`rounded-md px-4 py-2 text-sm font-medium text-white ${
+          disabled={busy}
+          className={`rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-60 ${
             tone === 'neutral'
               ? 'bg-blue-600 hover:bg-blue-500'
               : 'bg-red-600 hover:bg-red-500'

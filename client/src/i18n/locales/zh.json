@@ -39,6 +39,7 @@
     "home": "首页",
     "profile": "个人资料",
     "accountSettings": "账户设置",
+    "designTemplates": "设计模板",
     "logIn": "登录",
     "logOut": "退出登录",
     "legal": "信息与法律条款"
@@ -667,6 +668,18 @@
     "votes": "{count, plural, other {# 票}}",
     "votesBreakdown": "{up} 赞成 · {down} 反对",
     "unknownOwner": "未知"
+  },
+  "templatesPage": {
+    "heading": "设计模板",
+    "mine": "我的",
+    "searchLabel": "搜索设计模板",
+    "searchPlaceholder": "搜索模板…",
+    "loadFailed": "无法加载模板。",
+    "searchFailed": "无法执行该搜索。",
+    "noMatches": "没有与“{query}”匹配的结果。",
+    "emptyMine": "还没有设计。",
+    "empty": "未找到设计。",
+    "layoutCount": "{count, plural, other {# 个版式}}"
   },
   "vote": {
     "upNamed": "为{name}投赞成票",

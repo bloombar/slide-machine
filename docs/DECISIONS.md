@@ -2392,3 +2392,192 @@ writes, so carrying them forward is correct by construction. `layoutCount`/`desc
 that same draft (a layout added or removed; `aiInstructions` reworded), so carrying the *old* values forward
 after a save that changed either would go stale immediately — the save that most needs the description to
 reflect a rewritten `aiInstructions` is exactly the save the old code would have shown the previous one on.
+
+## Design Templates page (slice 6) (2026-09-27)
+
+Judgment calls the brief for TMPL-28's page left open.
+
+**`TemplateCard` extracted with the layout-paging state moved from a keyed-by-id map on the parent
+(`TemplateLibrary`) to a plain `useState(0)` local to the card itself.** The map only ever existed to survive
+a re-render without one card's paging leaking onto another's — but a card mounted under a stable
+`key={template.id}` (both callers give it one) already gets exactly that from React for free. Moving the
+state in removed a whole prop (`layoutAt`/`setLayoutAt`) from the extraction rather than threading it through
+a component boundary that no longer needed to know about it.
+
+**`useDiscover`/`DiscoverSource` grew a generic item type and an optional `normalizeSearch`, rather than a
+second hook for templates.** The feed side needed nothing new — `template.feed` already answers
+`{items, hasMore}`, the same shape `deck.feed` does, and `fetchPage`'s non-search branch already read
+`.items` rather than a lecture-specific field. Only the search side differs: a lecture search groups matches
+into `lectures`/`projects`/`users`, while `template.search` answers the same flat `{items, hasMore}` its own
+feed does. `normalizeSearch` is the one seam that needed adding; `LECTURE_SOURCE` supplies none and falls
+back to reading `.lectures`, so `DeckFeed`'s own behaviour is unchanged.
+
+**`DiscoverResults` was not genericized, and the Design Templates page does not use it.** `DiscoverResults`
+groups a search's lecture/project/person matches under labelled headings — sensible for a lecture search,
+meaningless for a template search, which has no such groups. Reusing it would have meant either a "Lectures"
+heading appearing over a list of designs, or teaching the component to suppress a heading nobody asked it to
+grow a flag for. The page instead reads `useDiscover`'s state directly and draws its own grid of
+`TemplateCard`s with its own empty/error strings — the hook (paging, sort, search debounce) is shared exactly
+as the brief asked; the presentational component is not, because sharing it here would have leaked lecture
+vocabulary into a template list.
+
+**`DiscoverControls` grew two seams (`sorts`, `searchLabelKey`/`searchPlaceholderKey`) rather than one.** The
+brief only asked for a third sort option; reusing the component as-is would still have left the search box
+labelled "Search lectures, projects, and people" on a page of designs, which is simply wrong copy, not a
+cosmetic quibble — a screen reader announces it as the field's name. Both seams default to Discover's own
+values, so `DeckFeed` passes nothing new and renders identically.
+
+**The chosen sort is kept in component state, not the URL.** Lecture Discover does not persist its sort to
+the URL either (`DeckFeed`/`useDiscover` hold it in `useState` alone), and the brief only asked for the URL if
+Discover already did something similar — it does not, so the Design Templates page does not either.
+
+**A delete on the page is applied through a `remove(id)` on `useDiscover` itself, not a `removedIds` set kept
+alongside it (round 2, replacing round 1's approach).** Round 1 filtered the rendered list by a client-side set
+of deleted ids while leaving the hook's own `lectures` array untouched — which looked harmless until
+`loadMore`'s offset, computed from that same array's length, silently counted the deleted row anyway. Deleting
+a row shifts everything after it one position earlier on the server's own ordered list; an offset that still
+counts the deleted row then lands one row past where the next page actually starts, skipping whatever shifted
+into the gap. `remove(id)` shrinks the array `loadMore` reads its offset from, which is what keeps the two in
+step — see `useDiscover.ts`'s own doc comment on `remove`. The same round also de-duplicates by id when
+appending a loaded page, for the same family of bug from the other direction (a row shifting back into a page
+already fetched, from a delete or a publish elsewhere), and the page's own empty state now checks `hasMore`
+before reading "nothing loaded" as "nothing left" — deleting every row on the current page must still offer
+"Load more" when the server has more to give.
+
+**A card on this page is never "selected": it opens as a plain link, not a radio (round 2, replacing round 1's
+non-radiogroup `role="radio"`).** Round 1 kept `PreviewCard` always rendering `role="radio"` and simply
+avoided wrapping this page's cards in a `radiogroup`, on the reasoning that no a11y lint rule here would flag
+it — true, but beside the point: a radio outside any group is still the accessibility tree's word for a choice
+that does not exist, and a `<button>` also cannot be opened in a new tab the way a link can. `PreviewCard`
+gained a `linkTo` prop (`{to, state}`) that renders a react-router `<Link>` in its place instead, carrying
+`state.from` the same way a caller's own `navigate(to, {state})` would; `TemplateCard` forwards it, and
+`TemplateLibrary`'s own use is unchanged (no `linkTo`, so it still renders the radio it always has).
+
+### Round 2 (code review, TMPL-28)
+
+Fixes from the first review pass, beyond the two above.
+
+**The creator link is guarded on `template.owner?.displayName`, not merely on `template.owner` existing.** An
+owner record with an id but nothing to show (a deleted account) is not the same case as no owner at all, but
+both must render no link — round 1's plain `template.owner &&` would have rendered a link with no visible
+text for the former, focusable and read as nothing by a screen reader.
+
+**The page's own `onEdit`/`onDelete` no longer re-check `myRole` before handing `TemplateCard` a handler.**
+`TemplateCard` already gates both on `canEdit`/`canDelete` internally; round 1's matching checks in the page
+were a second copy of the same rule that could drift from the first, not an extra safeguard.
+
+**`useDiscover`'s sort type is now `Sort extends TemplateFeedSort = FeedSort`, not a bare `TemplateFeedSort`
+on every caller.** Before this, `DeckFeed`'s own `discover.setSort` was typed to accept `'mine'` even though
+nothing in the lecture feed's vocabulary has it — a caller could type-check code no lecture list should ever
+run. `DiscoverControls` grew the same generic parameter so a caller passing `discover.sort`/`setSort` straight
+through still type-checks without an explicit type argument (inferred from the props, the way JSX already
+infers other generic components). `DesignTemplatesPage` is the one caller that explicitly asks for
+`useDiscover<Template, TemplateFeedSort>`.
+
+**A delete's confirm dialog closes on failure too, rather than staying open over an error hidden behind it.**
+Round 1 left the dialog open on a failed `template.delete`, following `TemplateDesignPanel`'s own pattern
+exactly — but that pattern's error is genuinely invisible there too, sitting behind an open modal; copying it
+was copying a defect, not a convention worth keeping. This page's own delete now closes the dialog either way
+and shows `t('template.errors.delete')` on the page underneath, where it is actually visible. `ConfirmDialog`
+gained a `busy` prop (disables the confirm button, cancel stays live) so a slow delete cannot be fired twice by
+an impatient second click.
+
+**The e2e spec builds every design but one through the action API, not eleven-plus trips through the Design
+tab.** `template.duplicate {templateId: 'classic', name}` then `.setAccess`/`.share` are the same calls the UI
+itself makes; doing them directly, authenticated with a bearer token the way `admin-usage-reset.spec.ts` and
+`admin-settings.spec.ts` already do, cut the spec from creating fifteen designs by hand to one (kept to still
+exercise the real duplicate-rename-save-publish path at least once). The eleven bulk designs are still created
+*sequentially*, not in parallel, because "Latest" orders by `updatedAt` and the test's own assertions depend on
+which one landed last.
+
+**The guest's own email is verified too, not only the owner's.** `template.share` treats an unconfirmed
+recipient as a pending invitation rather than a grant (SHARE-3) — sharing with an unverified guest would have
+made every "Mine" assertion pass by accident (nothing shown, expected nothing shown) rather than by testing
+what the step claims to test.
+
+**Bulk design names are zero-padded (`#01`..`#11`), and several assertions in the spec name the exact page a
+result belongs on.** `getByText('#1')` also matches `#10` and `#11` as a substring; zero-padding makes every
+name a distinct two-character suffix instead. Separately, "Latest" is newest-first and the bulk designs are
+created in order, so `#11` (saved last) is on page one and `#01` (saved first) is the one "Load more" reveals
+— the reverse of what round 1 assumed.
+
+**Several `not.toBeVisible()` checks were replaced with waiting for a positive signal, or dropped as redundant
+once one already existed.** Two kinds of false pass turned up chasing this: asserting absence immediately
+after a search input change can pass while the 250ms debounce is still in flight, before the new (possibly
+still-matching) results have even loaded; and once the page's own "No matches for “{query}”" message is on
+screen, it names the query in its own text, so a plain `getByText(theQuery)` finds *that* paragraph and reports
+"visible" — the opposite of what the assertion was written to prove. Waiting for the "No matches" message
+first (itself the settled, positive proof) makes the followup checks either trustworthy or, in most cases,
+simply unnecessary.
+
+### Round 3 (slice 5's `onVote` threaded in during a rebase, plus a second review pass)
+
+**A duplicate-only "load more" response now returns the exact same `page` object, not a same-content copy.**
+`loadMore`'s own de-duplication (round 2) already dropped rows already on screen, but still built a fresh
+`{...prev, lectures: [...prev.lectures, ...appended]}` even when `appended` was empty — a new object every
+caller watching this value's identity (`LoadMore`'s effect, keyed on the `onLoadMore` callback that closes over
+it) reads as a change. In the degenerate case where a page keeps answering nothing new, that identity churn
+combines with `LoadMore`'s own `IntersectionObserver`, which fires on every (re)subscribe if its target is
+already in view — the button never leaves view when nothing was appended to push it down — into a tight
+refetch loop. Returning `prev` unchanged when there is nothing to append breaks the loop at its source rather
+than only shortening it.
+
+**A `remove()` racing an in-flight `loadMore()` is corrected by dropping rows off the front of the stale
+response, tracked via a ref reset at the start of each fetch.** Every row `remove()` can ever be called on is
+already on screen — a design's own Delete only appears on rows this page is currently showing — so it is
+always at a position before whatever offset the in-flight fetch used, and each one shifts that fetch's answer
+one row too far forward on the server's own ordered list. This is explicitly a heuristic, not a proven-correct
+fix for every possible interleaving of the two requests on the server (a genuine race could in principle have
+the fetch's own query execute either before or after the delete's write lands, and only one of those orderings
+is what dropping rows off the front actually corrects for) — noted as such in `useDiscover.ts`'s own comment.
+It is sufficient for the shape this repo's own callers produce: `remove()` is only ever called from inside a
+`template.delete` dispatch's own `.then()`, after that request has already finished, so by the time it can
+race a `loadMore()` fetch at all, that fetch's own request went out first and is simply still in flight — never
+the reverse order a fully general fix would also have to account for.
+
+**`patch(id, update)` rewrites one row of the loaded page in place, for a vote — wired from
+`DesignTemplatesPage`'s `TemplateCard`s via the `onVote` slice 5's rebase threaded through
+`TemplateLibrary`/`TemplateCard`/`VoteControl`.** Without it, casting a vote only updated `VoteControl`'s own
+local state, never the row `useDiscover` is holding — invisible as long as nothing ever re-reads that row from
+the hook's own state, which stopped being true the moment a sort change could land back on a page already
+fetched (see `useDiscover.patch`'s own doc comment): switching sort away and back shows that *cached* page
+again before its own fresh refetch has returned, and without `patch` that instant would flash the pre-vote
+counts the cached page still held. Tested at the hook level directly (`useDiscover.test.ts`, a new file — this
+hook had none before, only indirect coverage through `DeckFeed.test.tsx` and `DesignTemplatesPage.test.tsx`)
+and again at the page level, reproducing the exact cached-page-reuse window a mocked, never-resolving "Top"
+fetch leaves open.
+
+**`ConfirmDialog`'s `busy` now disables Cancel (and Escape/backdrop-close) too, not only Confirm — reversing
+round 2's stated reasoning that "closing on a request already sent is a display choice."** That reasoning
+undersold what closing does here: `onCancel` and `onConfirm` both drive the same caller state (this page's own
+`confirming`/`deleting`), and letting Cancel run while a delete is still in flight would race the two paths
+against each other in that shared state for no benefit a reader of the dialog could ever want — there is
+nothing to "cancel" once the request is already sent, and offering to only invites confusion about what,
+exactly, got cancelled.
+
+**Two of the e2e spec's own absence checks were replaced because they could not have failed.** Searching for
+`Bulk Design …` and then asserting `restrictedName` absent proved nothing — nothing about that design could
+ever appear under an unrelated query regardless of whether search narrowing worked at all; swapped for
+`publicName`, a real, public, un-matching design a broken "show everything public" implementation could
+plausibly have leaked in. And "Top reflects a vote" only ever checked one design's own count, never an order —
+which does not distinguish Top from Latest at all. Replaced with a real order check: two stamped designs
+(`highScoreName`/`lowScoreName`), created in an order that makes Latest sort them one way, with one voted up so
+Top sorts them the other way — the two sorts have to disagree for the check to mean anything.
+
+**The infinite-scroll step no longer asserts `#01` absent before clicking "Load more."** `LoadMore`'s own
+`IntersectionObserver` can fire before any manual click, in a real browser more readily than under jsdom, so an
+absence check timed against "whatever this render happens to be" could pass by luck rather than by proof. The
+step now waits for page one to settle, clicks the trigger only if it is still there (already gone means the
+observer got there first), and only ever asserts the positive: `#01` present once the second page is in.
+
+**The delete step reloads afterwards and re-asserts "No matches," rather than trusting the same render its own
+delete just resolved in.** Sort and query are page-local state, not carried in the URL (see round 2's own
+decision on that), so a plain reload lands back on Latest with an empty box — Mine and the design's own name
+are set again before the check means anything.
+
+### Load-more after a delete, and a page of duplicates (supervisor, TMPL-28)
+
+`useDiscover` throws away a load-more answer that was in flight across a `remove()`, and fetches again from the corrected offset. Whether the server read that page before or after the delete can't be known from the client, so no slice of the answer is safe to keep. Refetching and removing duplicates is right under either order.
+
+A load-more that brings back only rows already on screen ends the list (`hasMore: false`) instead of asking for the same offset again, which `LoadMore`'s observer would repeat forever. The known limit: the offset counts rows held, not rows the server has handed out. If ten or more rows below the fold are edited or published ahead during one scroll, the list stops early. Switching sort or searching starts a fresh list. A server-side cursor would remove the lag if it ever matters.
+

@@ -39,6 +39,7 @@
     "home": "Home",
     "profile": "Profile",
     "accountSettings": "Account settings",
+    "designTemplates": "Design Templates",
     "logIn": "Log in",
     "logOut": "Log out",
     "legal": "Legal and information"
@@ -667,6 +668,18 @@
     "votes": "{count, plural, one {# vote} other {# votes}}",
     "votesBreakdown": "{up} up · {down} down",
     "unknownOwner": "Unknown"
+  },
+  "templatesPage": {
+    "heading": "Design Templates",
+    "mine": "Mine",
+    "searchLabel": "Search design templates",
+    "searchPlaceholder": "Search templates…",
+    "loadFailed": "Could not load the templates.",
+    "searchFailed": "Could not run that search.",
+    "noMatches": "No matches for “{query}”.",
+    "emptyMine": "No designs yet.",
+    "empty": "No designs found.",
+    "layoutCount": "{count, plural, one {# layout} other {# layouts}}"
   },
   "vote": {
     "upNamed": "Upvote {name}",
