@@ -132,9 +132,34 @@ describe('DesignTemplatesPage sorting and search (TMPL-28)', () => {
     )
   })
 
-  it('opens on "Latest" when navigation carries no sort, or an unrecognized one', async () => {
+  it('opens on "Latest" when navigation carries no sort at all', async () => {
     mockDispatch.mockResolvedValue({ items: [template()], hasMore: false })
     renderPageWithState({ from: '/app' })
+    await screen.findByText('Shipped')
+    expect(mockDispatch).toHaveBeenCalledWith('template.feed', {
+      sort: 'latest',
+      offset: 0,
+      limit: 10,
+    })
+  })
+
+  // Only the literal 'mine' opens on "Mine" — anything else navigation might
+  // carry, recognized or not, falls back to this page's own default rather
+  // than being passed straight through to `template.feed`.
+  it('opens on "Latest" when navigation carries a sort other than "mine"', async () => {
+    mockDispatch.mockResolvedValue({ items: [template()], hasMore: false })
+    renderPageWithState({ sort: 'top' })
+    await screen.findByText('Shipped')
+    expect(mockDispatch).toHaveBeenCalledWith('template.feed', {
+      sort: 'latest',
+      offset: 0,
+      limit: 10,
+    })
+  })
+
+  it('opens on "Latest" when navigation carries a sort of the wrong type', async () => {
+    mockDispatch.mockResolvedValue({ items: [template()], hasMore: false })
+    renderPageWithState({ sort: 42 })
     await screen.findByText('Shipped')
     expect(mockDispatch).toHaveBeenCalledWith('template.feed', {
       sort: 'latest',

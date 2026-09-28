@@ -85,16 +85,21 @@ export default function TemplateEditorPage() {
   const from = (location.state as { from?: string } | null)?.from ?? '/app'
 
   /**
-   * "Back" to the Design Templates page lands on its "Mine" tab when the
-   * design the caller is leaving is theirs (TMPL-28) — that tab is where a
-   * design just opened or duplicated into a copy actually lives, not
+   * "Back" to the Design Templates page lands on its "Mine" tab whenever the
+   * design the caller is leaving is one Mine itself lists — owned, or shared
+   * with them as an editor or a viewer (TMPL-28) — that tab is where a design
+   * they opened, were shared, or duplicated into a copy actually lives, not
    * whichever sort the page happened to default to before it was reached.
    * Passed only when `from` is that page at all; anywhere else (a lecture's
-   * or project's Design tab) is unaffected, and a reader leaving someone
-   * else's design keeps the page's own default (Latest) rather than this.
+   * or project's Design tab) is unaffected, and leaving a built-in or a
+   * public design the caller has no role on keeps the page's own default
+   * (Latest) rather than this.
    */
   const backState =
-    from === '/app/templates' && template?.myRole === 'owner'
+    from === '/app/templates' &&
+    (template?.myRole === 'owner' ||
+      template?.myRole === 'editor' ||
+      template?.myRole === 'viewer')
       ? { sort: 'mine' }
       : undefined
 

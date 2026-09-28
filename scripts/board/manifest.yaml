@@ -2398,7 +2398,7 @@
     drives the Top sort. The vote control sits at the right-hand end of each
     template's action row (duplicate, edit, delete), at the same size, wherever
     templates are listed: the Design tab of lecture, project and account
-    settings, and the Design Templates page (TMPL-28). It also appears on the
+    settings, and the Design templates page (TMPL-28). It also appears on the
     template's own page. An owner sees their own template's tally, not the
     buttons, as with a lecture. Account settings uses the same page width as
     other pages, so its Design tab has room for the row."
@@ -2408,8 +2408,8 @@
   status: Backlog
   review: false
 - id: TMPL-28
-  title: Design Templates page
-  full: "Design Templates, linked from the navigation menu just below Account
+  title: Design templates page
+  full: "Design templates, linked from the navigation menu just below Account
     settings, is a page for browsing and searching templates. It uses the same
     mechanics as the lecture Discover list (SOC-2): infinite scroll, search, and
     a choice of sort. Under the heading, a short explanation says what a design

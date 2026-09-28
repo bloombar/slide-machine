@@ -630,9 +630,12 @@ describe('template.search (TMPL-28)', () => {
   })
 
   it('matches a creator-name search within "mine", scoped to the caller and any visibility', async () => {
+    // Named so its own text never contains "ada" — the query this test
+    // searches on — so a match here can only be through the creator arm,
+    // never a coincidental name match masquerading as one.
     const restricted = await act(ada, 'template.duplicate', {
       templateId: builtinId(),
-      name: 'Ada Private',
+      name: 'Confidential Style',
     })
     const res = await act(ada, 'template.search', { q: 'ada', sort: 'mine' })
     const ids = res.body.items.map((t: { id: string }) => t.id)
@@ -643,14 +646,17 @@ describe('template.search (TMPL-28)', () => {
   // checked for a creator-name match too: bob's own query for "ada" must
   // never surface a design ada owns but never shared or made public.
   it("never surfaces someone else's restricted template on a creator-name match", async () => {
+    // Named without "ada" in it, for the same reason as above — the
+    // assertion below must fail only because of the ownership scope, never
+    // because the name itself happened not to match the query either way.
     await act(ada, 'template.duplicate', {
       templateId: builtinId(),
-      name: 'Ada Restricted Only',
+      name: 'Confidential Design Only',
     })
     for (const sort of ['latest', 'top', 'mine'] as const) {
       const res = await act(bob, 'template.search', { q: 'ada', sort })
       const names = res.body.items.map((t: { name: string }) => t.name)
-      expect(names).not.toContain('Ada Restricted Only')
+      expect(names).not.toContain('Confidential Design Only')
     }
   })
 

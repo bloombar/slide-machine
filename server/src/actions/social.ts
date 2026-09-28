@@ -495,11 +495,23 @@ const publicTemplateFilter = () => ({ visibility: 'public' as const })
  * author dimension, so a design's creator is a third way in alongside its
  * name and its AI instructions. Built-ins have no owner and so are never
  * found this way — only by name or instructions.
+ *
+ * Narrowed to `TemplateModel`'s own distinct owners *before* the name match
+ * (round 2), not a plain capped `displayName` lookup across every user: a
+ * name-matching user who owns no template at all still counts against
+ * `CANDIDATE_CAP`, and with enough of them ahead of a real creator in
+ * whatever order Mongo returns, that creator's own templates go silently
+ * unmatched — the cap is spent on candidates that were never going to
+ * contribute an id to the `$in` this feeds.
  */
 const templateOwnerCandidates = async (
   rx: RegExp,
 ): Promise<Types.ObjectId[]> => {
-  const owners = await UserModel.find({ displayName: rx })
+  const ownerIds = await TemplateModel.distinct('ownerId')
+  const owners = await UserModel.find({
+    _id: { $in: ownerIds },
+    displayName: rx,
+  })
     .select('_id')
     .limit(CANDIDATE_CAP)
   return owners.map(u => u._id)

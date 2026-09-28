@@ -812,13 +812,13 @@ A template is **public** or **restricted**, with the same two values, the same p
 
 Templates are up- and down-voted as lectures are ([SOC-1](#soc-1-voting)), built-ins included. Each user has one changeable vote per template, and the net score drives the **Top** sort.
 
-- The vote control sits at the **right-hand end of each template's action row** (duplicate, edit, delete), at the same size, wherever templates are listed: the Design tab of lecture, project and account settings, and the Design Templates page ([TMPL-28](#tmpl-28-design-templates-page)). It also appears on the template's own page.
+- The vote control sits at the **right-hand end of each template's action row** (duplicate, edit, delete), at the same size, wherever templates are listed: the Design tab of lecture, project and account settings, and the Design templates page ([TMPL-28](#tmpl-28-design-templates-page)). It also appears on the template's own page.
 - An owner sees their own template's tally, not the buttons, as with a lecture.
 - Account settings uses the same page width as other pages, so its Design tab has room for the row.
 
-#### TMPL-28 Design Templates page
+#### TMPL-28 Design templates page
 
-**Design Templates**, linked from the navigation menu just below Account settings, is a page for browsing and searching templates. It uses the same mechanics as the lecture Discover list ([SOC-2](#soc-2-browse-search--sort)): infinite scroll, search, and a choice of sort. Under the heading, a short explanation says what a design template is for: every slide is drawn with one of the layouts in the lecture's chosen template, and while speaking live each new slide automatically picks the layout that best fits its content.
+**Design templates**, linked from the navigation menu just below Account settings, is a page for browsing and searching templates. It uses the same mechanics as the lecture Discover list ([SOC-2](#soc-2-browse-search--sort)): infinite scroll, search, and a choice of sort. Under the heading, a short explanation says what a design template is for: every slide is drawn with one of the layouts in the lecture's chosen template, and while speaking live each new slide automatically picks the layout that best fits its content.
 
 - **Latest** (the default) and **Top** list every public template, built-ins included, and rank them as lectures are ranked. **Mine** lists templates the caller owns or has been shared. Search applies within the chosen sort and matches the title, the creator's name, or the AI instructions.
 - Each template is drawn as in the Design tab: its name, a thumbnail whose layouts can be flipped through, and the action row ([TMPL-27](#tmpl-27-template-voting)). Anyone may duplicate a template. Edit and delete appear only on the caller's own templates.

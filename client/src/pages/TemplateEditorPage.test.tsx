@@ -140,6 +140,24 @@ const renderPageFrom = (from: string) =>
     </MemoryRouter>,
   )
 
+/** The page, opened as if from a lecture's Design tab, with `Landed` mounted
+ * at `/d/:slug` too (TMPL-28) — so a test can prove Back there carries no
+ * `sort` at all, not merely that it lands on the right pathname. */
+const renderPageFromLecture = () =>
+  render(
+    <MemoryRouter
+      initialEntries={[
+        { pathname: '/t/my-style-ab12', state: { from: '/d/lecture-1' } },
+      ]}
+    >
+      <Routes>
+        <Route path="/t/:slug" element={<TemplateEditorPage />} />
+        <Route path="/d/:slug" element={<Landed />} />
+        <Route path="/app" element={<p>home</p>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
 /** A promise plus the call that settles it, for controlling exactly when an
  * async mock resolves — needed to see what the page shows while a fetch is
  * still in flight. */
@@ -936,11 +954,24 @@ describe('TemplateEditorPage (TMPL-4)', () => {
     expect(await screen.findByText('back at the lecture')).toBeInTheDocument()
   })
 
-  // TMPL-28: Back to the Design Templates page lands on its "Mine" tab when
-  // the design being left is the caller's own — that tab is where it lives.
+  // TMPL-28: Back to the Design Templates page lands on its "Mine" tab
+  // whenever the design being left is one Mine itself lists — owned, or
+  // shared as an editor or a viewer — that tab is where it lives.
   describe('Back to the Design Templates page (TMPL-28)', () => {
     it('passes "Mine" for the caller’s own design', async () => {
       withTemplate(template({ myRole: 'owner' }))
+      renderPageFrom('/app/templates')
+
+      await screen.findByLabelText('Template name')
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+
+      expect(
+        await screen.findByText('landed:/app/templates sort:mine'),
+      ).toBeInTheDocument()
+    })
+
+    it('passes "Mine" for a design shared with the caller as an editor', async () => {
+      withTemplate(template({ myRole: 'editor' }))
       renderPageFrom('/app/templates')
 
       await screen.findByLabelText('Template name')
@@ -970,14 +1001,62 @@ describe('TemplateEditorPage (TMPL-4)', () => {
       ).toBeInTheDocument()
     })
 
+    // The stub at `/d/:slug` here renders whatever `location.state` it
+    // received, the way `Landed` does for `/app/templates` — a plain
+    // "landed at the right pathname" stub could not prove `sort` was never
+    // sent, only that the URL was right.
     it('does not touch the sort when Back goes anywhere else', async () => {
       withTemplate(template({ myRole: 'owner' }))
-      renderPage()
+      renderPageFromLecture()
 
       await screen.findByLabelText('Template name')
       fireEvent.click(screen.getByRole('button', { name: 'Back' }))
 
-      expect(await screen.findByText('back at the lecture')).toBeInTheDocument()
+      expect(
+        await screen.findByText('landed:/d/lecture-1 sort:'),
+      ).toBeInTheDocument()
+    })
+
+    it('Cancel also passes "Mine" for the caller’s own design', async () => {
+      withTemplate(template({ myRole: 'owner' }))
+      renderPageFrom('/app/templates')
+
+      await screen.findByLabelText('Template name')
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+      expect(
+        await screen.findByText('landed:/app/templates sort:mine'),
+      ).toBeInTheDocument()
+    })
+
+    it('the unsaved-changes dialog’s "Save and leave" also passes "Mine"', async () => {
+      withTemplate(template({ myRole: 'owner' }))
+      renderPageFrom('/app/templates')
+
+      const name = await screen.findByLabelText('Template name')
+      fireEvent.change(name, { target: { value: 'Renamed' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+      await screen.findByRole('alertdialog')
+      fireEvent.click(screen.getByRole('button', { name: 'Save and leave' }))
+
+      expect(
+        await screen.findByText('landed:/app/templates sort:mine'),
+      ).toBeInTheDocument()
+    })
+
+    it('the unsaved-changes dialog’s "Discard changes" also passes "Mine"', async () => {
+      withTemplate(template({ myRole: 'owner' }))
+      renderPageFrom('/app/templates')
+
+      const name = await screen.findByLabelText('Template name')
+      fireEvent.change(name, { target: { value: 'Renamed' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+      await screen.findByRole('alertdialog')
+      fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
+
+      expect(
+        await screen.findByText('landed:/app/templates sort:mine'),
+      ).toBeInTheDocument()
     })
   })
 })
