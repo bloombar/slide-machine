@@ -87,11 +87,11 @@ describe('ShellMenu', () => {
 
   // TMPL-28: every design template on a page of its own, one entry below
   // Account settings.
-  it('links to Design Templates, right after Account settings', async () => {
+  it('links to Design templates, right after Account settings', async () => {
     renderMenu(true)
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
     const link = await screen.findByRole('menuitem', {
-      name: 'Design Templates',
+      name: 'Design templates',
     })
     expect(link).toHaveAttribute('href', '/app/templates')
     const labels = screen
@@ -101,7 +101,7 @@ describe('ShellMenu', () => {
       'Home',
       'Profile',
       'Account settings',
-      'Design Templates',
+      'Design templates',
     ])
   })
 
@@ -135,7 +135,7 @@ describe('ShellMenu', () => {
       'Home',
       'Profile',
       'Account settings',
-      'Design Templates',
+      'Design templates',
       'About us',
       'Send feedback',
       'Privacy policy',

@@ -39,7 +39,7 @@
     "home": "Home",
     "profile": "Profile",
     "accountSettings": "Account settings",
-    "designTemplates": "Design Templates",
+    "designTemplates": "Design templates",
     "logIn": "Log in",
     "logOut": "Log out",
     "legal": "Legal and information"
@@ -670,10 +670,11 @@
     "unknownOwner": "Unknown"
   },
   "templatesPage": {
-    "heading": "Design Templates",
+    "heading": "Design templates",
+    "explanation": "A design template is the set of layouts a lecture's slides are drawn with — while you speak live, each new slide automatically picks whichever layout in your chosen template best fits its content.",
     "mine": "Mine",
-    "searchLabel": "Search design templates",
-    "searchPlaceholder": "Search templates…",
+    "searchLabel": "Search by title, creator, or AI instructions",
+    "searchPlaceholder": "Search by title, creator, or instructions…",
     "loadFailed": "Could not load the templates.",
     "searchFailed": "Could not run that search.",
     "noMatches": "No matches for “{query}”.",

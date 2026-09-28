@@ -241,7 +241,7 @@ test('design templates page: browse, vote, mine, search, and manage designs (TMP
   await test.step('reached from the hamburger menu', async () => {
     await guestPage.goto('/app')
     await guestPage.getByRole('button', { name: 'Menu' }).click()
-    await guestPage.getByRole('menuitem', { name: 'Design Templates' }).click()
+    await guestPage.getByRole('menuitem', { name: 'Design templates' }).click()
     await expect(guestPage).toHaveURL(/\/app\/templates$/)
   })
 
@@ -261,6 +261,21 @@ test('design templates page: browse, vote, mine, search, and manage designs (TMP
     // still shows up on Latest.
     await searchTemplatesPage(guestPage, 'Classic')
     await expect(guestPage.getByText('Classic', { exact: true })).toBeVisible()
+  })
+
+  await test.step("search finds a design by its creator's name", async () => {
+    // The owner's display name (`owner.name`), matched by `template.search`
+    // alongside title and AI instructions (TMPL-28). The last bulk design is
+    // the most recently saved of everything this owner made, so it is on
+    // Latest's first page regardless of how many older designs of theirs
+    // also match the same creator name.
+    await searchTemplatesPage(guestPage, owner.name)
+    await expect(
+      guestPage.getByText(bulkName(BULK_COUNT), { exact: true }),
+    ).toBeVisible()
+    // The owner's restricted design shares the same creator name, but a
+    // guest with no access to it must never see it surface this way either.
+    await expect(guestPage.getByText(restrictedName)).not.toBeVisible()
   })
 
   await test.step("clicking the creator's name goes to their profile", async () => {
@@ -397,15 +412,43 @@ test('design templates page: browse, vote, mine, search, and manage designs (TMP
     await expect(guestPage).toHaveURL(/\/t\//)
     await guestPage.getByRole('button', { name: 'Back' }).click()
     await expect(guestPage).toHaveURL(/\/app\/templates$/)
+    // The guest neither owns nor edits this built-in-derived public design,
+    // so Back keeps the page's own default (Latest) rather than jumping to
+    // "Mine" (TMPL-28).
+    await expect(
+      guestPage.getByRole('button', { name: 'Latest' }),
+    ).toHaveAttribute('aria-pressed', 'true')
   })
 
-  await test.step('Duplicate lands in the editor for the copy', async () => {
+  await test.step('opening the owner’s own design and pressing Back lands on "Mine"', async () => {
+    await ownerPage.goto('/app/templates')
+    await ownerPage.getByRole('searchbox').fill(publicName)
+    await ownerPage.getByRole('link', { name: new RegExp(publicName) }).click()
+    await expect(ownerPage).toHaveURL(/\/t\//)
+    await ownerPage.getByRole('button', { name: 'Back' }).click()
+    await expect(ownerPage).toHaveURL(/\/app\/templates$/)
+    // This is where the design just opened actually lives (TMPL-28) — the
+    // owner's own library, not whichever sort the page happened to default
+    // to before it was reached.
+    await expect(
+      ownerPage.getByRole('button', { name: 'Mine' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  await test.step('Duplicate lands in the editor for the copy, and Back from it lands on "Mine"', async () => {
     await searchTemplatesPage(guestPage, publicName)
     await guestPage.getByLabel(`Duplicate ${publicName}`).click()
     await expect(guestPage).toHaveURL(/\/t\//)
     // The copy is the guest's own, so they land in the editor, not the
     // read-only view a design they merely duplicated used to show them.
     await expect(guestPage.getByLabel('Template name')).toBeVisible()
+    await guestPage.getByRole('button', { name: 'Back' }).click()
+    await expect(guestPage).toHaveURL(/\/app\/templates$/)
+    // The copy the guest just made is theirs, so Back lands them on "Mine",
+    // where it lives — the same rule as opening an already-owned design.
+    await expect(
+      guestPage.getByRole('button', { name: 'Mine' }),
+    ).toHaveAttribute('aria-pressed', 'true')
   })
 
   await test.step('the owner can delete their own design from the page', async () => {

@@ -671,9 +671,10 @@
   },
   "templatesPage": {
     "heading": "Modèles de conception",
+    "explanation": "Un modèle de conception est l’ensemble des dispositions utilisées pour dessiner les diapositives d’un cours — pendant que vous parlez en direct, chaque nouvelle diapositive choisit automatiquement la disposition du modèle choisi qui convient le mieux à son contenu.",
     "mine": "Les miens",
-    "searchLabel": "Rechercher des modèles de conception",
-    "searchPlaceholder": "Rechercher des modèles…",
+    "searchLabel": "Rechercher par titre, créateur ou instructions pour l’IA",
+    "searchPlaceholder": "Rechercher par titre, créateur ou instructions…",
     "loadFailed": "Impossible de charger les modèles.",
     "searchFailed": "Impossible d’effectuer cette recherche.",
     "noMatches": "Aucun résultat pour « {query} ».",

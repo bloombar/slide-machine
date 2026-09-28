@@ -671,9 +671,10 @@
   },
   "templatesPage": {
     "heading": "设计模板",
+    "explanation": "设计模板是一组用于绘制课程幻灯片的版式——在你实时讲课时，每张新幻灯片都会在所选模板中自动挑选最适合其内容的版式。",
     "mine": "我的",
-    "searchLabel": "搜索设计模板",
-    "searchPlaceholder": "搜索模板…",
+    "searchLabel": "按标题、创建者或 AI 使用说明搜索",
+    "searchPlaceholder": "按标题、创建者或说明搜索…",
     "loadFailed": "无法加载模板。",
     "searchFailed": "无法执行该搜索。",
     "noMatches": "没有与“{query}”匹配的结果。",

@@ -11,10 +11,12 @@
  * card here is never "selected" for anything — clicking it opens the
  * design's own page (`/t/:slug`) as a plain link (`TemplateCard`'s `linkTo`),
  * the same landing `TemplateDesignPanel`'s duplicate and edit already use,
- * so its own Back button returns here.
+ * so its own Back button returns here — landing on "Mine" rather than this
+ * page's own default whenever the design it left is the caller's own
+ * (`location.state.sort`, set by `TemplateEditorPage`'s Back).
  */
 import { useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import type {
   Template,
@@ -56,8 +58,18 @@ const SORTS: SortTab<TemplateFeedSort>[] = [
 export default function DesignTemplatesPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const location = useLocation()
+  // Coming back from a design the caller owns (TMPL-28) lands on "Mine",
+  // where that design actually lives — `TemplateEditorPage`'s Back sets this
+  // rather than the URL, since nothing else here needs the sort in the
+  // address bar. Any other value, or none, keeps the page's own default.
+  const initialSort =
+    (location.state as { sort?: TemplateFeedSort } | null)?.sort === 'mine'
+      ? 'mine'
+      : 'latest'
   const discover = useDiscover<Template, TemplateFeedSort>({
     source: TEMPLATE_SOURCE,
+    initialSort,
   })
   const [busyId, setBusyId] = useState<string | undefined>()
   const [error, setError] = useState<string | null>(null)
@@ -188,7 +200,12 @@ export default function DesignTemplatesPage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-6 sm:py-8">
-      <h1 className="mb-4 text-2xl font-bold">{t('templatesPage.heading')}</h1>
+      <h1 className="text-2xl font-bold">{t('templatesPage.heading')}</h1>
+      {/* What a design template is for (TMPL-28): plain enough that a first-time
+          visitor knows why a page of these exists before browsing them. */}
+      <p className="mt-2 mb-4 text-sm text-slate-600">
+        {t('templatesPage.explanation')}
+      </p>
       <DiscoverControls
         sort={discover.sort}
         onSortChange={discover.setSort}
