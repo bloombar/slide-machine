@@ -11,9 +11,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import type { TelemetryOverviewResponse } from '@slide-machine/shared'
+import ExportCsvButton from '../components/admin/ExportCsvButton'
 import {
   fetchTelemetryOverview,
-  telemetryExportPath,
+  downloadTelemetryExport,
   type TelemetryWindowQuery,
 } from '../api/telemetry'
 import {
@@ -107,12 +108,13 @@ export default function AdminTelemetryPage() {
               ))}
             </select>
           </label>
-          <a
-            href={telemetryExportPath(current?.window ?? {})}
-            className="rounded border border-slate-300 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Export CSV
-          </a>
+          <ExportCsvButton
+            disabled={!current}
+            download={() => downloadTelemetryExport(current?.window ?? {})}
+            fileName={() =>
+              `session-telemetry-${new Date().toISOString().slice(0, 10)}.csv`
+            }
+          />
         </div>
       </div>
 

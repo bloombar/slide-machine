@@ -14,16 +14,18 @@ afterEach(() => {
 
 /** Stubs the object-URL anchor plumbing the download handler drives. */
 const stubObjectUrl = () => {
+  const revokeObjectURL = vi.fn()
   vi.stubGlobal('URL', {
     ...URL,
     createObjectURL: vi.fn(() => 'blob:bundle'),
-    revokeObjectURL: vi.fn(),
+    revokeObjectURL,
   })
+  return revokeObjectURL
 }
 
 describe('AdminResearchPage', () => {
   it('downloads the bundle, unscoped by default', async () => {
-    stubObjectUrl()
+    const revoke = stubObjectUrl()
     const { calls } = mockFetchRoutes({
       '/api/admin/research/export': () => ({ status: 200, body: 'PK' }),
     })
@@ -32,6 +34,8 @@ describe('AdminResearchPage', () => {
     await waitFor(() => expect(calls).toHaveLength(1))
     expect(calls[0]).toContain('/api/admin/research/export')
     expect(calls[0]).not.toContain('from=')
+    // The deferred revoke fires once the click has been handled.
+    await waitFor(() => expect(revoke).toHaveBeenCalledWith('blob:bundle'))
   })
 
   it('scopes the request to the chosen dates, end date inclusive', async () => {

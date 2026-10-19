@@ -2,11 +2,12 @@
  * The research export page (SPEC EVAL-2): downloads the de-identified
  * bundle — lectures, slides, transcripts, session telemetry, votes, and
  * cost events for a date range, keyed by opaque study ids. Static apart
- * from the two date fields; the download itself is a plain link, like the
- * CSV exports beside it.
+ * from the two date fields; the download goes through the same token-bearing
+ * fetch as the CSV exports beside it.
  */
 import { useState } from 'react'
 import { downloadResearchBundle } from '../api/research'
+import { saveBlob } from '../lib/download'
 
 /** An ISO instant covering the whole of a `<input type="date">` day; the
  * end date is inclusive, because "to the 15th" means through the 15th. */
@@ -17,18 +18,13 @@ const dayEnd = (day: string): string =>
 
 /** Fetches the bundle and hands it to the browser as a download. A plain
  * <a href> can't send the Bearer token, so the bytes arrive as a blob and
- * leave through a temporary object-URL anchor. */
+ * leave through a temporary object-URL anchor (saveBlob). */
 const saveBundle = async (window: {
   from?: string
   to?: string
 }): Promise<void> => {
   const blob = await downloadResearchBundle(window)
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = `research-export-${new Date().toISOString().slice(0, 10)}.zip`
-  anchor.click()
-  URL.revokeObjectURL(url)
+  saveBlob(blob, `research-export-${new Date().toISOString().slice(0, 10)}.zip`)
 }
 
 export default function AdminResearchPage() {

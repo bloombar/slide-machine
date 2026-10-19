@@ -9,7 +9,7 @@ import type {
   ServicePricesResponse,
   UsageWindow,
 } from '@slide-machine/shared'
-import { apiFetch } from './http'
+import { apiFetch, apiFetchBlob } from './http'
 
 /** Which entity a summary is about. */
 export type CostScope =
@@ -59,8 +59,8 @@ export const fetchCostOverview = (
 export const fetchServicePrices = (): Promise<ServicePricesResponse> =>
   apiFetch<ServicePricesResponse>('/api/admin/cost/prices')
 
-/** Where the CSV lives. A plain link rather than a fetch: the export streams,
- * and the browser's own download handling is better at a long response than
- * holding one in memory would be. */
-export const costExportPath = (window: CostWindowQuery = {}): string =>
-  `/api/admin/cost/export${query(window)}`
+/** The ledger CSV as a blob (SPEC BILL-7) — fetched rather than plain-linked,
+ * because a plain <a href> can't send the Bearer token the admin API needs. */
+export const downloadCostExport = (
+  window: CostWindowQuery = {},
+): Promise<Blob> => apiFetchBlob(`/api/admin/cost/export${query(window)}`)
