@@ -2724,3 +2724,13 @@ shared browser.
 ### The Design tab chooses its tab once the applied design is known (supervisor, TMPL-28)
 
 The panel used to pick Mine or Latest the moment it mounted. The applied design is fetched, so it was usually still loading then, and the tab depended on how fast that fetch was. It now shows "Loading…" until the design resolves (or is known to be absent), then picks once. E2E specs that duplicate a built-in from a Design tab whose applied design is the author's own now switch to Latest first, and name the design they duplicate (`Duplicate Classic`) rather than taking the first button, since the pinned current design is drawn first.
+
+### The research bundle reads one lean dataset at a time (developer, EVAL-2)
+
+The bundle used to run every dataset query at once as full documents and hold them all while the CSVs and zip were built, which ran a 512 MB instance out of memory. `export-bundle.ts` now reads each dataset as plain rows (`.lean()`) with a projection of only the columns its CSV writes, builds its CSV, adds it to the zip, and lets the rows go before the next read. Output is byte-identical for every row the app writes; `research-export.test.ts` pins every CSV against fixed text. One deliberate difference: a date the schema defaults to `Date.now` but the row never stored — a quiz's `publishedAt`, or `occurredAt` on a cost event or deck view — used to export the time the bundle was built and now exports blank.
+
+**Segment word counts are computed by the database, in a `find` projection, not an `aggregate`.** `{ $cond: [{ $isArray: '$words' }, { $size: '$words' }, '$$REMOVE'] }` gives blank when `words` is absent and 0 for an empty list, as before, and (unlike a bare `$size`) does not error on a missing field. A `find` keeps the soft-delete plugin and `withDeleted` working exactly as for every other dataset; an aggregate would have bypassed the plugin and needed its own `$match`.
+
+**Lean rows get their schema defaults restored by hand**, where the CSV shows them: `channel` ('app', on cost events and deck views), `billable` (true), `costMicros` (0), `voteScore` (0), `slideOrder` (empty), refine `status` ('running'), segment `action` ('none'), and `{}` for the `slidesParts` cell of a refine run that has a request but no parts (the hydrated nested object was empty, not absent; keys are emitted in schema order).
+
+**Study ids are assigned per dataset**, as each dataset's account references are read, rather than in one pass over all of them first. Each account still gets exactly one id (assignment is guarded on the field being absent), so pseudonyms are identical and every referenced account is still covered.

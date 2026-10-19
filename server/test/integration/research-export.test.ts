@@ -5,11 +5,19 @@
  * a user id, email, or display name), window behavior including the
  * lecture-union rule, tombstone handling, and the admin gate.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  vi,
+} from 'vitest'
 import express from 'express'
 import request from 'supertest'
 import AdmZip from 'adm-zip'
-import { Types } from 'mongoose'
+import { Query, Types } from 'mongoose'
 import { env } from '../../src/config/env'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
 import { adminRouter } from '../../src/routes/admin'
@@ -393,10 +401,9 @@ describe('the bundle', () => {
     })
 
     const bundle = await getBundle()
-    // The README tells analysts a blank-looking channel means 'app'. That
-    // only holds because the export hydrates these rows through the schema —
-    // a `.lean()` here would silently start exporting an empty cell and the
-    // README would become a lie without a single test changing colour.
+    // The README tells analysts a blank-looking channel means 'app'. The
+    // export reads plain rows (EVAL-2), which carry no schema defaults, so it
+    // restores 'app' itself — that is what keeps the README true.
     expect(column(bundle.get('cost-events.csv')!, 'channel')).toEqual(['app'])
     expect(bundle.get('README.md')).toContain("reads as 'app'")
   })
@@ -873,5 +880,656 @@ describe('the gate', () => {
       .get('/api/admin/research/export')
       .set('Authorization', `Bearer ${token}`)
     expect(nonAdmin.status).toBe(403)
+  })
+})
+/** Ids are written out in full so the expected CSV below is fixed text. */
+const oid = (suffix: string): Types.ObjectId =>
+  new Types.ObjectId(suffix.padStart(24, '0'))
+const at = (time: string): Date => new Date(`2026-03-${time}Z`)
+
+/** One expected CSV line: cells are already CSV-escaped, joined as written. */
+const line = (...cells: (string | number)[]): string => cells.join(',')
+const expectedCsv = (...lines: string[]): string =>
+  lines.map(l => l + '\r\n').join('')
+
+describe('the whole bundle, file by file (EVAL-2 equivalence)', () => {
+  /**
+   * Seeds every shape the export has to render the same way whether it reads
+   * hydrated documents or plain rows: rows missing defaulted fields (so the
+   * schema default is what the CSV shows), deleted and live rows, and
+   * optional subdocuments present and absent. Written through the raw driver
+   * so the missing fields are genuinely missing in the database.
+   */
+  const seed = async (): Promise<void> => {
+    const [u1, u2, u3] = [oid('a01'), oid('a02'), oid('a03')]
+    const project = oid('a1')
+    await UserModel.collection.insertMany([
+      {
+        _id: u1,
+        email: 'o@example.com',
+        displayName: 'O',
+        studyId: 'aaaaaaaaaaaaaaaa',
+      },
+      {
+        _id: u2,
+        email: 'v@example.com',
+        displayName: 'V',
+        studyId: 'bbbbbbbbbbbbbbbb',
+      },
+      {
+        _id: u3,
+        email: 'w@example.com',
+        displayName: 'W',
+        studyId: 'cccccccccccccccc',
+      },
+    ])
+    await DeckModel.collection.insertMany([
+      {
+        _id: oid('d1'),
+        projectId: project,
+        ownerId: u1,
+        title: 'Osmosis',
+        studyLabel: 'cond-A',
+        language: 'en',
+        templateId: 'classic',
+        permalinkSlug: 'slug-d1',
+        slideOrder: ['s1', 's2'],
+        voteScore: 3,
+        quiz: { formId: 'form-1', publishedAt: at('02T00:00:00.000') },
+        createdAt: at('01T10:00:00.000'),
+        updatedAt: at('01T12:00:00.000'),
+        deletedAt: null,
+      },
+      {
+        // Missing title, slideOrder, voteScore, updatedAt, deletedAt, quiz.
+        _id: oid('d2'),
+        projectId: project,
+        ownerId: u1,
+        templateId: 'classic',
+        permalinkSlug: 'slug-d2',
+        createdAt: at('01T11:00:00.000'),
+      },
+      {
+        _id: oid('d3'),
+        projectId: project,
+        ownerId: u1,
+        title: 'Gone',
+        templateId: 'classic',
+        permalinkSlug: 'slug-d3',
+        slideOrder: ['x'],
+        voteScore: -1,
+        createdAt: at('01T12:00:00.000'),
+        updatedAt: at('04T00:00:00.000'),
+        deletedAt: at('05T00:00:00.000'),
+      },
+    ])
+    await SlideModel.collection.insertMany([
+      {
+        _id: oid('51'),
+        deckId: oid('d1'),
+        index: 0,
+        layoutType: 'content',
+        title: 'Cells',
+        body: 'Body text',
+        bullets: ['a', 'b'],
+        caption: 'cap',
+        imageSource: 'stock',
+        slots: { t: 'x' },
+        manuallyEdited: true,
+        sourceTranscript: 'said, this',
+      },
+      {
+        _id: oid('52'),
+        deckId: oid('d1'),
+        index: 1,
+        layoutType: 'content',
+        title: 'Second',
+        deletedAt: at('06T00:00:00.000'),
+      },
+      { _id: oid('53'), deckId: oid('d3'), index: 0, layoutType: 'title' },
+    ])
+    await TranscriptSegmentModel.collection.insertMany([
+      {
+        _id: oid('61'),
+        deckId: oid('d1'),
+        sessionId: 'sess-1',
+        slideId: oid('51'),
+        startMs: 0,
+        endMs: 900,
+        text: 'hello there',
+        confidence: 0.9,
+        words: [
+          { word: 'hello', startMs: 0, endMs: 400 },
+          { word: 'there', startMs: 400, endMs: 900 },
+        ],
+        action: 'new',
+        speaker: 0,
+        role: 'lecturer',
+        createdAt: at('01T10:05:00.000'),
+      },
+      {
+        // Empty words array, and no action (the schema default is 'none').
+        _id: oid('62'),
+        deckId: oid('d1'),
+        sessionId: 'sess-1',
+        startMs: 1000,
+        endMs: 1500,
+        text: 'empty words',
+        words: [],
+        createdAt: at('01T10:06:00.000'),
+      },
+      {
+        // No words at all, deleted.
+        _id: oid('63'),
+        deckId: oid('d3'),
+        text: 'with, comma',
+        action: 'update',
+        speaker: 1,
+        role: 'student',
+        createdAt: at('01T10:07:00.000'),
+        deletedAt: at('08T00:00:00.000'),
+      },
+    ])
+    await VoteModel.collection.insertMany([
+      {
+        // No createdAt: the export falls back to the id's own timestamp.
+        _id: new Types.ObjectId('65f000000000000000000001'),
+        userId: u3,
+        targetType: 'template',
+        targetId: 'tpl-1',
+        value: -1,
+      },
+      {
+        _id: oid('b2'),
+        userId: u2,
+        targetType: 'deck',
+        targetId: oid('d1'),
+        value: 1,
+        createdAt: at('01T13:00:00.000'),
+      },
+    ])
+    await CostEventModel.collection.insertMany([
+      {
+        _id: oid('c1'),
+        payerId: u1,
+        actorId: u2,
+        actorKind: 'audience',
+        channel: 'agent',
+        projectId: project,
+        projectName: 'Biology',
+        deckId: oid('d1'),
+        deckName: 'Osmosis',
+        slideId: oid('51'),
+        locale: 'zh',
+        trigger: 'reading',
+        metric: 'audienceTtsCharacters',
+        quantity: 12,
+        billable: false,
+        costMicros: 1_500_000,
+        currency: 'USD',
+        occurredAt: at('01T14:00:00.000'),
+      },
+      {
+        // No actor, slide, deck, channel, billable or costMicros: the schema
+        // defaults ('app', true, 0) are what the CSV shows.
+        _id: oid('c2'),
+        payerId: u1,
+        actorKind: 'system',
+        metric: 'sttMinutes',
+        quantity: 3,
+        currency: 'USD',
+        occurredAt: at('01T15:00:00.000'),
+      },
+    ])
+    await RefineJobModel.collection.insertMany([
+      {
+        _id: oid('71'),
+        deckId: oid('d1'),
+        status: 'done',
+        request: {
+          identifySpeakers: true,
+          slidesLevel: 3,
+          slidesParts: { text: true },
+          allowSplit: false,
+          transcriptLevel: 2,
+        },
+        summary: {
+          reframed: 4,
+          slidesRefined: 3,
+          slidesSplit: 2,
+          transcriptsUpdated: 1,
+        },
+        createdAt: at('01T16:00:00.000'),
+        updatedAt: at('01T16:30:00.000'),
+      },
+      {
+        // No status (default 'running'), request, summary or updatedAt.
+        _id: oid('72'),
+        deckId: oid('d3'),
+        error: 'boom',
+        createdAt: at('01T17:00:00.000'),
+        deletedAt: at('07T00:00:00.000'),
+      },
+      {
+        // A request with only one field set.
+        _id: oid('73'),
+        deckId: oid('d1'),
+        status: 'error',
+        request: { transcriptLevel: 1 },
+        createdAt: at('01T18:00:00.000'),
+        updatedAt: at('01T18:00:00.000'),
+      },
+    ])
+    await DeckViewModel.collection.insertMany([
+      {
+        _id: oid('e1'),
+        deckId: oid('d1'),
+        deckName: 'Osmosis',
+        projectId: project,
+        projectName: 'Biology',
+        ownerId: u1,
+        viewerId: u3,
+        actorKind: 'audience',
+        channel: 'agent',
+        occurredAt: at('01T19:00:00.000'),
+        slidesReached: 0,
+        activeMs: 120_000,
+      },
+      {
+        // No viewer, channel, or depth.
+        _id: oid('e2'),
+        deckId: oid('d1'),
+        ownerId: u1,
+        actorKind: 'audience',
+        occurredAt: at('01T20:00:00.000'),
+      },
+    ])
+  }
+
+  const D = (n: string) => oid(n).toString()
+  const OWNER = 'aaaaaaaaaaaaaaaa'
+  const VOTER = 'bbbbbbbbbbbbbbbb'
+  const VIEWER = 'cccccccccccccccc'
+
+  // Expected text, written by hand from the seed above.
+  const EXPECTED: Record<string, string> = {
+    'lectures.csv': expectedCsv(
+      'deckId,projectId,ownerStudyId,title,studyLabel,language,templateId,slideCount,voteScore,quizFormId,quizPublishedAt,createdAt,updatedAt,deletedAt',
+      line(
+        D('d1'),
+        D('a1'),
+        OWNER,
+        'Osmosis',
+        'cond-A',
+        'en',
+        'classic',
+        2,
+        3,
+        'form-1',
+        '2026-03-02T00:00:00.000Z',
+        '2026-03-01T10:00:00.000Z',
+        '2026-03-01T12:00:00.000Z',
+        '',
+      ),
+      line(
+        D('d2'),
+        D('a1'),
+        OWNER,
+        '',
+        '',
+        '',
+        'classic',
+        0,
+        0,
+        '',
+        '',
+        '2026-03-01T11:00:00.000Z',
+        '2026-03-01T11:00:00.000Z',
+        '',
+      ),
+      line(
+        D('d3'),
+        D('a1'),
+        OWNER,
+        'Gone',
+        '',
+        '',
+        'classic',
+        1,
+        "'-1",
+        '',
+        '',
+        '2026-03-01T12:00:00.000Z',
+        '2026-03-04T00:00:00.000Z',
+        '2026-03-05T00:00:00.000Z',
+      ),
+    ),
+    'slides.csv': expectedCsv(
+      'slideId,deckId,index,layoutType,title,body,bullets,caption,imageSource,slots,manuallyEdited,sourceTranscript,deletedAt',
+      line(
+        D('51'),
+        D('d1'),
+        0,
+        'content',
+        'Cells',
+        'Body text',
+        '"[""a"",""b""]"',
+        'cap',
+        'stock',
+        '"{""t"":""x""}"',
+        'true',
+        '"said, this"',
+        '',
+      ),
+      line(
+        D('52'),
+        D('d1'),
+        1,
+        'content',
+        'Second',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '2026-03-06T00:00:00.000Z',
+      ),
+      line(D('53'), D('d3'), 0, 'title', '', '', '', '', '', '', '', '', ''),
+    ),
+    'transcript-segments.csv': expectedCsv(
+      'segmentId,deckId,sessionId,slideId,startMs,endMs,text,confidence,wordCount,action,speaker,role,createdAt,deletedAt',
+      line(
+        D('61'),
+        D('d1'),
+        'sess-1',
+        D('51'),
+        0,
+        900,
+        'hello there',
+        0.9,
+        2,
+        'new',
+        0,
+        'lecturer',
+        '2026-03-01T10:05:00.000Z',
+        '',
+      ),
+      line(
+        D('62'),
+        D('d1'),
+        'sess-1',
+        '',
+        1000,
+        1500,
+        'empty words',
+        '',
+        0,
+        'none',
+        '',
+        '',
+        '2026-03-01T10:06:00.000Z',
+        '',
+      ),
+      line(
+        D('63'),
+        D('d3'),
+        '',
+        '',
+        '',
+        '',
+        '"with, comma"',
+        '',
+        '',
+        'update',
+        1,
+        'student',
+        '2026-03-01T10:07:00.000Z',
+        '2026-03-08T00:00:00.000Z',
+      ),
+    ),
+    'votes.csv': expectedCsv(
+      'voterStudyId,targetType,targetId,value,createdAt',
+      line(VIEWER, 'template', 'tpl-1', "'-1", '2024-03-12T07:10:56.000Z'),
+      line(VOTER, 'deck', D('d1'), 1, '2026-03-01T13:00:00.000Z'),
+    ),
+    'cost-events.csv': expectedCsv(
+      'occurredAt,payerStudyId,actorStudyId,actorKind,channel,projectId,projectName,deckId,deckName,slideId,locale,trigger,metric,quantity,billable,cost,currency',
+      line(
+        '2026-03-01T14:00:00.000Z',
+        OWNER,
+        VOTER,
+        'audience',
+        'agent',
+        D('a1'),
+        'Biology',
+        D('d1'),
+        'Osmosis',
+        D('51'),
+        'zh',
+        'reading',
+        'audienceTtsCharacters',
+        12,
+        'false',
+        '1.500000',
+        'USD',
+      ),
+      line(
+        '2026-03-01T15:00:00.000Z',
+        OWNER,
+        '',
+        'system',
+        'app',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        'sttMinutes',
+        3,
+        'true',
+        '0.000000',
+        'USD',
+      ),
+    ),
+    'refine-jobs.csv': expectedCsv(
+      'jobId,deckId,status,identifySpeakers,slidesLevel,slidesParts,transcriptLevel,allowSplit,reframed,slidesRefined,slidesSplit,transcriptsUpdated,error,createdAt,updatedAt,deletedAt',
+      line(
+        D('71'),
+        D('d1'),
+        'done',
+        'true',
+        3,
+        '"{""text"":true}"',
+        2,
+        'false',
+        4,
+        3,
+        2,
+        1,
+        '',
+        '2026-03-01T16:00:00.000Z',
+        '2026-03-01T16:30:00.000Z',
+        '',
+      ),
+      line(
+        D('72'),
+        D('d3'),
+        'running',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        'boom',
+        '2026-03-01T17:00:00.000Z',
+        '2026-03-01T17:00:00.000Z',
+        '2026-03-07T00:00:00.000Z',
+      ),
+      line(
+        D('73'),
+        D('d1'),
+        'error',
+        '',
+        '',
+        // A run with a request but no slidesParts renders `{}`, not blank:
+        // the hydrated request supplies an empty nested object.
+        '{}',
+        1,
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '2026-03-01T18:00:00.000Z',
+        '2026-03-01T18:00:00.000Z',
+        '',
+      ),
+    ),
+    'deck-views.csv': expectedCsv(
+      'occurredAt,deckId,deckName,projectId,projectName,ownerStudyId,viewerStudyId,actorKind,channel,slidesReached,activeMs',
+      line(
+        '2026-03-01T19:00:00.000Z',
+        D('d1'),
+        'Osmosis',
+        D('a1'),
+        'Biology',
+        OWNER,
+        VIEWER,
+        'audience',
+        'agent',
+        0,
+        120000,
+      ),
+      line(
+        '2026-03-01T20:00:00.000Z',
+        D('d1'),
+        '',
+        '',
+        '',
+        OWNER,
+        '',
+        'audience',
+        'app',
+        '',
+        '',
+      ),
+    ),
+  }
+
+  it('writes every CSV exactly as before, including rows missing defaulted fields', async () => {
+    await seed()
+    const bundle = await getBundle()
+    for (const [name, expected] of Object.entries(EXPECTED)) {
+      expect(bundle.get(name), name).toBe(expected)
+    }
+    // No telemetry was seeded: the file is its header and nothing else.
+    expect(bundle.get('session-telemetry.csv')!.split('\r\n')).toHaveLength(2)
+  })
+
+  it('pseudonymizes every account any dataset references', async () => {
+    await seed()
+    await UserModel.collection.updateMany({}, { $unset: { studyId: '' } })
+    await getBundle()
+    const keyed = await UserModel.find({
+      _id: { $in: [oid('a01'), oid('a02'), oid('a03')] },
+    }).select('_id +studyId')
+    expect(keyed).toHaveLength(3)
+    for (const user of keyed) expect(user.studyId).toMatch(/^[0-9a-f]{16}$/)
+  })
+})
+describe('the bundle reads lean and narrow (EVAL-2 memory)', () => {
+  it('reads every dataset as plain rows, and never loads transcript words', async () => {
+    const owner = await makeUser()
+    const deck = await makeDeck(owner._id)
+    await TranscriptSegmentModel.create({
+      deckId: deck._id,
+      text: 'a long phrase',
+      words: [{ word: 'a', startMs: 0, endMs: 1 }],
+    })
+    await VoteModel.create({
+      userId: owner._id,
+      targetType: 'deck',
+      targetId: deck._id,
+      value: 1,
+    })
+    await CostEventModel.create({
+      payerId: owner._id,
+      actorKind: 'owner',
+      metric: 'sttMinutes',
+      quantity: 1,
+      costMicros: 1,
+      currency: 'USD',
+    })
+    await RefineJobModel.create({ deckId: deck._id })
+    await DeckViewModel.create({
+      deckId: deck._id,
+      ownerId: owner._id,
+      actorKind: 'owner',
+    })
+    await SlideModel.create({
+      deckId: deck._id,
+      index: 0,
+      layoutType: 'title',
+    })
+
+    // Record how each read is issued, without changing what it does.
+    type Seen = { model: string; lean: boolean; fields: unknown }
+    const reads: Seen[] = []
+    const realExec = Query.prototype.exec
+    const spy = vi.spyOn(Query.prototype, 'exec').mockImplementation(function (
+      this: Query<unknown, unknown>,
+    ) {
+      // Mongoose keeps these on the query but does not type them.
+      const query = this as unknown as {
+        op: string
+        model: { modelName: string }
+        _mongooseOptions: { lean?: unknown }
+        projection: () => unknown
+      }
+      if (query.op === 'find') {
+        reads.push({
+          model: query.model.modelName,
+          lean: Boolean(query._mongooseOptions.lean),
+          fields: query.projection(),
+        })
+      }
+      return realExec.apply(this)
+    } as typeof Query.prototype.exec)
+    try {
+      await getBundle()
+    } finally {
+      spy.mockRestore()
+    }
+
+    const models = [
+      'Deck',
+      'Slide',
+      'TranscriptSegment',
+      'Vote',
+      'CostEvent',
+      'RefineJob',
+      'DeckView',
+    ]
+    for (const model of models) {
+      const mine = reads.filter(r => r.model === model)
+      expect(mine.length, `${model} was read`).toBeGreaterThan(0)
+      // Plain rows, narrowed to the columns the CSV writes.
+      for (const read of mine) {
+        expect(read.lean, `${model} read lean`).toBe(true)
+        expect(read.fields, `${model} read with a projection`).toBeTruthy()
+      }
+    }
+    // The word list is the bulk of a segment; only its length may be asked for.
+    const segmentRead = reads.find(r => r.model === 'TranscriptSegment')!
+    expect(Object.keys(segmentRead.fields as object)).not.toContain('words')
   })
 })
