@@ -54,13 +54,39 @@ const latencyStats = (samples: number[]): LatencyStats => {
   }
 }
 
+/** The row fields `summarizeSession` reads; the read projects only these. */
+const SUMMARY_FIELDS = [
+  'sessionId',
+  'deckId',
+  'kind',
+  'at',
+  'finalizationMs',
+  'audioMs',
+  'outcome',
+  'generationMs',
+  'refusals',
+  'errorKind',
+  'endReason',
+  'capturedMs',
+] as const
+
+export type SummaryRow = Pick<
+  SessionTelemetryEventDb,
+  (typeof SUMMARY_FIELDS)[number]
+>
+
+const SUMMARY_PROJECTION = Object.fromEntries([
+  ['_id', 0],
+  ...SUMMARY_FIELDS.map(f => [f, 1]),
+])
+
 /**
  * Folds one session's rows (ordered by write time) into its summary.
  * `now` is passed in rather than read so the active/crashed boundary is
  * testable and stable across one report.
  */
 export const summarizeSession = (
-  rows: SessionTelemetryEventDb[],
+  rows: SummaryRow[],
   now: Date,
 ): TelemetrySessionSummary => {
   const first = rows[0]
@@ -171,7 +197,8 @@ export const summarizeSession = (
  * Summaries for every session with an event in the window (and, optionally,
  * on one lecture), newest first. Sessions are fetched whole even when they
  * span the window's edge — truncating one would misreport its latencies and
- * misclassify its end.
+ * misclassify its end. EVAL-1: rows are read per session as projected plain
+ * objects, so peak memory follows one session's size, not the deployment's.
  */
 export const sessionSummaries = async (
   scope: { deckId?: string },
@@ -191,22 +218,21 @@ export const sessionSummaries = async (
   )
   if (!sessionIds.length) return []
 
-  const rows = await SessionTelemetryEventModel.find({
-    sessionId: { $in: sessionIds },
-    ...(scope.deckId ? { deckId: new Types.ObjectId(scope.deckId) } : {}),
-  }).sort({ sessionId: 1, at: 1, _id: 1 })
-
-  const bySession = new Map<string, SessionTelemetryEventDb[]>()
-  for (const row of rows) {
-    const group = bySession.get(row.sessionId)
-    if (group) group.push(row)
-    else bySession.set(row.sessionId, [row])
-  }
-
+  // One session at a time (EVAL-1): each query is an equality on sessionId
+  // served by the { sessionId, at } index, so there is no sort over the whole
+  // collection, and only one session's lean, projected rows are ever held.
   const now = new Date()
-  const summaries = [...bySession.values()].map(group =>
-    summarizeSession(group, now),
-  )
+  const summaries: TelemetrySessionSummary[] = []
+  for (const sessionId of sessionIds) {
+    const rows = await SessionTelemetryEventModel.find({
+      sessionId,
+      ...(scope.deckId ? { deckId: new Types.ObjectId(scope.deckId) } : {}),
+    })
+      .select(SUMMARY_PROJECTION)
+      .sort({ at: 1, _id: 1 })
+      .lean<SummaryRow[]>()
+    if (rows.length) summaries.push(summarizeSession(rows, now))
+  }
 
   // Lecture titles denormalized at read time; a soft-deleted lecture's
   // session still happened, so its title still resolves.
