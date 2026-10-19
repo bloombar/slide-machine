@@ -14,17 +14,19 @@ const base64ToBlob = (base64: string, mimeType: string): Blob => {
 }
 
 /** Saves the exported file to disk under its suggested name. */
-export const downloadExport = (file: ExportDownload): void => {
-  const url = URL.createObjectURL(
-    base64ToBlob(file.contentBase64, file.mimeType),
-  )
+export const downloadExport = (file: ExportDownload): void =>
+  saveBlob(base64ToBlob(file.contentBase64, file.mimeType), file.fileName)
+
+/** Saves an already-fetched blob under the given name — for exports the
+ * server gates behind the Bearer token, which a plain <a href> can't send. */
+export const saveBlob = (blob: Blob, fileName: string): void => {
+  const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = file.fileName
+  link.download = fileName
   document.body.appendChild(link)
   link.click()
   link.remove()
-  // Defer the revoke: some browsers read the blob asynchronously after the
-  // click, and revoking on the same tick can produce an empty download.
+  // Deferred for the same reason as above.
   setTimeout(() => URL.revokeObjectURL(url), 0)
 }

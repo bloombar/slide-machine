@@ -12,8 +12,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import type { CostOverviewResponse } from '@slide-machine/shared'
+import ExportCsvButton from '../components/admin/ExportCsvButton'
 import {
-  costExportPath,
+  downloadCostExport,
   fetchCostOverview,
   type CostWindowQuery,
 } from '../api/cost'
@@ -113,12 +114,13 @@ export default function AdminCostPage() {
               ))}
             </select>
           </label>
-          <a
-            href={costExportPath(current?.window ?? {})}
-            className="rounded border border-slate-300 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Export CSV
-          </a>
+          <ExportCsvButton
+            disabled={!current}
+            download={() => downloadCostExport(current?.window ?? {})}
+            fileName={() =>
+              `cost-ledger-${new Date().toISOString().slice(0, 10)}.csv`
+            }
+          />
         </div>
       </div>
 

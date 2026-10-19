@@ -7,7 +7,7 @@ import type {
   TelemetryDeckResponse,
   TelemetryOverviewResponse,
 } from '@slide-machine/shared'
-import { apiFetch } from './http'
+import { apiFetch, apiFetchBlob } from './http'
 
 /** An optional reporting window; both ends open by default, because
  * "everything so far" is the question an operator asks first. */
@@ -37,8 +37,9 @@ export const fetchDeckTelemetry = (
     `/api/admin/telemetry/decks/${deckId}${query(window)}`,
   )
 
-/** Where the CSV lives. A plain link rather than a fetch: the browser's own
- * download handling beats holding a response in memory. */
-export const telemetryExportPath = (
+/** The session CSV as a blob (SPEC EVAL-1) — fetched rather than
+ * plain-linked, because a plain <a href> can't send the Bearer token the
+ * admin API needs. */
+export const downloadTelemetryExport = (
   window: TelemetryWindowQuery = {},
-): string => `/api/admin/telemetry/export${query(window)}`
+): Promise<Blob> => apiFetchBlob(`/api/admin/telemetry/export${query(window)}`)

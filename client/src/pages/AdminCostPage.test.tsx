@@ -2,10 +2,10 @@
  * Unit tests for the deployment-wide cost page's configured-prices section
  * (BILL-7): the price list renders at the bottom of the page, and loads
  * independently of the cost figures so a ledger failure does not hide the
- * rates or vice versa.
+ * rates or vice versa. Also the token-bearing CSV export.
  */
-import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import type {
   CostOverviewResponse,
@@ -13,6 +13,10 @@ import type {
 } from '@slide-machine/shared'
 import AdminCostPage from './AdminCostPage'
 import { mockFetchRoutes } from '../test/fetch-mock'
+import { setAccessToken } from '../auth/token'
+import { saveBlob } from '../lib/download'
+
+vi.mock('../lib/download')
 
 const money = (micros: number) => ({
   micros,
@@ -70,8 +74,20 @@ const servicePrices = (): ServicePricesResponse => ({
 const renderPage = ({
   overviewStatus = 200,
   pricesStatus = 200,
-}: { overviewStatus?: number; pricesStatus?: number } = {}) => {
+  exportStatus = 200,
+}: {
+  overviewStatus?: number
+  pricesStatus?: number
+  exportStatus?: number
+} = {}) => {
   const mocks = mockFetchRoutes({
+    '/api/admin/cost/export': () => ({
+      status: exportStatus,
+      body:
+        exportStatus === 200
+          ? 'occurredAt,payerId\n'
+          : { error: { code: 'unauthorized', message: 'Sign in to continue' } },
+    }),
     '/api/admin/cost/prices': () => ({
       status: pricesStatus,
       body:
@@ -95,7 +111,12 @@ const renderPage = ({
   return mocks
 }
 
-afterEach(() => vi.unstubAllGlobals())
+beforeEach(() => vi.mocked(saveBlob).mockReset())
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  setAccessToken(null)
+})
 
 describe('AdminCostPage configured prices', () => {
   it('shows the configured prices below the cost figures', async () => {
@@ -129,5 +150,71 @@ describe('AdminCostPage configured prices', () => {
     expect(
       await screen.findByText('Could not load the configured prices.'),
     ).toBeInTheDocument()
+  })
+})
+
+describe('AdminCostPage CSV export', () => {
+  it('exports with the admin token, for the window shown', async () => {
+    setAccessToken('admin-token')
+    const { fetchMock, calls } = renderPage()
+    await screen.findByText('Total')
+    const button = screen.getByRole('button', { name: 'Export CSV' })
+    const exportCalls = () => calls.filter(c => c.includes('/export'))
+
+    fireEvent.click(button)
+    await waitFor(() => expect(saveBlob).toHaveBeenCalledTimes(1))
+    expect(exportCalls()).toEqual(['/api/admin/cost/export'])
+    const init = fetchMock.mock.calls.find(([u]) =>
+      String(u).includes('/export'),
+    )![1]
+    expect(new Headers(init?.headers).get('Authorization')).toBe(
+      'Bearer admin-token',
+    )
+    const [blob, fileName] = vi.mocked(saveBlob).mock.calls[0]!
+    expect(await blob.text()).toBe('occurredAt,payerId\n')
+    expect(fileName).toMatch(/^cost-ledger-\d{4}-\d{2}-\d{2}\.csv$/)
+
+    fireEvent.change(screen.getByLabelText(/Period/), {
+      target: { value: '7' },
+    })
+    await waitFor(() => expect(calls.some(c => c.includes('from='))).toBe(true))
+    fireEvent.click(button)
+    await waitFor(() => expect(exportCalls()).toHaveLength(2))
+    expect(exportCalls()[1]).toContain('/export?from=')
+  })
+
+  it('cannot export while a newly picked period is still loading', async () => {
+    const { calls } = renderPage()
+    await screen.findByText('Total')
+    const button = screen.getByRole('button', { name: 'Export CSV' })
+    await waitFor(() => expect(button).toBeEnabled())
+
+    // Hold the next overview fetch open: the new period's window is unknown.
+    const base = globalThis.fetch
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+        String(input).includes('from=')
+          ? new Promise<Response>(() => {})
+          : base(input, init),
+      ),
+    )
+    fireEvent.change(screen.getByLabelText(/Period/), {
+      target: { value: '7' },
+    })
+    await waitFor(() => expect(button).toBeDisabled())
+    fireEvent.click(button)
+    expect(calls.filter(c => c.includes('/export'))).toHaveLength(0)
+    expect(saveBlob).not.toHaveBeenCalled()
+  })
+
+  it('shows an alert when the export is refused, and saves nothing', async () => {
+    renderPage({ exportStatus: 401 })
+    await screen.findByText('Total')
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /could not export/i,
+    )
+    expect(saveBlob).not.toHaveBeenCalled()
   })
 })

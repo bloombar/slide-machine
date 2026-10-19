@@ -1,15 +1,19 @@
 /**
  * Unit tests for the admin telemetry overview (SPEC EVAL-1): stat tiles,
- * the sessions table with its lecture links, the period-scoped export link,
+ * the sessions table with its lecture links, the token-bearing period-scoped CSV export,
  * and the error state.
  */
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import type { TelemetryOverviewResponse } from '@slide-machine/shared'
 import AdminTelemetryPage from './AdminTelemetryPage'
 import { COLUMN_HINTS } from '../components/admin/TelemetryPanel'
 import { mockFetchRoutes } from '../test/fetch-mock'
+import { setAccessToken } from '../auth/token'
+import { saveBlob } from '../lib/download'
+
+vi.mock('../lib/download')
 
 const overview = (
   over: Partial<TelemetryOverviewResponse> = {},
@@ -56,13 +60,22 @@ const overview = (
   ...over,
 })
 
+let exportResponse: () => { status: number; body?: unknown } = () => ({
+  status: 200,
+  body: 'sessionId,deckId\n',
+})
+
 const renderPage = (
   handler: () => { status: number; body?: unknown } = () => ({
     status: 200,
     body: overview(),
   }),
 ) => {
-  const mocks = mockFetchRoutes({ '/api/admin/telemetry': handler })
+  // The export key must come first: the overview key is a prefix of it.
+  const mocks = mockFetchRoutes({
+    '/api/admin/telemetry/export': () => exportResponse(),
+    '/api/admin/telemetry': handler,
+  })
   render(
     <MemoryRouter>
       <AdminTelemetryPage />
@@ -71,8 +84,14 @@ const renderPage = (
   return mocks
 }
 
+beforeEach(() => {
+  vi.mocked(saveBlob).mockReset()
+  exportResponse = () => ({ status: 200, body: 'sessionId,deckId\n' })
+})
+
 afterEach(() => {
   vi.unstubAllGlobals()
+  setAccessToken(null)
 })
 
 describe('AdminTelemetryPage', () => {
@@ -87,20 +106,73 @@ describe('AdminTelemetryPage', () => {
     expect(screen.getByText('excluded')).toBeInTheDocument()
   })
 
-  it('scopes the export link to the window actually shown', async () => {
-    renderPage()
-    const link = await screen.findByRole('link', { name: 'Export CSV' })
+  it('exports the CSV with the admin token, for the window shown', async () => {
+    setAccessToken('admin-token')
+    const { fetchMock, calls } = renderPage()
+    const button = await screen.findByRole('button', { name: 'Export CSV' })
+    await waitFor(() => expect(button).toBeEnabled())
+    const exportCalls = () => calls.filter(c => c.includes('/export'))
+
     // All time: no window params.
-    expect(link).toHaveAttribute('href', '/api/admin/telemetry/export')
+    fireEvent.click(button)
+    await waitFor(() => expect(saveBlob).toHaveBeenCalledTimes(1))
+    expect(exportCalls()).toEqual(['/api/admin/telemetry/export'])
+    const init = fetchMock.mock.calls.find(([u]) =>
+      String(u).includes('/export'),
+    )![1]
+    expect(new Headers(init?.headers).get('Authorization')).toBe(
+      'Bearer admin-token',
+    )
+    const [blob, fileName] = vi.mocked(saveBlob).mock.calls[0]!
+    expect(await blob.text()).toBe('sessionId,deckId\n')
+    expect(fileName).toMatch(/^session-telemetry-\d{4}-\d{2}-\d{2}\.csv$/)
 
     fireEvent.change(screen.getByLabelText(/Period/), {
       target: { value: '7' },
     })
-    await waitFor(() =>
-      expect(
-        screen.getByRole('link', { name: 'Export CSV' }).getAttribute('href'),
-      ).toContain('from='),
+    await waitFor(() => expect(calls.some(c => c.includes('from='))).toBe(true))
+    fireEvent.click(button)
+    await waitFor(() => expect(exportCalls()).toHaveLength(2))
+    expect(exportCalls()[1]).toContain('/export?from=')
+  })
+
+  it('cannot export while a newly picked period is still loading', async () => {
+    const { calls } = renderPage()
+    const button = await screen.findByRole('button', { name: 'Export CSV' })
+    await waitFor(() => expect(button).toBeEnabled())
+
+    // Hold the next overview fetch open: the new period's window is unknown.
+    const base = globalThis.fetch
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+        String(input).includes('from=')
+          ? new Promise<Response>(() => {})
+          : base(input, init),
+      ),
     )
+    fireEvent.change(screen.getByLabelText(/Period/), {
+      target: { value: '7' },
+    })
+    await waitFor(() => expect(button).toBeDisabled())
+    fireEvent.click(button)
+    expect(calls.filter(c => c.includes('/export'))).toHaveLength(0)
+    expect(saveBlob).not.toHaveBeenCalled()
+  })
+
+  it('shows an alert when the export is refused, and saves nothing', async () => {
+    exportResponse = () => ({
+      status: 401,
+      body: { error: { code: 'unauthorized', message: 'Sign in to continue' } },
+    })
+    renderPage()
+    const button = await screen.findByRole('button', { name: 'Export CSV' })
+    await waitFor(() => expect(button).toBeEnabled())
+    fireEvent.click(button)
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /could not export/i,
+    )
+    expect(saveBlob).not.toHaveBeenCalled()
   })
 
   it('says plainly when the period holds no sessions', async () => {
