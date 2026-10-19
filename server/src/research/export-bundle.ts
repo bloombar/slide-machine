@@ -11,13 +11,16 @@
  * transcripts — leaves as-is and is scrubbed downstream; the bundle's README
  * says so plainly rather than implying a guarantee the export does not make.
  *
- * Assembled in memory: at the deployment scale this instrument serves (one
- * pilot course, a semester per bundle) the datasets are far below anything a
- * buffer minds, and a zip cannot be streamed entry-by-entry anyway without
- * giving up its central directory.
+ * Assembled in memory, one dataset at a time (EVAL-2): each dataset is read
+ * as plain rows limited to the columns its CSV writes, turned into CSV text,
+ * added to the zip, and dropped before the next is read. Peak memory is
+ * roughly one dataset's rows plus the CSV text so far, not every dataset as
+ * full documents at once — which a small server cannot hold. The zip itself
+ * cannot be streamed entry-by-entry without giving up its central directory.
  */
 import AdmZip from 'adm-zip'
 import { Types } from 'mongoose'
+import type { SlideRefineParts } from '@slide-machine/shared'
 import { csvRow } from '../audit/csv'
 import { MICROS_PER_UNIT } from '../billing/pricing'
 import { CostEventModel } from '../models/cost-event'
@@ -26,7 +29,10 @@ import { DeckModel } from '../models/deck'
 import { RefineJobModel } from '../models/refine-job'
 import { SessionTelemetryEventModel } from '../models/session-telemetry-event'
 import { SlideModel } from '../models/slide'
-import { TranscriptSegmentModel } from '../models/transcript-segment'
+import {
+  TranscriptSegmentModel,
+  type TranscriptSegmentDb,
+} from '../models/transcript-segment'
 import { VoteModel } from '../models/vote'
 import { sessionSummaries } from '../telemetry/session-report'
 import { SESSION_CSV_COLUMNS, sessionCsvValues } from '../telemetry/session-csv'
@@ -164,6 +170,7 @@ export const buildResearchBundle = async (
   ] = await Promise.all([
     DeckModel.find(windowFilter('createdAt', window))
       .select('_id')
+      .lean()
       .setOptions(seen),
     TranscriptSegmentModel.distinct('deckId', {
       ...windowFilter('createdAt', window),
@@ -201,310 +208,409 @@ export const buildResearchBundle = async (
     ),
   ].map(id => new Types.ObjectId(id))
 
-  const [
-    decks,
-    slides,
-    segments,
-    sessions,
-    votes,
-    costEvents,
-    refineJobs,
-    deckViews,
-  ] = await Promise.all([
-    DeckModel.find({ _id: { $in: deckIds } }).setOptions(seen),
-    SlideModel.find({ deckId: { $in: deckIds } })
-      .sort({ deckId: 1, index: 1 })
-      .setOptions(seen),
-    TranscriptSegmentModel.find(windowFilter('createdAt', window))
-      .sort({ createdAt: 1 })
-      .setOptions(seen),
-    sessionSummaries({}, window),
-    VoteModel.find(windowFilter('createdAt', window)).sort({ createdAt: 1 }),
-    CostEventModel.find(windowFilter('occurredAt', window)).sort({
-      occurredAt: 1,
-    }),
-    RefineJobModel.find(windowFilter('createdAt', window))
-      .sort({ createdAt: 1 })
-      .setOptions(seen),
-    DeckViewModel.find(windowFilter('occurredAt', window)).sort({
-      occurredAt: 1,
-    }),
-  ])
-
-  // Every account any row references, pseudonymized in one pass.
-  const studyIds = await ensureStudyIds([
-    ...decks.map(d => d.ownerId),
-    ...votes.map(v => v.userId),
-    ...costEvents.map(e => e.payerId),
-    ...costEvents.flatMap(e => (e.actorId ? [e.actorId] : [])),
-    ...deckViews.map(v => v.ownerId),
-    ...deckViews.flatMap(v => (v.viewerId ? [v.viewerId] : [])),
-  ])
-  /** The pseudonym for a user reference; blank when there is no identity
-   * (anonymous actor) or none left (account purged) — blank, not withheld. */
-  const sid = (id?: Types.ObjectId | null): string | undefined =>
-    id ? studyIds.get(id.toString()) : undefined
-
+  // EVAL-2: each dataset below is read, turned into CSV text, added to the
+  // zip, and dropped before the next is read — never all of them at once.
   const zip = new AdmZip()
   const add = (name: string, content: string): void => {
     zip.addFile(name, Buffer.from(content, 'utf-8'))
   }
+  const sid = studyIdLookup()
 
   add('README.md', readme(window))
-
-  add(
-    'lectures.csv',
-    csvFile(
-      [
-        'deckId',
-        'projectId',
-        'ownerStudyId',
-        'title',
-        'studyLabel',
-        'language',
-        'templateId',
-        'slideCount',
-        'voteScore',
-        'quizFormId',
-        'quizPublishedAt',
-        'createdAt',
-        'updatedAt',
-        'deletedAt',
-      ],
-      decks.map(d => [
-        d._id.toString(),
-        d.projectId.toString(),
-        sid(d.ownerId),
-        d.title,
-        d.studyLabel,
-        d.language,
-        d.templateId,
-        d.slideOrder.length,
-        d.voteScore,
-        d.quiz?.formId,
-        iso(d.quiz?.publishedAt),
-        iso(d.createdAt),
-        iso(d.updatedAt ?? d.createdAt),
-        iso(d.deletedAt),
-      ]),
-    ),
-  )
-
-  add(
-    'slides.csv',
-    csvFile(
-      [
-        'slideId',
-        'deckId',
-        'index',
-        'layoutType',
-        'title',
-        'body',
-        'bullets',
-        'caption',
-        'imageSource',
-        'slots',
-        'manuallyEdited',
-        'sourceTranscript',
-        'deletedAt',
-      ],
-      slides.map(s => [
-        s._id.toString(),
-        s.deckId.toString(),
-        s.index,
-        s.layoutType,
-        s.title,
-        s.body,
-        json(s.bullets),
-        s.caption,
-        s.imageSource,
-        json(s.slots),
-        s.manuallyEdited,
-        s.sourceTranscript,
-        iso(s.deletedAt),
-      ]),
-    ),
-  )
-
-  add(
-    'transcript-segments.csv',
-    csvFile(
-      [
-        'segmentId',
-        'deckId',
-        'sessionId',
-        'slideId',
-        'startMs',
-        'endMs',
-        'text',
-        'confidence',
-        'wordCount',
-        'action',
-        'speaker',
-        'role',
-        'createdAt',
-        'deletedAt',
-      ],
-      segments.map(s => [
-        s._id.toString(),
-        s.deckId.toString(),
-        s.sessionId,
-        s.slideId?.toString(),
-        s.startMs,
-        s.endMs,
-        s.text,
-        s.confidence,
-        s.words?.length,
-        s.action,
-        s.speaker,
-        s.role,
-        iso(s.createdAt),
-        iso(s.deletedAt),
-      ]),
-    ),
-  )
-
+  add('lectures.csv', await lecturesCsv(deckIds, sid))
+  add('slides.csv', await slidesCsv(deckIds))
+  add('transcript-segments.csv', await segmentsCsv(window))
   add(
     'session-telemetry.csv',
-    csvFile([...SESSION_CSV_COLUMNS], sessions.map(sessionCsvValues)),
-  )
-
-  add(
-    'votes.csv',
     csvFile(
-      ['voterStudyId', 'targetType', 'targetId', 'value', 'createdAt'],
-      votes.map(v => [
-        sid(v.userId),
-        v.targetType,
-        v.targetId.toString(),
-        v.value,
-        iso(
-          (v as unknown as { createdAt?: Date }).createdAt ??
-            v._id.getTimestamp(),
-        ),
-      ]),
+      [...SESSION_CSV_COLUMNS],
+      (await sessionSummaries({}, window)).map(sessionCsvValues),
     ),
   )
-
-  add(
-    'cost-events.csv',
-    csvFile(
-      [
-        'occurredAt',
-        'payerStudyId',
-        'actorStudyId',
-        'actorKind',
-        'channel',
-        'projectId',
-        'projectName',
-        'deckId',
-        'deckName',
-        'slideId',
-        'locale',
-        'trigger',
-        'metric',
-        'quantity',
-        'billable',
-        'cost',
-        'currency',
-      ],
-      costEvents.map(e => [
-        iso(e.occurredAt),
-        sid(e.payerId),
-        sid(e.actorId),
-        e.actorKind,
-        e.channel,
-        e.projectId?.toString(),
-        e.projectName,
-        e.deckId?.toString(),
-        e.deckName,
-        e.slideId?.toString(),
-        e.locale,
-        e.trigger,
-        e.metric,
-        e.quantity,
-        e.billable,
-        (e.costMicros / MICROS_PER_UNIT).toFixed(6),
-        e.currency,
-      ]),
-    ),
-  )
-
-  add(
-    'refine-jobs.csv',
-    csvFile(
-      [
-        'jobId',
-        'deckId',
-        'status',
-        'identifySpeakers',
-        'slidesLevel',
-        'slidesParts',
-        'transcriptLevel',
-        'allowSplit',
-        'reframed',
-        'slidesRefined',
-        'slidesSplit',
-        'transcriptsUpdated',
-        'error',
-        'createdAt',
-        'updatedAt',
-        'deletedAt',
-      ],
-      refineJobs.map(j => [
-        j._id.toString(),
-        j.deckId.toString(),
-        j.status,
-        j.request?.identifySpeakers,
-        j.request?.slidesLevel,
-        json(j.request?.slidesParts),
-        j.request?.transcriptLevel,
-        j.request?.allowSplit,
-        j.summary?.reframed,
-        j.summary?.slidesRefined,
-        j.summary?.slidesSplit,
-        j.summary?.transcriptsUpdated,
-        j.error,
-        iso(j.createdAt),
-        iso(j.updatedAt ?? j.createdAt),
-        iso(j.deletedAt),
-      ]),
-    ),
-  )
-
-  add(
-    'deck-views.csv',
-    csvFile(
-      [
-        'occurredAt',
-        'deckId',
-        'deckName',
-        'projectId',
-        'projectName',
-        'ownerStudyId',
-        'viewerStudyId',
-        'actorKind',
-        'channel',
-        'slidesReached',
-        'activeMs',
-      ],
-      deckViews.map(v => [
-        iso(v.occurredAt),
-        v.deckId.toString(),
-        v.deckName,
-        v.projectId?.toString(),
-        v.projectName,
-        sid(v.ownerId),
-        sid(v.viewerId),
-        v.actorKind,
-        v.channel,
-        // Both a floor, never exact — see the README bullet: a reader who
-        // closed the tab abruptly reports nothing further.
-        v.slidesReached ?? undefined,
-        v.activeMs ?? undefined,
-      ]),
-    ),
-  )
+  add('votes.csv', await votesCsv(window, sid))
+  add('cost-events.csv', await costEventsCsv(window, sid))
+  add('refine-jobs.csv', await refineJobsCsv(window))
+  add('deck-views.csv', await deckViewsCsv(window, sid))
 
   return zip.toBuffer()
+}
+
+/** Pseudonymizes accounts a dataset references; resolves any user reference
+ * to its study id. Accounts are keyed as each dataset is read (EVAL-2) rather
+ * than in one pass over every dataset, but the ids are the same: each is
+ * assigned once, guarded on being absent. */
+interface StudyIds {
+  /** Assigns a study id to every account in `refs` not yet keyed. */
+  load: (refs: Iterable<Types.ObjectId>) => Promise<void>
+  /** The pseudonym for a user reference; blank when there is no identity
+   * (anonymous actor) or none left (account purged) — blank, not withheld. */
+  (id?: Types.ObjectId | null): string | undefined
+}
+
+const studyIdLookup = (): StudyIds => {
+  const known = new Map<string, string>()
+  const lookup = ((id?: Types.ObjectId | null) =>
+    id ? known.get(id.toString()) : undefined) as StudyIds
+  lookup.load = async refs => {
+    for (const [user, studyId] of await ensureStudyIds(refs)) {
+      known.set(user, studyId)
+    }
+  }
+  return lookup
+}
+
+/** Lectures (lectures.csv). `slideOrder` is read only for its length. */
+const lecturesCsv = async (
+  deckIds: Types.ObjectId[],
+  sid: StudyIds,
+): Promise<string> => {
+  const decks = await DeckModel.find({ _id: { $in: deckIds } })
+    .select(
+      '_id projectId ownerId title studyLabel language templateId slideOrder voteScore quiz.formId quiz.publishedAt createdAt updatedAt deletedAt',
+    )
+    .lean()
+    .setOptions(seen)
+  await sid.load(decks.map(d => d.ownerId))
+  return csvFile(
+    [
+      'deckId',
+      'projectId',
+      'ownerStudyId',
+      'title',
+      'studyLabel',
+      'language',
+      'templateId',
+      'slideCount',
+      'voteScore',
+      'quizFormId',
+      'quizPublishedAt',
+      'createdAt',
+      'updatedAt',
+      'deletedAt',
+    ],
+    decks.map(d => [
+      d._id.toString(),
+      d.projectId.toString(),
+      sid(d.ownerId),
+      d.title,
+      d.studyLabel,
+      d.language,
+      d.templateId,
+      // Plain rows carry no schema defaults: restore the ones that show.
+      (d.slideOrder ?? []).length,
+      d.voteScore ?? 0,
+      d.quiz?.formId,
+      iso(d.quiz?.publishedAt),
+      iso(d.createdAt),
+      iso(d.updatedAt ?? d.createdAt),
+      iso(d.deletedAt),
+    ]),
+  )
+}
+
+/** Slides of the bundled lectures (slides.csv). */
+const slidesCsv = async (deckIds: Types.ObjectId[]): Promise<string> => {
+  const slides = await SlideModel.find({ deckId: { $in: deckIds } })
+    .select(
+      '_id deckId index layoutType title body bullets caption imageSource slots manuallyEdited sourceTranscript deletedAt',
+    )
+    .sort({ deckId: 1, index: 1 })
+    .lean()
+    .setOptions(seen)
+  return csvFile(
+    [
+      'slideId',
+      'deckId',
+      'index',
+      'layoutType',
+      'title',
+      'body',
+      'bullets',
+      'caption',
+      'imageSource',
+      'slots',
+      'manuallyEdited',
+      'sourceTranscript',
+      'deletedAt',
+    ],
+    slides.map(s => [
+      s._id.toString(),
+      s.deckId.toString(),
+      s.index,
+      s.layoutType,
+      s.title,
+      s.body,
+      json(s.bullets),
+      s.caption,
+      s.imageSource,
+      json(s.slots),
+      s.manuallyEdited,
+      s.sourceTranscript,
+      iso(s.deletedAt),
+    ]),
+  )
+}
+
+/** A transcript segment as read for the export: the word count stands in for
+ * the `words` array, which is never loaded. */
+type SegmentRow = Omit<TranscriptSegmentDb, 'words'> & {
+  _id: Types.ObjectId
+  wordCount?: number
+}
+
+/** Transcript segments (transcript-segments.csv). The word list is the bulk of
+ * a segment, so only its length is computed in the database: blank when a
+ * segment has no list, 0 for an empty one (EVAL-2). */
+const segmentsCsv = async (window: ReportWindow): Promise<string> => {
+  const segments = await TranscriptSegmentModel.find(
+    windowFilter('createdAt', window),
+  )
+    .select({
+      deckId: 1,
+      sessionId: 1,
+      slideId: 1,
+      startMs: 1,
+      endMs: 1,
+      text: 1,
+      confidence: 1,
+      action: 1,
+      speaker: 1,
+      role: 1,
+      createdAt: 1,
+      deletedAt: 1,
+      wordCount: {
+        $cond: [{ $isArray: '$words' }, { $size: '$words' }, '$$REMOVE'],
+      },
+    })
+    .sort({ createdAt: 1 })
+    .lean<SegmentRow[]>()
+    .setOptions(seen)
+  return csvFile(
+    [
+      'segmentId',
+      'deckId',
+      'sessionId',
+      'slideId',
+      'startMs',
+      'endMs',
+      'text',
+      'confidence',
+      'wordCount',
+      'action',
+      'speaker',
+      'role',
+      'createdAt',
+      'deletedAt',
+    ],
+    segments.map(s => [
+      s._id.toString(),
+      s.deckId.toString(),
+      s.sessionId,
+      s.slideId?.toString(),
+      s.startMs,
+      s.endMs,
+      s.text,
+      s.confidence,
+      s.wordCount,
+      s.action ?? 'none',
+      s.speaker,
+      s.role,
+      iso(s.createdAt),
+      iso(s.deletedAt),
+    ]),
+  )
+}
+
+/** Votes (votes.csv). */
+const votesCsv = async (
+  window: ReportWindow,
+  sid: StudyIds,
+): Promise<string> => {
+  const votes = await VoteModel.find(windowFilter('createdAt', window))
+    .select('_id userId targetType targetId value createdAt')
+    .sort({ createdAt: 1 })
+    .lean()
+  await sid.load(votes.map(v => v.userId))
+  return csvFile(
+    ['voterStudyId', 'targetType', 'targetId', 'value', 'createdAt'],
+    votes.map(v => [
+      sid(v.userId),
+      v.targetType,
+      v.targetId.toString(),
+      v.value,
+      iso(
+        (v as unknown as { createdAt?: Date }).createdAt ??
+          v._id.getTimestamp(),
+      ),
+    ]),
+  )
+}
+
+/** The cost ledger (cost-events.csv). */
+const costEventsCsv = async (
+  window: ReportWindow,
+  sid: StudyIds,
+): Promise<string> => {
+  const costEvents = await CostEventModel.find(
+    windowFilter('occurredAt', window),
+  )
+    .select(
+      'occurredAt payerId actorId actorKind channel projectId projectName deckId deckName slideId locale trigger metric quantity billable costMicros currency',
+    )
+    .sort({ occurredAt: 1 })
+    .lean()
+  await sid.load([
+    ...costEvents.map(e => e.payerId),
+    ...costEvents.flatMap(e => (e.actorId ? [e.actorId] : [])),
+  ])
+  return csvFile(
+    [
+      'occurredAt',
+      'payerStudyId',
+      'actorStudyId',
+      'actorKind',
+      'channel',
+      'projectId',
+      'projectName',
+      'deckId',
+      'deckName',
+      'slideId',
+      'locale',
+      'trigger',
+      'metric',
+      'quantity',
+      'billable',
+      'cost',
+      'currency',
+    ],
+    costEvents.map(e => [
+      iso(e.occurredAt),
+      sid(e.payerId),
+      sid(e.actorId),
+      e.actorKind,
+      // Plain rows carry no schema defaults, and the README promises a row
+      // from before the field existed reads as 'app' (BILL-7).
+      e.channel ?? 'app',
+      e.projectId?.toString(),
+      e.projectName,
+      e.deckId?.toString(),
+      e.deckName,
+      e.slideId?.toString(),
+      e.locale,
+      e.trigger,
+      e.metric,
+      e.quantity,
+      e.billable ?? true,
+      ((e.costMicros ?? 0) / MICROS_PER_UNIT).toFixed(6),
+      e.currency,
+    ]),
+  )
+}
+
+/** The `slidesParts` cell: the keys that are set, in schema order. A run
+ * with a request but no parts reads `{}`, as the hydrated document did. */
+const partsJson = (parts?: SlideRefineParts): string => {
+  const set: SlideRefineParts = {}
+  if (parts?.text !== undefined) set.text = parts.text
+  if (parts?.layout !== undefined) set.layout = parts.layout
+  if (parts?.imagery !== undefined) set.imagery = parts.imagery
+  return JSON.stringify(set)
+}
+
+/** Refinement runs (refine-jobs.csv). */
+const refineJobsCsv = async (window: ReportWindow): Promise<string> => {
+  const refineJobs = await RefineJobModel.find(
+    windowFilter('createdAt', window),
+  )
+    .select(
+      '_id deckId status request summary error createdAt updatedAt deletedAt',
+    )
+    .sort({ createdAt: 1 })
+    .lean()
+    .setOptions(seen)
+  return csvFile(
+    [
+      'jobId',
+      'deckId',
+      'status',
+      'identifySpeakers',
+      'slidesLevel',
+      'slidesParts',
+      'transcriptLevel',
+      'allowSplit',
+      'reframed',
+      'slidesRefined',
+      'slidesSplit',
+      'transcriptsUpdated',
+      'error',
+      'createdAt',
+      'updatedAt',
+      'deletedAt',
+    ],
+    refineJobs.map(j => [
+      j._id.toString(),
+      j.deckId.toString(),
+      j.status ?? 'running',
+      j.request?.identifySpeakers,
+      j.request?.slidesLevel,
+      j.request ? partsJson(j.request.slidesParts) : undefined,
+      j.request?.transcriptLevel,
+      j.request?.allowSplit,
+      j.summary?.reframed,
+      j.summary?.slidesRefined,
+      j.summary?.slidesSplit,
+      j.summary?.transcriptsUpdated,
+      j.error,
+      iso(j.createdAt),
+      iso(j.updatedAt ?? j.createdAt),
+      iso(j.deletedAt),
+    ]),
+  )
+}
+
+/** Lecture openings (deck-views.csv). */
+const deckViewsCsv = async (
+  window: ReportWindow,
+  sid: StudyIds,
+): Promise<string> => {
+  const deckViews = await DeckViewModel.find(windowFilter('occurredAt', window))
+    .select(
+      'occurredAt deckId deckName projectId projectName ownerId viewerId actorKind channel slidesReached activeMs',
+    )
+    .sort({ occurredAt: 1 })
+    .lean()
+  await sid.load([
+    ...deckViews.map(v => v.ownerId),
+    ...deckViews.flatMap(v => (v.viewerId ? [v.viewerId] : [])),
+  ])
+  return csvFile(
+    [
+      'occurredAt',
+      'deckId',
+      'deckName',
+      'projectId',
+      'projectName',
+      'ownerStudyId',
+      'viewerStudyId',
+      'actorKind',
+      'channel',
+      'slidesReached',
+      'activeMs',
+    ],
+    deckViews.map(v => [
+      iso(v.occurredAt),
+      v.deckId.toString(),
+      v.deckName,
+      v.projectId?.toString(),
+      v.projectName,
+      sid(v.ownerId),
+      sid(v.viewerId),
+      v.actorKind,
+      v.channel ?? 'app',
+      // Both a floor, never exact — see the README bullet: a reader who
+      // closed the tab abruptly reports nothing further.
+      v.slidesReached ?? undefined,
+      v.activeMs ?? undefined,
+    ]),
+  )
 }
