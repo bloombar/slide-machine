@@ -4,10 +4,18 @@
  * edge is reported whole), lecture scoping and name denormalization, the CSV
  * export's shape, and the admin gate.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  vi,
+} from 'vitest'
 import express from 'express'
 import request from 'supertest'
-import { Types } from 'mongoose'
+import { Query, Types } from 'mongoose'
 import { env } from '../../src/config/env'
 import { connectMongo, disconnectMongo } from '../../src/db/mongoose'
 import { adminRouter } from '../../src/routes/admin'
@@ -185,6 +193,56 @@ describe('session summaries', () => {
       crashed: 1,
       excludable: 1,
     })
+  })
+})
+
+describe('the read stays small (EVAL-1)', () => {
+  it('reads one session per query, as lean projected rows', async () => {
+    const deck = await makeDeck('Scoped')
+    await healthySession('sess-a', deck._id, 0)
+    await healthySession('sess-b', deck._id, 100_000)
+    await healthySession('sess-other', null, 200_000)
+    // A tied `at`: the error row was written first, so it must fold first and
+    // the phrase at the same instant closes the outage at zero length.
+    await event('sess-tie', 'session_start', 0, { deckId: deck._id })
+    await event('sess-tie', 'generation_error', 5_000, {
+      deckId: deck._id,
+      errorKind: 'unavailable',
+    })
+    await event('sess-tie', 'phrase', 5_000, {
+      deckId: deck._id,
+      outcome: 'new',
+      generationMs: 700,
+    })
+
+    const find = vi.spyOn(SessionTelemetryEventModel, 'find')
+    const lean = vi.spyOn(Query.prototype, 'lean')
+    try {
+      const summaries = await sessionSummaries({ deckId: deck.id }, {})
+      expect(summaries.map(s => s.sessionId).sort()).toEqual([
+        'sess-a',
+        'sess-b',
+        'sess-tie',
+      ])
+      expect(
+        summaries.find(s => s.sessionId === 'sess-tie')
+          ?.longestGenerationOutageMs,
+      ).toBe(0)
+
+      // Never one query over every session's rows at once.
+      const rowQueries = find.mock.calls.map(
+        c => c[0] as unknown as { sessionId: unknown; deckId: unknown },
+      )
+      expect(rowQueries).toHaveLength(3)
+      for (const filter of rowQueries) {
+        expect(typeof filter.sessionId).toBe('string')
+        expect(filter.deckId).toEqual(deck._id)
+      }
+      expect(lean).toHaveBeenCalledTimes(3)
+    } finally {
+      find.mockRestore()
+      lean.mockRestore()
+    }
   })
 })
 
