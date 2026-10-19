@@ -4633,13 +4633,18 @@ describe('DeckViewerPage sign-in gate (AUTH-8)', () => {
     vi.spyOn(runtimeConfig, 'getTtsEnabled').mockReturnValue(true)
     const { calls } = openGated('/d/shared-abc123')
     await screen.findByText('Shared Lecture')
-    fireEvent.keyDown(window, { key: ' ', code: 'Space' })
 
-    expect(
-      await screen.findByRole('dialog', {
-        name: 'Log in to play back the lecture',
-      }),
-    ).toBeInTheDocument()
+    // The title paints before React attaches the Space listener, so a single
+    // press can land in between on a slow machine. Press until the gate
+    // opens; a repeat press only re-raises the same gate.
+    await waitFor(() => {
+      fireEvent.keyDown(window, { key: ' ', code: 'Space' })
+      expect(
+        screen.getByRole('dialog', {
+          name: 'Log in to play back the lecture',
+        }),
+      ).toBeInTheDocument()
+    })
     expect(calls.some(u => u.includes('/tts'))).toBe(false)
   })
 
