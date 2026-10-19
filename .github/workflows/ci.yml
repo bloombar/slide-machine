@@ -20,7 +20,9 @@ concurrency:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: 26.04's kernel (6.19+) stops mongo:8 from
+    # starting (SERVER-121912). Unpin once a mongo:8 release runs on it.
+    runs-on: ubuntu-24.04
     services:
       mongo:
         image: mongo:8
